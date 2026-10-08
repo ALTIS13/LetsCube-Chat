@@ -116,6 +116,36 @@ Read-only Keystore loading and a standalone owned Android platform probe are nex
 The latter uses a separate app UID with fictional metadata and no WebView/network/
 account/content access, not the primary release package or old ephemeral QA13.
 
+## Trusted Root Compatibility Repair
+
+The original AtomicBackend pins above describe the first accepted source,
+not the current repaired backend. A real separate-UID Realme PREPARE refused
+BACKEND_CREATE: raw trusted CE root was not its canonical string. Real UID/CE
+and generated-key/reader checks had passed, journal checks were unreached.
+Exact diagnostic cleanup passed; the failed phase is not relabelled success.
+
+Normalize only the actual application Context's trusted root after requiring
+absolute/no-dot-components and raw final-leaf lstat directory. Capture its
+canonical identity; recapture/revalidate it per operation. Strict canonical/
+lstat namespace/base/new/bak rules, CE admission and stream ownership remain.
+No hardcoded data-path whitelist, fallback, create/repair or same-UID TOCTOU
+guarantee was introduced.
+
+Calibrated old-source RED1 plus refusal control, affected behavior7/7, seven
+compiled omissions and real Android36 compile passed15 selected checks.
+Independent scoped source review accepted, no P1/P2; no unchanged suite replay.
+New raw SHA256: backend `52B2A9FA8235A943F0282B9A398F2D4BF09163B9FD8A236643B00AC613BDD637`;
+probe `C0061DA1DCA0AD7B63FA8957DCFF2688FF6F7429FFE23E2AA471551EB67C392C`;
+unit `B667C7B2FA384C9BB3A9E68553E1BF67B7E79B3D82252684DDB3AE05A02E71D0`;
+API doubles `3019E9DA4C88F6DF4877BEE0B342A609EEF799B1EABC680D7B2D282AB3FFD919`.
+Changed-artifact R3 physical PREPARE/COLD/KEY_LOSS passed on Realme after a
+separate read-only incarnation reconciliation, not an install replay. Actual G8
+round-trip/restart/failed-write preservation and missing-key/no-recreation are
+accepted for that credential-free diagnostic only. Exact cleanup preserved
+primary APK/UID/users/TestAPK. Reboot/upgrade/other-user and whole-vault proof
+remain separate.
+[Actual platform chronology](2026-10-08-native-preview-platform.md).
+
 ## Read-Only Keystore Evidence
 
 Task6C3a `MessagePreviewKeystoreReader` is independently source-accepted, no
@@ -158,6 +188,5 @@ it; the future explicit creation spec must enforce it via
 The accepted envelope already requests provider-generated IVs. No hardware-
 backing/other-validity-policy/unlocked lease or native acceptance is inferred.
 
-Next: real separate-UID platform round-trip/restart/key-loss probe and explicit
-pristine marker/key initialization, then whole generation/erasure/provision
+Next: explicit pristine marker/key initialization, then whole generation/erasure/provision
 transitions. Task5 SDK/Auth/resolver binding remains unresolved; no rich/Stable GO.

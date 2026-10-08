@@ -157,6 +157,16 @@ a test count, `built in Ns`, `sw.js build <id>` — never by its exit code.
 - **Vite's watcher misses scripted bursts.** After a scripted multi-file edit,
   `curl` the dev server for each file and grep a marker of the new code before
   running e2e. Distinct from the `app.store.ts?t=` staleness in `CLAUDE.md` §5.
+- **A rejected ADB acknowledgement can follow a completed install.** The
+  separate preview probe was installed on 2026-10-08, but a Success-only parser
+  refused before recording ownership. Accept only bounded exact operation-specific
+  success forms, not arbitrary prose. If the acknowledgement is lost, preserve
+  the failure and reconcile the exact current incarnation read-only; do not
+  retry installation or fabricate the old phase receipt.
+  A later R3 attempt repeated this observation loss: stricter parsing alone did
+  not establish the real response. Before another install, retain bounded code,
+  stream lengths/hashes and exact-form classification, never raw secret-bearing
+  output. Preserve unknown ACKs as unknown; a plausible newline shape is not proof.
 - **`fonts.check` is not a check.** It answers `true` for a face that never
   loaded. Prove a face by rendered **width** with and without it in the stack.
   (Inter is self-hosted since 2026-09-20 — `/fonts/inter/`, 174 KB — so the

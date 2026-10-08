@@ -50,8 +50,18 @@ accepted, affected numeric11/11; metadata-envelope Task6B is source-accepted wit
 actual JCA/14 compiled omissions/Android36 API compile. Task6C1 checked I/O is
 source-accepted with owned JVM-file fault controls/nine compiled omissions, not
 Android persistence or a durable vault. CE AtomicFile and read-only Keystore
-loading are source-accepted; real separate-UID platform probe and explicit pristine
-initialization are next. No rich display/Stable promotion.
+loading are source-accepted. The separate-UID probe's actual PREPARE observed
+CE/UID/key generation/reader policy, then refused the noncanonical trusted root;
+no journal/restart/key-loss proof followed. Exact diagnostic cleanup passed.
+Trusted-root normalization is independently source-accepted, affected15/15
+including Android36 compile. Distinct R3 APK9f861a9a passed artifact checks;
+original install ACK remains refused/unknown. Separate read-only reconciliation
+then no-install PREPARE/COLD/KEY_LOSS passed on Realme: G8 round-trip/restart,
+failed-write preservation and missing-key/no-recreation. Exact cleanup passed
+with primary APK/UID/users/TestAPK preserved. Marker/inventory/one-use admission
+leaves are inactive source-accepted; explicit pristine initialization/sole UID
+lifecycle owner remain unfinished. No Task5 native-positive/rich/Stable promotion.
+[Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
 [Current source and device limits](operations/2026-10-08-native-preview-vault-foundation.md).
 

@@ -123,10 +123,24 @@ API compile. Same-UID namespace TOCTOU remains outside the accepted boundary.
 Task6C3a read-only Keystore loading is source-accepted with28 behavior/16 compiled
 omission controls and Android36 compilation, without initialization, key minting,
 deletion, plugin integration or native/Stable promotion. A separate owned
-app-UID platform probe is being prepared, without accounts/WebView/network or
-release-package changes; no actual build/install/run has occurred for it.
+app-UID platform probe was built and reconciled after an install-ACK refusal.
+Its actual forward PREPARE reached real CE/UID/key-generation/KeyInfo checks,
+then refused at BACKEND_CREATE because the trusted raw root was noncanonical.
+No journal/restart/key-loss acceptance followed; exact diagnostic cleanup passed
+with primary APK/UID/users preserved. The narrow trusted-root normalization
+repair is independently source-accepted (affected15/15 including Android36 API
+compile); strict raw leaf/owned child guards remain. Distinct R3 APK9f861a9a
+passed artifact checks; its original install ACK refused and remains UNKNOWN.
+Independent read-only incarnation reconciliation then admitted separate no-install
+PREPARE/COLD/KEY_LOSS phases: all passed on Realme with distinct process IDs,
+authenticated G8, failed-write preservation and missing-key/no-recreation.
+Exact diagnostic cleanup passed; main APK/UID/users/TestAPK preserved.
+Marker/inventory and one-use foreground admission leaves are inactive source-
+accepted; whole pristine initialization and the sole UID/lifecycle owner remain
+unfinished. No Task5 native-positive, rental, SQL, main or Stable claim follows.
+[Platform attempts and exact remaining acceptance](operations/2026-10-08-native-preview-platform.md).
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
-Next: finish these platform boundaries, then pristine marker/key initialization
+Next: pristine marker/key initialization
 and serialized transitions; Task5 native proof remains separate and unresolved.
 [Foundation contract and scoped evidence](operations/2026-10-08-native-preview-vault-foundation.md).
 Preserve failed evidence; no Stable GO. A063 excluded; all rich flags false.

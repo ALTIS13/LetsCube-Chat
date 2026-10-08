@@ -148,3 +148,73 @@ These establish platform behavior, not this application's device acceptance.
 - Keystore key presence is not evidence of hardware backing or device-unlocked
   usability. Actual isolation/restart/upgrade/key-loss behavior needs a scoped
   device case. Never log/export a key, bearer, alias or personal tuple.
+
+### Installation Marker Source
+
+Task6C3b's inactive, native-private marker codec is independently source-accepted.
+Exact28 bytes: ASCII `LCNMPVI1`, big-endian version1,16-byte nonce; exact bounds,
+magic/version/lowercase installation and defensive snapshots. Fixed checked
+UNAVAILABLE carries no cause/stack/suppressed diagnostics. This plain marker is
+not authenticated metadata, G0, a reservation or creation/access authority.
+
+Feature-absence RED1, new JVM selection16/16 and only three added compiled
+omissions3/3:19 selected controls including11 mutants, not one final whole-suite
+run. Existing foundation suites were not replayed. A separate actual Android36
+bootclasspath compile generated this new leaf's two classes only, exit0; no APK
+rebuild or device test of the marker. Source/probe/tests frozen SHA256:
+
+- source `1D7180DB7651C5D3D2F4768AD5B11B02610865E09A71311BBECDA7CAE182B1FE`;
+- probe `2BD8F5BD209BEF12E4B90F4A512A7462E2FEE22F36E0C6AC3749E994748DF849`;
+- tests `027E982B8F9CA7CBBBED11A65AFBB14C84CD7F10DBE5427D251533FF41D773B6`.
+
+Pristine namespace/alias inventory, immutable marker file/directory sync, exact
+one-use key creation, sole-worker/passive foreground ownership and authenticated
+EMPTY/G0 initialization remain next. The marker does not activate those parts.
+[Separate platform artifact/device checkpoint](2026-10-08-native-preview-platform.md).
+
+### Bounded Owned-Key Inventory Source
+
+Task6C3b now has an inactive native-private supplied-enumeration scanner. Require
+observed clean end, at most256 total entries and256 UTF-16 units per alias; any
+`letscube.nmpv.` alias refuses, including malformed/future versions. Current-owner/
+deadline callback precedes every iterator effect and final success. Null/error/
+overflow/stale inputs refuse with fixed checked diagnostics and no name export.
+No Keystore entry/key lookup, file effect, initialization or bridge was added.
+
+Feature-absence RED1; new actual-class JVM tests21/21, including10 compiled
+omissions. Actual Android36 bootclasspath compile generated this leaf's three
+classes only, exit0; no old suite/APK/device replay. Frozen source19FC0F0C...,
+probe285AF96B..., tests70740798... . Independent source review accepted, no P1/P2.
+This is a supplied-port algorithm, not actual current-UID Keystore absence,
+finite platform-call latency or initialization authority. Trusted sole-worker/
+foreground wiring and complete pristine initialization remain next.
+
+### Initialization Admission Gate Source
+
+Inactive native-private `MessagePreviewInitializationGate` is independently
+source-accepted, no P1/P2. Per-instance issuer-bound foreground handle, exact
+worker/one-use permit, busy-slot retention through invalidation and an independent
+10,000 ms monotonic budget. Effect-attempt failure and initialized completion
+are terminal; late A cannot release B. Final currency/time is checked after the
+trusted passive authority read. No storage effect or live consumer was added.
+
+New component RED,26/26 JVM controls including14 compiled omissions, then only
+two probe-affected controls2/2; no final26-case replay. Separate actual Android36
+compile generated its six new classes, exit0. Source/probe/tests SHA256:
+`6366E947E55F88183578294058C25116C6D717324536BEBE67F8A4F8B239E621`,
+`11DCB7C49D4E3F7B545770289BA0964486E0E0448648FFAC4D7F392CCD3A4DCD`,
+`2394F9C6148F5A9CF7CEF2D42E20B3D833D73FC92F13C73F58482D5C54DD0994`.
+This is not an actual process/UID singleton, Android main-Looper or lifecycle
+authority, storage initializer, G0/durability ACK, Task5 binding or preview
+readiness. Trusted ports must remain short passive memory reads. The real sole
+owner/platform ports and complete pristine initialization are still unfinished.
+
+### Separate Physical Primitive Acceptance
+
+R3 on Realme passed the actual own-UID CE/Keystore/AtomicFile G8 round-trip,
+failed-write preservation, stop/restart read and missing-key/no-recreation
+checks. Exact diagnostic cleanup passed with primary APK/UID/users/TestAPK
+preserved. The probe embeds backend/reader/envelope/journal only, not the new
+marker/inventory/admission gate or a complete initializer. No credential, Auth,
+SDK-device binding, whole-vault or rich-display proof follows from it.
+[Exact phases and unresolved gates](2026-10-08-native-preview-platform.md).

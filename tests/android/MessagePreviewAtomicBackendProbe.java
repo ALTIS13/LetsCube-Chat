@@ -2,6 +2,7 @@ package com.kub.messenger;
 
 import android.content.Context;
 import android.os.UserManager;
+import android.system.Os;
 import android.util.AtomicFile;
 import java.io.File;
 import java.io.IOException;
@@ -41,6 +42,27 @@ public final class MessagePreviewAtomicBackendProbe {
         int closed;
         @Override public void write(int value) { }
         @Override public void close() { closed++; }
+    }
+    // Only the platform-supplied root has a parent alias; child paths/FDs use real canonical files.
+    private static final class RootAlias extends File {
+        File resolved;
+        boolean rawLstatBeforeCanonical = true;
+        boolean absolute = true;
+        boolean lookupFails;
+        int canonicalCalls;
+        int previousLstats;
+        RootAlias(File raw, File resolved) { super(raw.getPath()); this.resolved = resolved; }
+        @Override public boolean isAbsolute() { return absolute && super.isAbsolute(); }
+        @Override public File getCanonicalFile() throws IOException {
+            if (lookupFails) throw new IOException("FIXTURE_CANONICAL_REFUSAL");
+            if (!getPath().equals(Os.lastLstat) || Os.lstats <= previousLstats) rawLstatBeforeCanonical = false;
+            previousLstats = Os.lstats; canonicalCalls++;
+            return resolved;
+        }
+    }
+    private static RootAlias rootAlias(Path root, Path canonical) throws Exception {
+        Files.createDirectories(root);
+        return new RootAlias(root.toFile(), canonical.toFile());
     }
     private static Path namespace(Path root) { return root.resolve("native-message-previews-v1"); }
     private static Path base(Path root) { return namespace(root).resolve("journal-v1.bin"); }
@@ -197,6 +219,101 @@ public final class MessagePreviewAtomicBackendProbe {
         OutputStream next = backend.startWrite(); backend.failWrite(next);
         refused(backend::openRead, "MISSING_READ_FIXED");
     }
+    private static void rootAliasHealthy(Path root) throws Exception {
+        Path canonical = root.resolve("canonical"); ready(canonical);
+        RootAlias alias = rootAlias(root.resolve("alias-parent/no-backup"), canonical);
+        App app = new App(alias);
+        MessagePreviewAtomicBackend backend;
+        try { backend = backend(app); }
+        catch (IOException failure) { throw new AssertionError("PLATFORM_PARENT_ALIAS_ACCEPTED"); }
+        byte[] bytes = new byte[] { 7, 8, 3 };
+        OutputStream owned = backend.startWrite(); owned.write(bytes);
+        backend.sync(owned); backend.finishWrite(owned);
+        check(Arrays.equals(Files.readAllBytes(base(canonical)), bytes), "ALIAS_FD_CANONICAL_BYTES");
+        check(!Files.exists(namespace(alias.toPath())), "ALIAS_NO_IMPLICIT_RAW_NAMESPACE");
+        try (InputStream input = backend.openRead()) {
+            check(Arrays.equals(input.readAllBytes(), bytes), "ALIAS_READ_CANONICAL_BYTES");
+        }
+        owned = backend.startWrite(); owned.write(9); backend.sync(owned); backend.failWrite(owned);
+        check(Arrays.equals(Files.readAllBytes(base(canonical)), bytes), "ALIAS_FAIL_PRESERVES_BYTES");
+        check(alias.rawLstatBeforeCanonical, "RAW_LSTAT_BEFORE_CANONICAL");
+        check(alias.canonicalCalls == app.rootReads && app.rootReads >= 8, "ALIAS_ROOT_RECAPTURED");
+    }
+    private static void rootAliasRefusals(Path root) throws Exception {
+        Path canonical = root.resolve("canonical"); ready(canonical);
+        Path raw = root.resolve("alias-parent/no-backup"); Files.createDirectories(raw);
+        App app = new App(null);
+        refused(() -> backend(app), "ROOT_NULL_REFUSED");
+        app.root = new RootAlias(new File("relative-root"), canonical.toFile());
+        refused(() -> backend(app), "ROOT_RELATIVE_REFUSED");
+        RootAlias nonAbsolute = new RootAlias(raw.toFile(), canonical.toFile()); nonAbsolute.absolute = false;
+        app.root = nonAbsolute;
+        refused(() -> backend(app), "ROOT_ABSOLUTE_REQUIRED");
+        app.root = new RootAlias(new File(raw + File.separator + "."), canonical.toFile());
+        refused(() -> backend(app), "ROOT_DOT_REFUSED");
+        Files.createDirectory(raw.resolve("nested"));
+        app.root = new RootAlias(new File(raw + File.separator + "nested" + File.separator + ".."), canonical.toFile());
+        refused(() -> backend(app), "ROOT_DOTDOT_REFUSED");
+        Path leafLink = root.resolve("root-link"); Files.createSymbolicLink(leafLink, canonical);
+        app.root = new RootAlias(leafLink.toFile(), canonical.toFile());
+        refused(() -> backend(app), "ROOT_LEAF_SYMLINK_REFUSED");
+        Path leafFile = root.resolve("root-file"); Files.write(leafFile, new byte[] { 1 });
+        app.root = new RootAlias(leafFile.toFile(), canonical.toFile());
+        refused(() -> backend(app), "ROOT_LEAF_TYPE_REFUSED");
+        app.root = new RootAlias(root.resolve("absent-root").toFile(), canonical.toFile());
+        refused(() -> backend(app), "ROOT_LOOKUP_REFUSED");
+        RootAlias failing = new RootAlias(raw.toFile(), canonical.toFile()); failing.lookupFails = true;
+        app.root = failing;
+        refused(() -> backend(app), "ROOT_CANONICAL_LOOKUP_REFUSED");
+        check(AtomicFile.starts == 0 && AtomicFile.reads == 0, "UNSAFE_ROOT_BEFORE_ATOMIC_IO");
+    }
+    private static void rootAliasRecheck(Path root) throws Exception {
+        Path canonical = root.resolve("canonical"); ready(canonical);
+        Path other = root.resolve("other"); ready(other);
+        RootAlias alias = rootAlias(root.resolve("alias-parent/no-backup"), canonical);
+        App app = new App(alias); MessagePreviewAtomicBackend backend = backend(app);
+        app.root = rootAlias(root.resolve("another-parent/no-backup"), canonical);
+        OutputStream owned = backend.startWrite(); owned.write(3); backend.finishWrite(owned);
+        RootAlias current = (RootAlias) app.root; current.resolved = other.toFile();
+        refused(backend::startWrite, "NORMALIZED_ROOT_DRIFT_REFUSED");
+        refused(backend::openRead, "NORMALIZED_ROOT_DRIFT_REFUSED");
+        check(AtomicFile.starts == 1 && AtomicFile.reads == 0, "ROOT_DRIFT_BEFORE_IO");
+        current.resolved = canonical.toFile(); owned = backend.startWrite();
+        final OutputStream pending = owned;
+        current.resolved = other.toFile();
+        refused(() -> backend.sync(pending), "SYNC_ROOT_DRIFT_REFUSED");
+        refused(() -> backend.finishWrite(pending), "FINISH_ROOT_DRIFT_REFUSED");
+        check(AtomicFile.last.flushes == 0 && AtomicFile.finishes == 1 && !AtomicFile.last.getFD().valid(),
+            "ROOT_DRIFT_FINISH_RELEASES_WITHOUT_COMMIT");
+        current.resolved = canonical.toFile(); final OutputStream next = backend.startWrite();
+        current.resolved = other.toFile();
+        refused(() -> backend.failWrite(next), "FAIL_ROOT_DRIFT_REFUSED");
+        check(AtomicFile.fails == 0 && !AtomicFile.last.getFD().valid(), "ROOT_DRIFT_FAIL_RELEASES_WITHOUT_ROLLBACK");
+        current.resolved = canonical.toFile();
+        Path raw = current.toPath(); Files.delete(raw); Files.createSymbolicLink(raw, canonical);
+        refused(backend::startWrite, "RAW_LEAF_SYMLINK_RECHECKED");
+        check(AtomicFile.starts == 3 && Files.readAllBytes(base(canonical))[0] == 3,
+            "RAW_ROOT_RETIREMENT_PRESERVES_BYTES");
+    }
+    private static void rootAliasChildren(Path root) throws Exception {
+        Path canonical = root.resolve("canonical"); ready(canonical);
+        App app = new App(rootAlias(root.resolve("alias-parent/no-backup"), canonical));
+        Path foreign = root.resolve("foreign"); Files.createDirectory(foreign);
+        Path ns = namespace(canonical); Files.delete(ns); Files.createSymbolicLink(ns, foreign);
+        refused(() -> backend(app), "ALIAS_NAMESPACE_SYMLINK_REFUSED");
+        Files.delete(ns); Files.createDirectory(ns);
+        for (String suffix : new String[] { "", ".new", ".bak" }) {
+            Path target = Path.of(base(canonical) + suffix);
+            Files.createSymbolicLink(target, foreign.resolve("absent"));
+            refused(() -> backend(app), "ALIAS_TARGET_SYMLINK_REFUSED");
+            Files.delete(target); Files.createDirectory(target);
+            refused(() -> backend(app), "ALIAS_TARGET_DIRECTORY_REFUSED"); Files.delete(target);
+        }
+        MessagePreviewAtomicBackend backend = backend(app);
+        Path next = Path.of(base(canonical) + ".new"); Files.createSymbolicLink(next, foreign.resolve("absent"));
+        refused(backend::startWrite, "ALIAS_TARGET_SYMLINK_RECHECKED");
+        check(AtomicFile.starts == 0 && !Files.exists(foreign.resolve("absent")), "ALIAS_NO_FOREIGN_WRITE");
+    }
     public static void main(String[] args) throws Exception {
         String scenario = args[0]; Path root = Path.of(args[1]);
         switch (scenario) {
@@ -209,6 +326,10 @@ public final class MessagePreviewAtomicBackendProbe {
             case "finalization": finalization(root); break;
             case "completion-policy": completionPolicy(root); break;
             case "sync-fault": syncFault(root); break;
+            case "root-alias": rootAliasHealthy(root); break;
+            case "root-alias-refusals": rootAliasRefusals(root); break;
+            case "root-alias-recheck": rootAliasRecheck(root); break;
+            case "root-alias-children": rootAliasChildren(root); break;
             default: throw new AssertionError("UNKNOWN_CASE");
         }
         System.out.println("PASS " + scenario);

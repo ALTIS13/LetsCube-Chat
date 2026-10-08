@@ -42,7 +42,7 @@ test.before(() => {
   directory = mkdtempSync(join(tmpdir(), "letscube-atomic-backend-")); compile(directory);
 });
 test.after(() => { if (directory) clean(directory); });
-for (const scenario of ["healthy", "policy", "missing", "paths", "symlinks", "ownership", "finalization", "completion-policy", "sync-fault"]) {
+for (const scenario of ["healthy", "policy", "missing", "paths", "symlinks", "ownership", "finalization", "completion-policy", "sync-fault", "root-alias", "root-alias-refusals", "root-alias-recheck", "root-alias-children"]) {
   test(`compiled adapter with JVM API doubles: ${scenario}`, () => {
     const result = run(scenario);
     assert.equal(result.status, 0, result.stderr);
@@ -54,16 +54,22 @@ for (const scenario of ["healthy", "policy", "missing", "paths", "symlinks", "ow
 const mutations = [
   ["CE admission", "if (context.isDeviceProtectedStorage()) throw unavailable();", "", "policy", "CE_RECHECKED"],
   ["unlocked admission", "!((UserManager) service).isUserUnlocked()", "false", "policy", "UNLOCK_REQUIRED"],
-  ["canonical path", "if (!path.equals(path.getCanonicalFile())) throw unavailable();", "", "paths", "CANONICAL_PATH_REQUIRED"],
+  ["raw root traversal", "if (\".\".equals(part.getName()) || \"..\".equals(part.getName())) throw unavailable();", "", "paths", "CANONICAL_PATH_REQUIRED"],
   ["one writer", "if (active != null) throw unavailable();", "", "ownership", "ONE_WRITER"],
   ["stream identity before I/O", "borrowed != active", "false", "ownership", "FOREIGN_BEFORE_IO_OR_CLOSE"],
   ["explicit flush", "owned.flush();", "", "healthy", "SYNC_EXPLICIT_FLUSH"],
   ["explicit fd sync", "owned.getFD().sync();", "", "sync-fault", "REAL_FD_SYNC_REQUIRED"],
   ["release after failure", "active = null;", "", "finalization", "CONSUMED_STREAM_REFUSED"],
+  ["root alias normalization", "return raw.getCanonicalFile();", "return raw;", "root-alias", "PLATFORM_PARENT_ALIAS_ACCEPTED"],
+  ["raw root absolute", "raw == null || !raw.isAbsolute()", "raw == null", "root-alias-refusals", "ROOT_ABSOLUTE_REQUIRED"],
+  ["raw root leaf directory", "if (!OsConstants.S_ISDIR(Os.lstat(raw.getPath()).st_mode)) throw unavailable();", "Os.lstat(raw.getPath());", "root-alias-refusals", "ROOT_LEAF_SYMLINK_REFUSED"],
+  ["raw root lookup failure", "} catch (ErrnoException refused) { throw unavailable(); }\n        return raw.getCanonicalFile();", "} catch (ErrnoException refused) { return raw.getCanonicalFile(); }\n        return raw.getCanonicalFile();", "root-alias-refusals", "ROOT_LOOKUP_REFUSED"],
+  ["normalized root identity", "if (!root.equals(platformRoot())) throw unavailable();", "", "root-alias-recheck", "NORMALIZED_ROOT_DRIFT_REFUSED"],
+  ["root lstat before normalization", "        try {\n            if (!OsConstants.S_ISDIR(Os.lstat(raw.getPath()).st_mode)) throw unavailable();\n        } catch (ErrnoException refused) { throw unavailable(); }\n        return raw.getCanonicalFile();", "        File normalized = raw.getCanonicalFile();\n        try {\n            if (!OsConstants.S_ISDIR(Os.lstat(raw.getPath()).st_mode)) throw unavailable();\n        } catch (ErrnoException refused) { throw unavailable(); }\n        return normalized;", "root-alias", "RAW_LSTAT_BEFORE_CANONICAL"],
 ];
 for (const [name, before, after, scenario, oracle] of mutations) {
   test(`compiled adapter omission refused: ${name}`, () => {
-    const actual = readFileSync(source, "utf8");
+    const actual = readFileSync(source, "utf8").replace(/\r\n/g, "\n");
     assert.equal(actual.split(before).length, 2, "one literal production rule");
     const healthy = run(scenario);
     assert.equal(healthy.status, 0, healthy.stderr);

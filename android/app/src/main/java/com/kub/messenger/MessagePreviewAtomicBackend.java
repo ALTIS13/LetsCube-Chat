@@ -28,8 +28,7 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
             context = supplied.getApplicationContext();
             if (context == null) throw unavailable();
             storageAvailable();
-            root = context.getNoBackupFilesDir();
-            if (root == null || !root.isAbsolute()) throw unavailable();
+            root = platformRoot();
             namespace = new File(root, "native-message-previews-v1");
             base = new File(namespace, "journal-v1.bin");
             validate();
@@ -45,6 +44,19 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
         if (context.isDeviceProtectedStorage()) throw unavailable();
         Object service = context.getSystemService(Context.USER_SERVICE);
         if (!(service instanceof UserManager) || !((UserManager) service).isUserUnlocked()) throw unavailable();
+    }
+
+    private File platformRoot() throws IOException {
+        File raw = context.getNoBackupFilesDir();
+        if (raw == null || !raw.isAbsolute()) throw unavailable();
+        for (File part = raw; part != null; part = part.getParentFile()) {
+            if (".".equals(part.getName()) || "..".equals(part.getName())) throw unavailable();
+        }
+        // Android may alias a parent directory; the supplied root leaf must still be a real directory.
+        try {
+            if (!OsConstants.S_ISDIR(Os.lstat(raw.getPath()).st_mode)) throw unavailable();
+        } catch (ErrnoException refused) { throw unavailable(); }
+        return raw.getCanonicalFile();
     }
 
     private static void canonical(File path) throws IOException {
@@ -72,7 +84,7 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
 
     private void validate() throws IOException {
         storageAvailable();
-        if (!root.equals(context.getNoBackupFilesDir())) throw unavailable();
+        if (!root.equals(platformRoot())) throw unavailable();
         directory(root);
         directory(namespace);
         target(base);

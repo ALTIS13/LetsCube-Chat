@@ -34,7 +34,10 @@ public final class OsConstants {
   "android/system/Os.java": `package android.system;
 import java.nio.file.*;
 public final class Os {
+  public static String lastLstat;
+  public static int lstats;
   public static StructStat lstat(String name) throws ErrnoException {
+    lastLstat = name; lstats++;
     Path path = Paths.get(name);
     if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) throw new ErrnoException(2);
     if (Files.isSymbolicLink(path)) return new StructStat(3);

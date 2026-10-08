@@ -25029,11 +25029,21 @@ Task6B metadata-only authentication is independently source-accepted with actual
 JCA/14 compiled omissions/Android36 API compile. Task6C1 checked journal I/O is
 independently source-accepted with owned JVM-file fault controls/nine compiled
 omissions, not Android persistence. CE AtomicFile/read-only Keystore loading are
-source-accepted; actual platform probe and pristine initialization remain next.
+source-accepted. The standalone actual PREPARE reached CE/UID/key policy, then
+refused the noncanonical trusted root before journal I/O; exact cleanup passed.
+Trusted-root normalization is independently source-accepted with affected15/15
+and Android36 compile, preserving strict leaf/child guards. Distinct R3 physical
+PREPARE/COLD/KEY_LOSS passed after exact current-incarnation reconciliation:
+authenticated G8, process restart, failed-write preservation and missing-key/
+no-recreation. Original install ACK remains refused/unknown; exact diagnostic
+cleanup passed, primary APK/UID/users/TestAPK preserved. Inactive marker,
+owned-alias inventory and one-use admission leaves are accepted source, not an
+initialized vault. Explicit pristine initialization/sole UID owner remain next.
 D-335 remains OPEN, generic v1 unchanged; no durable vault, consent, rich display
 or Stable acceptance.
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
 [Foundation contract, evidence and next gates](operations/2026-10-08-native-preview-vault-foundation.md).
+[Platform attempts and actual acceptance limits](operations/2026-10-08-native-preview-platform.md).
 
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
