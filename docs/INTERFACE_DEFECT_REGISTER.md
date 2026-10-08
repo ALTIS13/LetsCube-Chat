@@ -25019,6 +25019,17 @@ D-335 stays OPEN, all rich/display flags false. Never replay installed DDL.
 [Source contract and evidence](operations/2026-10-08-native-preview-device-binding-plan.md).
 [Installation and acceptance limits](operations/2026-10-08-native-preview-device-binding-install.md).
 
+**2026-10-08 native continuation:** verification-only0.1.15/build16 candidate
+passed artifact checks but not the actual SDK/Auth/resolver binding. Anonymous
+diagnostics measured the QA caller's missing default network/hostname lookup
+failure; effective policy remains UNKNOWN, not a proven product cause. Owned
+QA13 cleanup is reconciled with primary data preserved. Inactive Task6A is
+independently source-accepted after erasure/lost-ACK/numeric headroom controls;
+Task6B metadata-only authentication is independently source-accepted with actual
+JCA/14 compiled omissions/Android36 API compile, not durable storage. D-335 remains OPEN, generic
+v1 unchanged; no durable vault, consent, rich display or Stable acceptance.
+[Foundation contract, evidence and next gates](operations/2026-10-08-native-preview-vault-foundation.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03

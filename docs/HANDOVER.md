@@ -112,8 +112,11 @@ decrypt). Next: isolated credential-free native vault fence foundation; no plugi
 store/background integration and no Task5 native-positive or Stable inference.
 Task6A inactive fence is now source-accepted after erasure/lost-ACK and numeric
 headroom repairs; final affected numeric run11/11, no remaining P1/P2. Task6B
-authenticated metadata codec is next/in progress, separate from the Android
-Keystore/AtomicFile adapter. [Foundation contract and evidence](operations/2026-10-08-native-preview-vault-foundation.md).
+authenticated metadata codec is also source-accepted: actual JCA controls,
+14 compiled omissions, Android36 SDK compilation and independent review.
+No storage/key creation is integrated. Next: the CE/Keystore/checked AtomicFile
+adapter and its failure/crash tests, separate from unresolved Task5 native proof.
+[Foundation contract and scoped evidence](operations/2026-10-08-native-preview-vault-foundation.md).
 Preserve failed evidence; no Stable GO. A063 excluded; all rich flags false.
 Current resume record:
 `.superpowers/sdd/2026-10-08-native-preview-device-binding-plan/progress.md`.
