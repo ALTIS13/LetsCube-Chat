@@ -69,8 +69,14 @@ PIDs, actual resumed/main/single owner, authenticated EMPTY/G0, repeat-init refu
 cold read and exact owned key-loss refusal/no recreation. Exact cleanup passed;
 primary/local-Test/installed-Test/users preserved. Earlier native/observer/lock
 refusals remain failed, not retroactively explained by the successful case.
-Next: inactive production passive lifecycle authority, serialized transitions
+The inactive passive lifecycle authority80E71 is now independently source-
+accepted, with separate23/9/18 focused JVM runs. One actual SDK dependency
+compile passed: fresh class references real MainActivity/Capacitor, unchanged
+source/config/main-Test APK pins. A fresh project cache isolated the preceding
+Windows cache-lock sharing failure; no old cache/junction reset or failed-receipt
+promotion. No consumer is wired. Next: existing-owner serialized transitions
 and real integration. No Task5 native-positive/rich/Stable promotion.
+[Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).

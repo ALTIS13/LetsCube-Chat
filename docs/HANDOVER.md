@@ -37,11 +37,17 @@ cold read and exact owned key-loss refusal/no recreation. Exact cleanup passed;
 primary/local-Test/installed-Test/user state preserved, no diagnostic remains.
 Frozen APK/source were reused without rebuild. Earlier native refusal, observer
 ENOBUFS and showing-keyguard refusals remain failed; success after a measured
-awake/unrestricted precondition does not prove their historical cause. Next:
-inactive production passive lifecycle authority, then serialized transitions
-and real integration. No Task5 native-positive/rich/Stable, unchanged suite
+awake/unrestricted precondition does not prove their historical cause. The next
+inactive passive lifecycle authority80E71 is now independently source-accepted:
+separate23/9/18 JVM runs, exact MainActivity/instance/epoch retirement and no reset.
+Actual existing-toolchain SDK dependency compile passed with a fresh isolated
+project cache after a separate cache-lock failure/configuration diagnosis; the
+old refusals remain failed, source/config/protected APKs preserved. No consumer
+is wired. Next: existing-owner serialized transitions, then real integration.
+No Task5 native-positive/rich/Stable, unchanged suite
 replay, SQL replay or main deployment. Detailed chronology:
 [pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).
+[Passive authority and actual SDK limits](operations/2026-10-08-native-preview-foreground-authority.md).
 
 Active stage,2026-10-08 Moscow: D-335 recipient-bound native previews,
 coordinator-owned. Server-only default-none schema is installed once and
