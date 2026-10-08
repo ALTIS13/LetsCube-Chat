@@ -25026,8 +25026,12 @@ failure; effective policy remains UNKNOWN, not a proven product cause. Owned
 QA13 cleanup is reconciled with primary data preserved. Inactive Task6A is
 independently source-accepted after erasure/lost-ACK/numeric headroom controls;
 Task6B metadata-only authentication is independently source-accepted with actual
-JCA/14 compiled omissions/Android36 API compile, not durable storage. D-335 remains OPEN, generic
-v1 unchanged; no durable vault, consent, rich display or Stable acceptance.
+JCA/14 compiled omissions/Android36 API compile. Task6C1 checked journal I/O is
+independently source-accepted with owned JVM-file fault controls/nine compiled
+omissions, not Android persistence. CE AtomicFile/key loading is in progress.
+D-335 remains OPEN, generic v1 unchanged; no durable vault, consent, rich display
+or Stable acceptance.
+[Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
 [Foundation contract, evidence and next gates](operations/2026-10-08-native-preview-vault-foundation.md).
 
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait

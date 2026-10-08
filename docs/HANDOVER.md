@@ -114,8 +114,15 @@ Task6A inactive fence is now source-accepted after erasure/lost-ACK and numeric
 headroom repairs; final affected numeric run11/11, no remaining P1/P2. Task6B
 authenticated metadata codec is also source-accepted: actual JCA controls,
 14 compiled omissions, Android36 SDK compilation and independent review.
-No storage/key creation is integrated. Next: the CE/Keystore/checked AtomicFile
-adapter and its failure/crash tests, separate from unresolved Task5 native proof.
+No storage/key creation is integrated. Task6C1 checked journal I/O is source-
+accepted after real owned JVM-file failure controls, nine compiled omissions and
+Android36 API compilation; independent review found no P1/P2. This is not actual
+Android persistence. Task6C2 fixed CE/no-backup AtomicFile backend and Task6C3a
+read-only Keystore loading are in progress, without initialization, key minting,
+deletion, plugin integration or native/Stable promotion.
+[Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
+Next: finish these platform boundaries, then pristine marker/key initialization
+and serialized transitions; Task5 native proof remains separate and unresolved.
 [Foundation contract and scoped evidence](operations/2026-10-08-native-preview-vault-foundation.md).
 Preserve failed evidence; no Stable GO. A063 excluded; all rich flags false.
 Current resume record:
