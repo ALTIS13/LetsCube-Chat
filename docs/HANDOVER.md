@@ -57,14 +57,23 @@ credential codec3B0411 is now independently source-accepted: actual JCA/external
 wire oracle, separate2/47/27/4 selections and28 compiled omissions, not a fresh
 aggregate. One actual Android36 API compile passed: four production sources,
 five fresh class files, preserved source/tools/main-Test APKs; resultCA400D.
-No consumer/key/storage integration or Task5 acceptance. Next: exact credential-
-key custody, then nonempty/provision and real integration.
+No consumer/key/storage integration or Task5 acceptance. The subsequent exact
+credential-key custody portAEB837 is independently source-acceptedE32B93:
+conditional supplied worker/Gate, authenticated current PENDING/RETIRING, bounded
+inventory, literal key policy, one-use requests and no catch-time repair. A draft
+final-key-loss RED was repaired with an affected3/3 selection;76 behavior/29
+compiled cases plus presence are chronological reused evidence, not106/106 fresh.
+One actual Android36 compile passed, resultD842B9: six production sources/nine
+fresh checked definitions, preserved source/tools/main-Test APKs. No real
+provider proof or integration; next is one controlled offline exact key-create/
+delete Realme case, then nonempty/provision and genuine Task5 integration.
 No Task5 native-positive/rich/Stable, unchanged suite
 replay, SQL replay or main deployment. Detailed chronology:
 [pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Passive authority and actual SDK limits](operations/2026-10-08-native-preview-foreground-authority.md).
 [Serialized transitions and current limits](operations/2026-10-08-native-preview-vault-transitions.md).
 [Credential format and actual SDK limits](operations/2026-10-08-native-preview-credential-envelope.md).
+[Conditional key custody and actual SDK limits](operations/2026-10-08-native-preview-key-custody.md).
 
 Active stage,2026-10-08 Moscow: D-335 recipient-bound native previews,
 coordinator-owned. Server-only default-none schema is installed once and

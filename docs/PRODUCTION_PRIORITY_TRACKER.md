@@ -88,12 +88,21 @@ remain failed; no unchanged cold/key-loss replay. Inactive inner credential code
 3B0411 is independently source-accepted: actual JCA/external wire oracle, separate
 2/47/27/4 selections and28 compiled omissions, not a fresh aggregate. One actual
 Android36 API compile passed, resultCA400D: four production sources/five fresh
-classes and preserved source/tools/main-Test APKs. Next: exact credential-key
-custody, then nonempty/provision and real integration. No diagnostic/device job remains.
+classes and preserved source/tools/main-Test APKs. Exact credential-key custody
+AEB837 is subsequently inactive source-acceptedE32B93: conditional worker/Gate,
+authenticated PENDING/RETIRING, bounded inventory, one-use create/exact delete,
+literal policy and no repair. Draft final-key-loss RED repaired, affected3/3;
+76 behavior/29 compiled cases plus presence are chronological, not a fresh106
+aggregate. One actual Android36 compile passedD842B9, six real sources/nine fresh
+checked definitions, protected source/tool/main-Test APKs preserved. Actual
+provider and integration remain unproven. Next: one controlled offline Realme
+key-create/delete case, then nonempty/provision and genuine Task5 integration.
+No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
 [Serialized transition scope and SDK result](operations/2026-10-08-native-preview-vault-transitions.md).
 [Credential format and actual SDK limits](operations/2026-10-08-native-preview-credential-envelope.md).
+[Conditional key custody and actual SDK limits](operations/2026-10-08-native-preview-key-custody.md).
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
