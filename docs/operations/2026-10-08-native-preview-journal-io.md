@@ -83,3 +83,35 @@ Explicit descriptor sync plus kernel readback are still required for CHECKED.
 Source/stub tests and Android SDK compilation are distinct from actual device
 AtomicFile/restart/Keystore acceptance. Key/marker initialization, namespace
 pristine proof and serialized generation/tombstone transitions remain next.
+
+## Atomic Backend Evidence
+
+Task6C2 is independently source-accepted, no P1/P2 in its inactive single-instance
+I/O scope. CE/unlocked/canonical root and base/new/bak checks are repeated per
+operation. Exact borrowed-stream ownership precedes filesystem/close actions;
+completion releases its stream on failure as well as success. Explicit descriptor
+sync does not replace the kernel's exact authenticated readback.
+
+Feature-absence RED1, behavior9/9, eight compiled rule omissions. The initial
+mutation selection passed6/8; two oracle calibrations were corrected, then only
+the changed subset ran3/3. No fresh17-case whole-suite run is claimed. Separate
+Android36 bootclasspath javac passed without doubles. JVM host files/FDs are real,
+but Context/lstat/AtomicFile dispatch uses explicitly labeled API doubles; this
+is not Android recovery, durability or CE/device proof.
+
+| Input | SHA256 |
+| --- | --- |
+| Atomic backend | `193BDB5AC2A84F3AD805569FB69637883B278F97B13FB319B52AD38252403BC4` |
+| Java probe | `6F555F7EF7EA4FE9E8356DA7795BC6196FC6FE17818045156AC2B01F4E477378` |
+| Node controls | `279ED4286F4A2A32EEC68DC997EC745D07EB07235F5300B3EBD60C839E3FB8C0` |
+| API doubles | `81C8E7B3AD74B41ED94C1796FB19D8F9446C0286A3D8BF20D51EA2DEC7B5963D` |
+
+Path validation and AtomicFile are distinct syscalls, not directory-fd/O_NOFOLLOW
+custody. An already-missing namespace refuses; concurrent same-UID replacement
+or deletion between validation/startWrite is outside this proof. Future integration
+must retain a sole namespace lifecycle/storage owner. No unconditional no-creation,
+symlink-race or cross-process protection is claimed.
+
+Read-only Keystore loading and a standalone owned Android platform probe are next.
+The latter uses a separate app UID with fictional metadata and no WebView/network/
+account/content access, not the primary release package or old ephemeral QA13.

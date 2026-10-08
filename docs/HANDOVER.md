@@ -117,9 +117,13 @@ authenticated metadata codec is also source-accepted: actual JCA controls,
 No storage/key creation is integrated. Task6C1 checked journal I/O is source-
 accepted after real owned JVM-file failure controls, nine compiled omissions and
 Android36 API compilation; independent review found no P1/P2. This is not actual
-Android persistence. Task6C2 fixed CE/no-backup AtomicFile backend and Task6C3a
-read-only Keystore loading are in progress, without initialization, key minting,
-deletion, plugin integration or native/Stable promotion.
+Android persistence. Task6C2 fixed CE/no-backup AtomicFile backend is source-
+accepted with nine behavior/eight compiled omission controls and a real Android36
+API compile. Same-UID namespace TOCTOU remains outside the accepted boundary.
+Task6C3a read-only Keystore loading is in progress, without initialization, key
+minting, deletion, plugin integration or native/Stable promotion. A separate owned
+app-UID platform probe is being prepared, without accounts/WebView/network or
+release-package changes; no actual build/install/run has occurred for it.
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
 Next: finish these platform boundaries, then pristine marker/key initialization
 and serialized transitions; Task5 native proof remains separate and unresolved.
