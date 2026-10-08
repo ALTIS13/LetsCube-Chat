@@ -74,9 +74,15 @@ accepted, with separate23/9/18 focused JVM runs. One actual SDK dependency
 compile passed: fresh class references real MainActivity/Capacitor, unchanged
 source/config/main-Test APK pins. A fresh project cache isolated the preceding
 Windows cache-lock sharing failure; no old cache/junction reset or failed-receipt
-promotion. No consumer is wired. Next: existing-owner serialized transitions
-and real integration. No Task5 native-positive/rich/Stable promotion.
+promotion. No consumer is wired. Same-owner empty retirement `5920ED` is subsequently
+source-accepted: calibrated malformed/prewrite-auth RED repairs, separate 3/26/5/2
+affected runs and 14 compiled omissions, not a fresh 48/48 aggregate. One new real SDK
+compile passed with changed/fresh initializer and InitializedState, typed real
+Fence and preserved issuer/MainActivity/Capacitor/source/config/APK pins. Next:
+isolated physical transitions, then nonempty/provision and real integration.
+No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
+[Serialized transition scope and SDK result](operations/2026-10-08-native-preview-vault-transitions.md).
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).

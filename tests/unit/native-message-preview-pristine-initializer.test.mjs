@@ -13,7 +13,7 @@ const binary=name=>resolve(home,"bin",name+(process.platform === "win32" ? ".exe
 const base=resolve(root,"android/app/src/main/java/com/kub/messenger");
 const source=join(base,"MessagePreviewPristineInitializer.java");
 const backend=join(base,"MessagePreviewAtomicBackend.java");
-const supporting=["MessagePreviewVerificationState","MessagePreviewMetadataEnvelope","MessagePreviewJournalIO",
+const supporting=["MessagePreviewVerificationState","MessagePreviewVaultFence","MessagePreviewMetadataEnvelope","MessagePreviewJournalIO",
   "MessagePreviewInstallationMarker","MessagePreviewInitializationGate","MessagePreviewOwnedKeyInventory","MessagePreviewKeystoreReader"]
   .map(name=>join(base,name+".java"));
 const prefix="letscube-pristine-init-";

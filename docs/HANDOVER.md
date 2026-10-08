@@ -43,11 +43,17 @@ separate23/9/18 JVM runs, exact MainActivity/instance/epoch retirement and no re
 Actual existing-toolchain SDK dependency compile passed with a fresh isolated
 project cache after a separate cache-lock failure/configuration diagnosis; the
 old refusals remain failed, source/config/protected APKs preserved. No consumer
-is wired. Next: existing-owner serialized transitions, then real integration.
+is wired. The same-owner empty retirement transitions `5920ED` are subsequently
+source-accepted after calibrated malformed/prewrite-auth RED repairs, separate
+affected selections and 14 compiled omissions. One new actual SDK dependency
+compile passed with fresh changed initializer/InitializedState and preserved
+issuer/MainActivity/Capacitor/config/APK pins. Next: isolated physical transition
+proof, then nonempty/provision and real integration. This is not Task5 acceptance.
 No Task5 native-positive/rich/Stable, unchanged suite
 replay, SQL replay or main deployment. Detailed chronology:
 [pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Passive authority and actual SDK limits](operations/2026-10-08-native-preview-foreground-authority.md).
+[Serialized transitions and current limits](operations/2026-10-08-native-preview-vault-transitions.md).
 
 Active stage,2026-10-08 Moscow: D-335 recipient-bound native previews,
 coordinator-owned. Server-only default-none schema is installed once and

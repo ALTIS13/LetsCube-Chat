@@ -14,7 +14,7 @@ const source = join(java, "MessagePreviewForegroundAuthority.java");
 const fixture = join(root, "tests/fixtures/native-message-preview-foreground-authority/MessagePreviewForegroundAuthorityProbe.java");
 const frozen = {
   MessagePreviewInitializationGate: "6366e947e55f88183578294058c25116c6d717324536bebe67f8a4f8b239e621",
-  MessagePreviewPristineInitializer: "08f70f1fb995c357f333966b6fd4dd2de283989edfecd84898bc24306a6f1bee",
+  MessagePreviewPristineInitializer: "5920ed1908b4376687cbf7ee1a19cd968fb48c3dcbbc94257f95a4b5ee469a04",
   MainActivity: "28015cfd78a2533e66d85ca44bcf6d82483b241ed88f6e8241dcbde28a639fe0",
 };
 const jbr = "C:/Program Files/Android/Android Studio/jbr/bin";
