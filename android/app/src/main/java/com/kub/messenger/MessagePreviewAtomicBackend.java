@@ -300,7 +300,9 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
             }
         }
 
-        private String readMarker() throws Exception {
+        private String readMarker() throws Exception { return readMarker(false); }
+
+        private String readMarker(boolean afterInitialJournal) throws Exception {
             FileDescriptor fd = null;
             FileInputStream stream = null;
             String installation;
@@ -334,7 +336,20 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
             }
             currentNamespace();
             String[] children = namespace.list();
-            if (children == null || children.length != 1 || !"installation-v1.bin".equals(children[0])) throw new MarkerUnavailable();
+            if (!afterInitialJournal) {
+                if (children == null || children.length != 1 || !"installation-v1.bin".equals(children[0])) throw new MarkerUnavailable();
+            } else {
+                if (children == null || children.length != 2
+                    || !Arrays.asList(children).contains("installation-v1.bin")
+                    || !Arrays.asList(children).contains("journal-v1.bin")) throw new MarkerUnavailable();
+                File base = new File(namespace, "journal-v1.bin");
+                StructStat before = ownedStat(base, false, -1);
+                if (before.st_size <= 0 || before.st_size > 16_384) throw new MarkerUnavailable();
+                currentNamespace();
+                StructStat after = ownedStat(base, false, -1);
+                same(before, after);
+                if (before.st_size != after.st_size) throw new MarkerUnavailable();
+            }
             currentNamespace();
             return installation;
         }
@@ -377,13 +392,21 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
         }
 
         void requireCurrent(MarkerReservation reservation) throws MarkerUnavailable {
+            requireCurrent(reservation, false);
+        }
+
+        void requireCurrentAfterInitialJournal(MarkerReservation reservation) throws MarkerUnavailable {
+            requireCurrent(reservation, true);
+        }
+
+        private void requireCurrent(MarkerReservation reservation, boolean afterInitialJournal) throws MarkerUnavailable {
             try {
                 if (reservation == null || reservation != issued || reservation.issuer != this
                     || reservation.permit != permit || reservation.worker != worker) throw new MarkerUnavailable();
                 currentNamespace();
                 same(reservation.rootIdentity, rootIdentity); same(reservation.namespaceIdentity, namespaceIdentity);
                 same(reservation.markerIdentity, markerIdentity);
-                if (!reservation.installation.equals(readMarker())) throw new MarkerUnavailable();
+                if (!reservation.installation.equals(readMarker(afterInitialJournal))) throw new MarkerUnavailable();
                 currentNamespace();
             } catch (Exception refused) { throw new MarkerUnavailable(); }
         }

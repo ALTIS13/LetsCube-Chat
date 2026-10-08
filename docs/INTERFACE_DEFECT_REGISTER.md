@@ -25039,13 +25039,16 @@ no-recreation. Original install ACK remains refused/unknown; exact diagnostic
 cleanup passed, primary APK/UID/users/TestAPK preserved. Inactive marker,
 owned-alias inventory, one-use admission and marker reservation port24B218 are
 accepted source, not an initialized vault. Repaired actual Android36 compilation
-passed; new marker I/O has no physical receipt. Complete pristine key/G0
-initialization/sole UID owner remain next.
+passed; new marker I/O has no physical receipt. Full initializer08F70/backend056F
+now composes sole-owner/key/authenticated G0 in inactive source, independently
+accepted with final Android36 compile. Retained fixture-liveness uncertainty,
+actual G0/production lifecycle and whole transition proof remain next.
 D-335 remains OPEN, generic v1 unchanged; no durable vault, consent, rich display
 or Stable acceptance.
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
 [Foundation contract, evidence and next gates](operations/2026-10-08-native-preview-vault-foundation.md).
 [Platform attempts and actual acceptance limits](operations/2026-10-08-native-preview-platform.md).
+[Composed source and next physical gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 

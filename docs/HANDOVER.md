@@ -138,12 +138,17 @@ Exact diagnostic cleanup passed; main APK/UID/users/TestAPK preserved.
 Marker/inventory, one-use foreground admission and the nested marker reservation
 I/O port24B218 are inactive source-accepted. A public-API compile defect was
 repaired and exact Android36 compilation passed; new marker I/O is not covered
-by the old physical52B2/R3 receipts. Whole pristine key/G0 initialization and the sole UID/lifecycle owner remain
-unfinished. No Task5 native-positive, rental, SQL, main or Stable claim follows.
+by the old physical52B2/R3 receipts. The subsequent full initializer08F70/backend056F
+is now inactive source-accepted with one retained UID/worker and exact key/G0
+composition, final Android36 compile and independent review. Fixture-liveness
+uncertainty remains open; actual G0/production lifecycle integration is unproved.
+Fresh offline Realme diagnostic source/artifact/guards are being prepared, not run.
+No Task5 native-positive, rental, SQL, main or Stable claim follows.
+[Composed initialization and next physical gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and exact remaining acceptance](operations/2026-10-08-native-preview-platform.md).
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
-Next: pristine marker/key initialization
-and serialized transitions; Task5 native proof remains separate and unresolved.
+Next: isolated physical G0/lifecycle proof and serialized transitions;
+Task5 native proof remains separate and unresolved.
 [Foundation contract and scoped evidence](operations/2026-10-08-native-preview-vault-foundation.md).
 Preserve failed evidence; no Stable GO. A063 excluded; all rich flags false.
 Current resume record:

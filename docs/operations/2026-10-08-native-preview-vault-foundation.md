@@ -116,8 +116,8 @@ primary data retained; its failure diagnostic measured no default network and
 hostname lookup failure for that caller. Effective policy remains UNKNOWN.
 Do not replay Auth or change global networking to guess a repair.
 
-Next: complete explicit pristine initialization/sole UID owner, serialized
-transitions and crash/failure tests, then fresh verification-only foreground
+Next: isolated physical pristine-initializer proof, production lifecycle binding,
+serialized transitions and crash/failure tests, then fresh verification-only foreground
 adapter and a narrowly owned working device environment. Consent/background
 fetch/display and Stable publication require their separate real-system gates.
 Neither installed database migration is to be replayed.
@@ -251,6 +251,9 @@ scripted there, not physical proof. Current source/probe/tests SHA256:
 - tests `F514D16A0628F813A436BBCC3DCFD24494432769024500BC1746A85D73164C4B`.
 
 R3's historical physical52B2 proof remains unchanged; it does not test this new
-marker path. Actual owned-key absence, full sole-owner/key/authenticated EMPTY/G0
-composition and native lifecycle binding remain next. Task5 native-positive,
-rich display and Stable gates are still false.
+marker path. At this reservation checkpoint, full key/G0 composition was absent.
+The subsequent inactive initializer08F70/backend056F is now source-accepted with
+actual Android36 compilation; physical G0/production lifecycle remain next.
+Its fixture-liveness uncertainty is retained, not explained away by a retry.
+[Composed source and exact remaining proof](2026-10-08-native-preview-pristine-initializer.md).
+Task5 native-positive, rich display and Stable gates are still false.

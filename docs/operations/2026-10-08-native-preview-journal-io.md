@@ -194,6 +194,8 @@ are historical, not a physical marker test; journal behavior's exact byte
 projection is preserved. No key/G0/owner activation follows from that port.
 [Marker reservation scope and evidence](2026-10-08-native-preview-vault-foundation.md#marker-reservation-io-source).
 
-Next: complete explicit pristine key/G0 initialization and sole UID owner, then
-whole generation/erasure/provision transitions. Task5 SDK/Auth/resolver binding
-remains unresolved; no rich/Stable GO.
+Subsequent initializer08F70/backend056F composes sole-owner/key/authenticated G0
+in inactive source, with exact Android36 compile and independent acceptance.
+[Composition evidence and retained timing uncertainty](2026-10-08-native-preview-pristine-initializer.md).
+Next: isolated physical G0/lifecycle proof, then whole generation/erasure/provision
+transitions. Task5 SDK/Auth/resolver binding remains unresolved; no rich/Stable GO.

@@ -61,8 +61,11 @@ failed-write preservation and missing-key/no-recreation. Exact cleanup passed
 with primary APK/UID/users/TestAPK preserved. Marker/inventory/one-use admission
 and marker reservation port24B218 are inactive source-accepted; its actual
 Android36 API compile passed after the unavailable-flag repair, not a new device
-test. Complete pristine key/G0 initialization/sole UID
-lifecycle owner remain unfinished. No Task5 native-positive/rich/Stable promotion.
+test. Full initializer08F70/backend056F is subsequently inactive source-accepted
+with exact key/G0 composition, one UID/worker and final Android36 compilation.
+Fixture-liveness uncertainty remains; physical G0/production lifecycle binding
+and serialized transitions are unfinished. No Task5 native-positive/rich/Stable promotion.
+[Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
 [Current source and device limits](operations/2026-10-08-native-preview-vault-foundation.md).
