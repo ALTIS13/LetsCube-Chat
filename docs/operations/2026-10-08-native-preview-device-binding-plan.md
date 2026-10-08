@@ -200,11 +200,13 @@ OS display authorization, autonomous background credential refresh or immediate
 cross-process card retirement. Those remain separate native lifecycle work.
 
 [MainActivity](../../android/app/src/main/java/com/kub/messenger/MainActivity.java)
-does not register `MessagePreviews`; the
+now registers the subsequent verification-only `MessagePreviewsPlugin`. It
+returns protocol0, not vault/display capability. The
 [existing adapter](../../artifacts/kub/src/lib/platform/nativeMessagePreviews.ts)
-therefore cannot negotiate an actual native preview candidate today. This plan
-does not add that plugin/vault/fetch, expose bearer tokens to it or enable rich
-payloads. Existing generic chat v1 and voice contracts remain unchanged.
+still cannot negotiate a ready protocol1 preview candidate. The plugin was absent
+at this resolver's original design checkpoint; that absence is no longer a
+current implementation blocker. This resolver plan does not add vault/fetch or
+rich payloads. Existing generic chat v1 and voice contracts remain unchanged.
 Keep `nativePositive=false`, `richPreviewEnabled=false`, `canPublishRich=false`.
 A resolver-positive UUID does not change any of those flags.
 
@@ -248,9 +250,10 @@ A resolver-positive UUID does not change any of those flags.
    Zero devices is an observed availability gap, not success. Separate native
    capability/credential/display implementation and physical evidence come later.
 
-Immediate blockers to native preview, not to drafting this resolver: current ACK
-lacks row UUID; a real current-session QA registration is still needed; native
-`MessagePreviews` is absent. Global non-reassignment would require the separate
+Current blockers to native preview: a real current-session SDK registration and
+Task5 binding are still needed; protocol1 vault/lifecycle/card acceptance remains
+unfinished. The installed resolver supplies UUID discovery without changing the
+existing registration ACK. Global non-reassignment would require the separate
 write-contract decision above. This document resolves the discovery design only,
 not D335 native/display acceptance, FCM delivery or OS privacy proof.
 

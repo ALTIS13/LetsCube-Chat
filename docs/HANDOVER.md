@@ -135,8 +135,10 @@ Independent read-only incarnation reconciliation then admitted separate no-insta
 PREPARE/COLD/KEY_LOSS phases: all passed on Realme with distinct process IDs,
 authenticated G8, failed-write preservation and missing-key/no-recreation.
 Exact diagnostic cleanup passed; main APK/UID/users/TestAPK preserved.
-Marker/inventory and one-use foreground admission leaves are inactive source-
-accepted; whole pristine initialization and the sole UID/lifecycle owner remain
+Marker/inventory, one-use foreground admission and the nested marker reservation
+I/O port24B218 are inactive source-accepted. A public-API compile defect was
+repaired and exact Android36 compilation passed; new marker I/O is not covered
+by the old physical52B2/R3 receipts. Whole pristine key/G0 initialization and the sole UID/lifecycle owner remain
 unfinished. No Task5 native-positive, rental, SQL, main or Stable claim follows.
 [Platform attempts and exact remaining acceptance](operations/2026-10-08-native-preview-platform.md).
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).

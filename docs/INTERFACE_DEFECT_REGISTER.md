@@ -25037,8 +25037,10 @@ PREPARE/COLD/KEY_LOSS passed after exact current-incarnation reconciliation:
 authenticated G8, process restart, failed-write preservation and missing-key/
 no-recreation. Original install ACK remains refused/unknown; exact diagnostic
 cleanup passed, primary APK/UID/users/TestAPK preserved. Inactive marker,
-owned-alias inventory and one-use admission leaves are accepted source, not an
-initialized vault. Explicit pristine initialization/sole UID owner remain next.
+owned-alias inventory, one-use admission and marker reservation port24B218 are
+accepted source, not an initialized vault. Repaired actual Android36 compilation
+passed; new marker I/O has no physical receipt. Complete pristine key/G0
+initialization/sole UID owner remain next.
 D-335 remains OPEN, generic v1 unchanged; no durable vault, consent, rich display
 or Stable acceptance.
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).

@@ -11,7 +11,8 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const javaHome = process.env.MESSAGE_PREVIEW_TEST_JDK ?? "C:/Program Files/Android/Android Studio/jbr";
 const binary = name => resolve(javaHome, "bin", name + (process.platform === "win32" ? ".exe" : ""));
 const source = resolve(root, "android/app/src/main/java/com/kub/messenger/MessagePreviewAtomicBackend.java");
-const supporting = ["MessagePreviewVerificationState", "MessagePreviewMetadataEnvelope", "MessagePreviewJournalIO"]
+const supporting = ["MessagePreviewVerificationState", "MessagePreviewMetadataEnvelope", "MessagePreviewJournalIO",
+  "MessagePreviewInstallationMarker", "MessagePreviewInitializationGate"]
   .map(name => resolve(root, "android/app/src/main/java/com/kub/messenger", name + ".java"));
 const probe = resolve(root, "tests/android/MessagePreviewAtomicBackendProbe.java");
 let directory;

@@ -8,6 +8,18 @@ public abstract class Context {
   public abstract Context getApplicationContext();
   public abstract File getNoBackupFilesDir();
   public abstract Object getSystemService(String name);
+  public android.content.pm.ApplicationInfo getApplicationInfo() { return new android.content.pm.ApplicationInfo(); }
+}`,
+  // Compile closure for nested inactive MarkerIO only; old adapter scenarios do not exercise these APIs.
+  "android/content/pm/ApplicationInfo.java": `package android.content.pm;
+public class ApplicationInfo { public int uid = 10123; }`,
+  "android/os/Process.java": `package android.os;
+public final class Process { public static int myUid() { return 10123; } }`,
+  "android/os/Looper.java": `package android.os;
+public final class Looper {
+  private static final Looper MAIN = new Looper();
+  public static Looper getMainLooper() { return MAIN; }
+  public static Looper myLooper() { return MAIN; }
 }`,
   "android/os/UserManager.java": `package android.os;
 public class UserManager {
@@ -22,11 +34,14 @@ public class ErrnoException extends Exception {
   "android/system/StructStat.java": `package android.system;
 public class StructStat {
   public final int st_mode;
+  public final int st_uid = 10123;
+  public final long st_dev = 1, st_ino = 1, st_size = 0;
   public StructStat(int mode) { st_mode = mode; }
 }`,
   "android/system/OsConstants.java": `package android.system;
 public final class OsConstants {
   public static final int ENOENT = 2, ENOTDIR = 20;
+  public static final int O_RDONLY=0, O_WRONLY=1, O_CREAT=64, O_EXCL=128, O_NOFOLLOW=131072;
   public static boolean S_ISLNK(int mode) { return mode == 3; }
   public static boolean S_ISDIR(int mode) { return mode == 2; }
   public static boolean S_ISREG(int mode) { return mode == 1; }
@@ -45,6 +60,12 @@ public final class Os {
     if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return new StructStat(1);
     return new StructStat(4);
   }
+  // Fail loudly if a future test accidentally treats this old policy double as MarkerIO I/O proof.
+  public static void mkdir(String name, int mode) throws ErrnoException { throw new ErrnoException(13); }
+  public static java.io.FileDescriptor open(String name, int flags, int mode) throws ErrnoException { throw new ErrnoException(13); }
+  public static StructStat fstat(java.io.FileDescriptor fd) throws ErrnoException { throw new ErrnoException(13); }
+  public static void fsync(java.io.FileDescriptor fd) throws ErrnoException { throw new ErrnoException(13); }
+  public static void close(java.io.FileDescriptor fd) throws ErrnoException { throw new ErrnoException(13); }
 }`,
   "android/util/AtomicFile.java": `package android.util;
 import java.io.*;

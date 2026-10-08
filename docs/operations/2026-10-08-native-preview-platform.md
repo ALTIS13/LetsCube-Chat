@@ -107,6 +107,23 @@ APK770a29ff/UID10533, original user digest and local main/TestAPK preserved.
 No diagnostic remains from R3. Fixed scalar receipts are kept privately in the
 distinct recovery chain; no content, bearer, key material or personal capture.
 
+## Future ACK Observation Repair
+
+A new inactive diagnostic helper is independently source-accepted. It awaits
+exclusive fixed-file ACK metadata write/sync/close, canonical path/DACL and exact
+readback before permitting an owner/native phase or cleanup PASS. Only bounded
+exit/stream byte counts, SHA256 digests and exact-form classification are stored;
+malformed/refused results and persistence uncertainty cannot admit success.
+Old R3 helpers, records and unknown historical ACKs remain unchanged.
+
+Focused pure inspector controls9 and new integration controls10 unique passed;
+the latter's initial two VM setup errors were repaired with only affected2/2,
+not a fresh combined10-case run. Independent delta review found no P1/P2.
+These are fictional host/device-port source checks, not actual Windows ACK
+durability/DACL or another install. The prepared helper is still bound to the
+frozen R3 artifact/source pins: changed MarkerIO/backend code must refuse those
+old pins, not be smuggled into old physical evidence. No R4 phase was executed.
+
 ## Remaining Acceptance
 
 Real app-UID CE admission and generated-key/reader policy were observed, not

@@ -59,7 +59,9 @@ original install ACK remains refused/unknown. Separate read-only reconciliation
 then no-install PREPARE/COLD/KEY_LOSS passed on Realme: G8 round-trip/restart,
 failed-write preservation and missing-key/no-recreation. Exact cleanup passed
 with primary APK/UID/users/TestAPK preserved. Marker/inventory/one-use admission
-leaves are inactive source-accepted; explicit pristine initialization/sole UID
+and marker reservation port24B218 are inactive source-accepted; its actual
+Android36 API compile passed after the unavailable-flag repair, not a new device
+test. Complete pristine key/G0 initialization/sole UID
 lifecycle owner remain unfinished. No Task5 native-positive/rich/Stable promotion.
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).

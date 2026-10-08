@@ -116,7 +116,7 @@ primary data retained; its failure diagnostic measured no default network and
 hostname lookup failure for that caller. Effective policy remains UNKNOWN.
 Do not replay Auth or change global networking to guess a repair.
 
-Next: Android CE/no-backup/Keystore/checked AtomicFile storage, serialized
+Next: complete explicit pristine initialization/sole UID owner, serialized
 transitions and crash/failure tests, then fresh verification-only foreground
 adapter and a narrowly owned working device environment. Consent/background
 fetch/display and Stable publication require their separate real-system gates.
@@ -167,9 +167,9 @@ rebuild or device test of the marker. Source/probe/tests frozen SHA256:
 - probe `2BD8F5BD209BEF12E4B90F4A512A7462E2FEE22F36E0C6AC3749E994748DF849`;
 - tests `027E982B8F9CA7CBBBED11A65AFBB14C84CD7F10DBE5427D251533FF41D773B6`.
 
-Pristine namespace/alias inventory, immutable marker file/directory sync, exact
-one-use key creation, sole-worker/passive foreground ownership and authenticated
-EMPTY/G0 initialization remain next. The marker does not activate those parts.
+At that codec checkpoint, marker file persistence and pristine admission were
+still absent. The subsequent leaves and MarkerIO below supply scoped inactive
+prerequisites, not complete UID/key/G0 initialization or active capability.
 [Separate platform artifact/device checkpoint](2026-10-08-native-preview-platform.md).
 
 ### Bounded Owned-Key Inventory Source
@@ -218,3 +218,39 @@ preserved. The probe embeds backend/reader/envelope/journal only, not the new
 marker/inventory/admission gate or a complete initializer. No credential, Auth,
 SDK-device binding, whole-vault or rich-display proof follows from it.
 [Exact phases and unresolved gates](2026-10-08-native-preview-platform.md).
+
+### Marker Reservation I/O Source
+
+Inactive nested `MessagePreviewAtomicBackend.MarkerIO` is independently source-
+accepted, no P1/P2. It requires a real consumed gate permit on the exact worker,
+actual process/application UID, non-main Looper and unlocked CE application root.
+Only raw ENOENT admits namespace absence. One-use exclusive0700 namespace and
+0600 marker creation,28-byte file sync/checked close, both directory syncs and
+fresh bounded exact readback precede a native-private reservation. Currency is
+rechecked after platform reads and directory fstat. Failure retains residue;
+no reset/key mint/journal G0/finishInitialized or active consumer was introduced.
+
+The initial public Android36 compilation refused an unavailable O_DIRECTORY
+constant which the JVM double had exposed. The narrow repair uses public
+O_RDONLY/O_NOFOLLOW with immediate DIR/dev/inode/UID/mode fstat custody. The
+[official API surface](https://developer.android.com/reference/android/system/OsConstants)
+and installed SDK were checked. This is not atomic directory-only open,
+parent-path/hostile same-UID exclusion or syscall preemption. Both original SDK
+failures remain failed; one separate repaired-source compile passed exit0 with
+four backend/nested classes and unchanged source readback, without API doubles.
+
+Focused new JVM history: initial29/29, later changed subsets10/10 and2/2,
+public-API repair7/7 including two compiled omissions. No final aggregate or
+unchanged suite replay is claimed. Exact prior backend52B2 byte projection is
+preserved apart from the identical root-helper extraction; changed old-harness
+compile closure passed only healthy/root2. Android directory/UID semantics are
+scripted there, not physical proof. Current source/probe/tests SHA256:
+
+- backend `24B218172F0307273F9DD43296CFCC26FFF38AFF2C614F5AC09BFF10F87CC7D6`;
+- probe `73FB440DC3DF35038CCA8DE86EB36B994A016E0B7917E336F4CB94DCCF329672`;
+- tests `F514D16A0628F813A436BBCC3DCFD24494432769024500BC1746A85D73164C4B`.
+
+R3's historical physical52B2 proof remains unchanged; it does not test this new
+marker path. Actual owned-key absence, full sole-owner/key/authenticated EMPTY/G0
+composition and native lifecycle binding remain next. Task5 native-positive,
+rich display and Stable gates are still false.

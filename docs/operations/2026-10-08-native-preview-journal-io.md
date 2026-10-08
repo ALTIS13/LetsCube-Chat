@@ -188,5 +188,12 @@ it; the future explicit creation spec must enforce it via
 The accepted envelope already requests provider-generated IVs. No hardware-
 backing/other-validity-policy/unlocked lease or native acceptance is inferred.
 
-Next: explicit pristine marker/key initialization, then whole generation/erasure/provision
-transitions. Task5 SDK/Auth/resolver binding remains unresolved; no rich/Stable GO.
+The subsequent nested MarkerIO port24B218 is source-accepted with focused JVM
+controls and repaired-source Android36 compilation. Prior physical52B2 receipts
+are historical, not a physical marker test; journal behavior's exact byte
+projection is preserved. No key/G0/owner activation follows from that port.
+[Marker reservation scope and evidence](2026-10-08-native-preview-vault-foundation.md#marker-reservation-io-source).
+
+Next: complete explicit pristine key/G0 initialization and sole UID owner, then
+whole generation/erasure/provision transitions. Task5 SDK/Auth/resolver binding
+remains unresolved; no rich/Stable GO.
