@@ -72,10 +72,51 @@ does not retain a bearer or advertise display capability. Real device proof,
 vault/explicit choice/background card acceptance follow; no new permission gate.
 Verification-only native/client/probe source is independently accepted, including
 the malformed-newer-account retirement repair (RED5 then affected15/15). Candidate
-metadata is0.1.15/build16, not yet built/installed/published. Coordinator's next
-action: reviewed finite build, packaged logging/Firebase/signer/embedded web/test
-target inspection, then isolated Realme normal QA sign-in/verification/logout and
-read-only endpoint preservation witnesses. A063 excluded; all rich flags false.
+metadata is0.1.15/build16. The signed candidate is built and installed on isolated
+Realme QA13; APK770a29ff.../sourceb97a9b54 and signer continuity, Firebase,
+loggingnone/embedded-web/test-target gates passed. NOT published: one selected
+native verification test failed after120s, with no new successful Auth session or
+Android row. A separate guest-only device diagnostic passed: healthy unique login
+form, no captcha or boot recovery. Its package was removed and original test APK
+restored. A fictional compiled-browser calibration passed both ordinary typing
+and exact old test setter/submit with one intercepted Auth POST each and zero
+backend dispatch; the setter hypothesis is not reproduced there. No application
+cause or native positive is claimed. The separate native-keyboard calibration
+was built and executed once: mounted/form/submitted=true, verified/logout=false
+after120s. Its namespace was removed; matched server AFTER preserved unrelated
+bindings/choices and observed zero own Android rows. Input equality and the Auth
+HTTP outcome remain unmeasured. Anonymous network diagnosis first stopped at
+Android javac (Authenticator.getDefault is unavailable); main/original test bytes
+were restored. Repaired test-only build and one actual case passed1/0 with owned
+test-package removal: WebView health fetch failed without response/timeout; native
+HTTP was explicitly unavailable, not failed TLS. Phone shell health GET returned
+401 with default TLS; clock/DNS checks passed, and server CORS allows localhost.
+These do not prove target-app UID/WebView connectivity. A separate native-keyboard
+exact-input diagnostic passed1/0: both fields matched the owned QA inputs exactly,
+then both were cleared; no submit/Auth. Its namespace was removed onlyQA13,
+main770/original testBA unchanged. Input corruption was not reproduced in that
+attempt; React state/outgoing Auth body are not established by this measurement.
+The separate WebView failure diagnostic now passed1/0 after its cold-readiness
+P2 repair. Actual target UID had INTERNET/unblocked WebView loads, but no active
+network; the fixed health GET observed a DNS resource error/TypeError rejection.
+QA13 was RUNNING_UNLOCKED, target absent from both background lists. No network/
+Happ/trust policy was changed; shell401 is not app-UID proof. Cause review leaves
+the effective caller-network rule UNKNOWN; no guessed global repair. QA13 cleanup
+ran once: original test removed, switch0, explicit remove raced automatic ephemeral
+removal and refused. Separate read-only reconciliation passed: exact QA13 absent,
+original user-ID digest restored, main app retained, main770/testBA/probe03 unchanged.
+The failed cleanup exit is preserved, not relabeled PASS. No rental minutes used.
+Task6 contract delta is independently accepted (erasure-only retirement after
+context loss, separate live revision domains, authenticated metadata without bearer
+decrypt). Next: isolated credential-free native vault fence foundation; no plugin/
+store/background integration and no Task5 native-positive or Stable inference.
+Task6A inactive fence is now source-accepted after erasure/lost-ACK and numeric
+headroom repairs; final affected numeric run11/11, no remaining P1/P2. Task6B
+authenticated metadata codec is next/in progress, separate from the Android
+Keystore/AtomicFile adapter. [Foundation contract and evidence](operations/2026-10-08-native-preview-vault-foundation.md).
+Preserve failed evidence; no Stable GO. A063 excluded; all rich flags false.
+Current resume record:
+`.superpowers/sdd/2026-10-08-native-preview-device-binding-plan/progress.md`.
 [Current native source evidence and execution gates](operations/2026-10-08-native-preview-verification-bridge.md).
 Client sidecar is
 SOURCE_ACCEPTED:61/61 including10 mutants, adjacent9+4 and typecheck0; independent

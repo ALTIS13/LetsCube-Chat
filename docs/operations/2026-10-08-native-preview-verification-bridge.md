@@ -82,9 +82,138 @@ administrative endpoint deletion or fabricated Auth/device rows.
 
 All bounded source reviews accepted: client, repaired native, bound probe,
 build/artifact recipe, owned device procedure and read-only server witnesses.
-No outstanding P1/P2 in those reviews. Current gate: actual
-build/artifact/isolated device and cleanup. No current candidate build, device
-sign-in, main deployment or release publication is claimed by this source report.
+No outstanding P1/P2 in those reviews. Source acceptance is distinct from the
+following actual execution. No main deployment or release publication occurred.
+
+## Actual Candidate And Failed Device Check
+
+Sourcecommitb97a9b54,0.1.15/build16. Own web build/cap sync passed; the first Gradle
+launch failed before task compilation on its exact cleanup lock. A separately
+reviewed Gradle-only resume completed35.76s, instrumentation13.167s. Original
+failure and previous APK/AAB are preserved; no cache deletion/global JDK changes.
+
+Signed APK SHA256
+`770a29ffd10a58157dc7fd5fb3e5d76c184c8d444164532a61e403a50cd26321`,
+7,649,251 bytes, unchanged signer. Artifact inspection passed Firebase resource
+names,33 local web-asset byte comparisons/SW4d8b8253303f69cd, packaged loggingnone,
+native DEX presence and exact test manifest/source/signer. Original test APK
+SHA256`ba4573c84fa16c001774c428b45f83fc1af30719e9eb9fcc353d2c32331887b9`.
+
+Actual server BEFORE passed for the owned QA identity, with zero live Android
+devices/Android rows/preview choices. Candidate and test installed on new Realme
+ephemeral QA13; primary data preserved/A063 untouched. One selected test failed
+after120s, fixed refusal NMPV_VERIFICATION_NOT_OBSERVED; no successful new Auth
+session or Android row observed. Native positive and normal logout were not proved.
+
+A separate private guest diagnostic passed1/0: mounted native Android at /login,
+unique enabled writable form/fields/submit, no captcha or boot recovery. No Auth
+or SDK token request in that test. Its namespace was removed only from QA13;
+original test APK restored byte-identically, main APK unchanged. A local Chromium
+calibration of the exact built form passed ordinary fill and original Java setter/
+submit literals: one correct fictional Auth POST each, intercepted before network,
+zero backend dispatch. The setter failure hypothesis is not reproduced there;
+neither later guest readiness nor Chromium proves the original Android cause.
+
+The separate calibrated test used actual native keyboard input and observed one
+DOM submit event. Its signed test APK was built; the unchanged main APK and
+original test APK were rehashed after restoration. One selected case failed
+after120s: mounted/form/submitted=true, verified/logout=false. The test namespace
+was removed only from QA13. Fresh matched server BEFORE/AFTER passed: unrelated
+device digest and preview choices preserved, own Android/live bindings/choices0.
+Read-only Auth inspection found the QA account confirmed and unblocked, with no
+recent own session/login-audit row. This is not an Auth HTTP-attempt/result proof.
+Nonempty rendered fields do not prove exact credentials or React submit state.
+
+The following anonymous network diagnostic's first build failed Android javac:
+Authenticator.getDefault() is not available in that platform API. No device case
+ran and no successful build receipt was written. Main770/original testBA byte
+restoration passed. Preserve the original network-* logs/intent and use a distinct
+network-r1-* evidence namespace for the repaired private test. It must not inspect
+hidden APIs, change global cookie/authentication handlers or repeat credentials
+blindly. The repaired private Java removes the unavailable native lane completely;
+only its fixed native_other_failure flag is set. Changed API controls compile
+against the actual Android SDK jar, not only JVM stubs. The same scoped Gradle
+cache is intentionally reused; a proposed fresh-cache requirement was withdrawn
+after independent review found no concrete impact. Actual AndroidTest javac
+executed (not UP-TO-DATE), build succeeded, main/original test bytes were restored,
+and the distinct signed test APK has SHA256
+`14ff37de9f46d38edb6bb51db84aa840b216e468923ba57bf5a95f5cdfa5f442`.
+
+One actual selected diagnostic passed1/0, zero skips. WebView measurement completed
+with web_response=false, web_timeout=false, web_failure=true; own temporary state
+and test package were removed. This does not classify DNS/TLS/CORS. Phone shell
+read-only evidence: clock within five minutes, domain ping reply, curl with config
+disabled/default TLS/no body capture returned401. PC health GET with localhost
+Origin returned401 and wildcard CORS. Manifest/package INTERNET grant was observed;
+background restriction disabled and no QA13 always-on VPN/lockdown configured.
+Shell/PC connectivity does not prove target-app UID or WebView trust/policy.
+
+The independent exact-input AndroidTest was built and executed once, PASS1/0,
+zero skips. TestAPK SHA256
+`0d67ef3ff5d3d59d06ca0e7ee2f4c0a9cc28aeb7466a377de7aadce5beb2fc84`.
+Its four Boolean receipt fields were true: input attempted, email exact, password
+exact, fields cleared. It used ordinary native keyboard input and no submit/Auth;
+its namespace was removed onlyQA13, main770/original testBA unchanged. Input
+corruption was not reproduced in this attempt. Exact DOM values do not establish
+React state, an outgoing Auth body or successful Auth/device binding.
+
+The separate target-UID WebView diagnostic is now source-accepted after the cold
+readiness repair (RED1/warm control1, affectedGREEN5/5; old suites not replayed).
+One signed test-only build and actual selected case passed1/0, zero skips.
+TestAPK SHA256
+`6c07c4ff9854bce4bb73945338974ab93213000d1d8e7e467ede5d72be6bfce3`.
+Main770/original testBA remained byte-identical and its namespace was removed
+onlyQA13. Original WebView client and own JS state were restored/cleared.
+
+Actual target UID matched and had INTERNET; JS was enabled and WebView network
+loads were not blocked. Background restriction was disabled. The target's
+ConnectivityManager observed no active network/capabilities; the fixed health
+GET was observed, then its resource error category was DNS and its JS outcome
+was TypeError rejection. No SSL error was observed in this measurement. Callback
+absence alone does not prove universally healthy TLS/CSP. This is a measured
+QA13 network-availability gap, not proof that the product code is at fault or
+that an Auth POST was attempted. Shell/PC401 remains a different UID/context.
+
+Read-only adjacent checks found QA13 RUNNING_UNLOCKED and the target UID on
+neither recognized background blacklist nor whitelist. The first unsupported
+user-unlock command returned unknown, not locked; the supported user-state
+command supplied the positive observation. No app policy/permission, network,
+Happ/VPN, firewall, certificate or trust settings were changed. Next: narrowly
+review the QA connectivity boundary without guessing a global repair, then exact
+owned-profile cleanup. The source-only review leaves the effective caller-network
+rule UNKNOWN: the queried lists are not all UID policies and no active network
+can mean no default or caller-blocked. Metered=true with unavailable capabilities
+is not proof of a metered transport. A future passive callback/UID-specific policy
+measurement is a separately scoped option, not an active request or repair.
+
+Original cleanup executed once. It removed the original test onlyQA13 and switched
+to user0, then explicit remove-user13 raced Android's automatic ephemeral removal
+and refused. The original failed exit/intent are preserved. A distinct read-only
+reconciliation, with two focused source controls, passed: exact QA13 absent,
+original user-ID count/digest restored, main0.1.15/build16 retained, all owned
+20261008 test namespaces absent from primary user, main770/testBA/probe03 unchanged.
+No primary clear, A063 access, capture or additional removal command. This proves
+the checked final cleanup state, not success of the first helper or native binding.
+Private result is device-cleanup-reconciliation.json; it does not replace the
+missing original device-cleanup.json or promote the release gate.
+
+Independent Task6 contract delta was accepted without execution: erasure-only
+retirement survives Task5 clear/expiry, context and vault-intent fences are distinct,
+and an authenticated empty metadata envelope protects cold generation reads without
+decrypting the bearer. Next: a credential-free isolated admission/fence foundation,
+no plugin integration/Keystore/storage/background consumer yet. Task5 native
+acceptance remains unresolved; no protocol1 or rich capability is enabled.
+
+Task6A is now independently source-accepted: exact target/context/intent fences,
+erasure after context loss, refused-BEGIN lost-ACK correlation and reserved final
+numeric/identity erasure slots. Final changed numeric input ran11/11 after RED2;
+unchanged evidence was reused, not called a new full suite. The inactive class
+contains no credentials/store/SDK/plugin. [Task6 foundation](2026-10-08-native-preview-vault-foundation.md)
+records current pins and the next metadata-only codec. No native binding or
+publication gate is promoted by source acceptance.
+
+Original failed evidence remains immutable. No Stable GO from progress alone;
+source acceptance, diagnostic JUnit success and Auth/SDK acceptance are distinct.
 
 ## Remaining Work
 

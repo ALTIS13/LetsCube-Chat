@@ -378,6 +378,12 @@ checked out, the dev server's hot-update state.
 - **A port collision is silent.** Require a server you start to announce its own
   port before you trust it (`CLAUDE.md` §5).
 
+- **Ephemeral-profile cleanup can race the platform.** On 2026-10-08, switching
+  owned Realme QA13 back to user0 was followed by remove-user refusal and a fresh
+  read showing QA13 already absent. Preserve the failed command; reconcile the
+  exact owned ID, original user-count/digest, primary package and test namespaces
+  read-only. Do not rerun removal, clear primary data or rename the first exit PASS.
+
 ---
 
 ## 10. The owner, and how to work with him
