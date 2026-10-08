@@ -63,8 +63,14 @@ and marker reservation port24B218 are inactive source-accepted; its actual
 Android36 API compile passed after the unavailable-flag repair, not a new device
 test. Full initializer08F70/backend056F is subsequently inactive source-accepted
 with exact key/G0 composition, one UID/worker and final Android36 compilation.
-Fixture-liveness uncertainty remains; physical G0/production lifecycle binding
-and serialized transitions are unfinished. No Task5 native-positive/rich/Stable promotion.
+Fixture-liveness uncertainty remains. A subsequent controlled offline chain on
+Realme passed PREPARE/COLD/KEY_LOSS with unchanged source/APK, distinct native
+PIDs, actual resumed/main/single owner, authenticated EMPTY/G0, repeat-init refusal,
+cold read and exact owned key-loss refusal/no recreation. Exact cleanup passed;
+primary/local-Test/installed-Test/users preserved. Earlier native/observer/lock
+refusals remain failed, not retroactively explained by the successful case.
+Next: inactive production passive lifecycle authority, serialized transitions
+and real integration. No Task5 native-positive/rich/Stable promotion.
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).

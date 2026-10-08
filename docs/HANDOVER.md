@@ -30,6 +30,19 @@ controlled-snapshot integration belong to0.1.13; reuse is explicitly hash-bound
 to unchanged native source, not new tests. Natural OS timing remains NOT PROVEN.
 A063 untouched; no personal capture/login or paid rental.
 
+**Latest device checkpoint,2026-10-08:** controlled offline full-initializer
+PREPARE/COLD/KEY_LOSS passed on Realme, separate UID10552 and PIDs7715/9383/3908:
+actual resumed/main/single owner, authenticated EMPTY/G0, repeat-init refusal,
+cold read and exact owned key-loss refusal/no recreation. Exact cleanup passed;
+primary/local-Test/installed-Test/user state preserved, no diagnostic remains.
+Frozen APK/source were reused without rebuild. Earlier native refusal, observer
+ENOBUFS and showing-keyguard refusals remain failed; success after a measured
+awake/unrestricted precondition does not prove their historical cause. Next:
+inactive production passive lifecycle authority, then serialized transitions
+and real integration. No Task5 native-positive/rich/Stable, unchanged suite
+replay, SQL replay or main deployment. Detailed chronology:
+[pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).
+
 Active stage,2026-10-08 Moscow: D-335 recipient-bound native previews,
 coordinator-owned. Server-only default-none schema is installed once and
 verified-postchecked: migration `20261007210924_native_message_preview.sql`,
@@ -141,13 +154,14 @@ repaired and exact Android36 compilation passed; new marker I/O is not covered
 by the old physical52B2/R3 receipts. The subsequent full initializer08F70/backend056F
 is now inactive source-accepted with one retained UID/worker and exact key/G0
 composition, final Android36 compile and independent review. Fixture-liveness
-uncertainty remains open; actual G0/production lifecycle integration is unproved.
-Fresh offline Realme diagnostic source/artifact/guards are being prepared, not run.
+uncertainty remains open. The separate offline full-initializer G0/cold/key-loss
+chain is now physically accepted; production lifecycle integration is still
+unproved.
 No Task5 native-positive, rental, SQL, main or Stable claim follows.
 [Composed initialization and next physical gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and exact remaining acceptance](operations/2026-10-08-native-preview-platform.md).
 [Checked journal scope and evidence](operations/2026-10-08-native-preview-journal-io.md).
-Next: isolated physical G0/lifecycle proof and serialized transitions;
+Next: production passive lifecycle authority and serialized transitions;
 Task5 native proof remains separate and unresolved.
 [Foundation contract and scoped evidence](operations/2026-10-08-native-preview-vault-foundation.md).
 Preserve failed evidence; no Stable GO. A063 excluded; all rich flags false.
