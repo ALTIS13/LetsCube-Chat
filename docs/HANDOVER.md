@@ -47,8 +47,13 @@ is wired. The same-owner empty retirement transitions `5920ED` are subsequently
 source-accepted after calibrated malformed/prewrite-auth RED repairs, separate
 affected selections and 14 compiled omissions. One new actual SDK dependency
 compile passed with fresh changed initializer/InitializedState and preserved
-issuer/MainActivity/Capacitor/config/APK pins. Next: isolated physical transition
-proof, then nonempty/provision and real integration. This is not Task5 acceptance.
+issuer/MainActivity/Capacitor/config/APK pins. The new controlled offline transition
+core subsequently passed once on Realme UID10553/PID21614, all23 endpoint flags:
+one retained owner/worker, authenticated EMPTY G0/G1/G2, exact operations, retained
+original marker/key and disposal. Exact diagnostic cleanup passed; primary/Test/
+users preserved. Reviewed source/host fixes and14-pin binding preceded effects;
+old failures remain failed. No diagnostic/device job remains. Next: inactive inner
+credential codec, then nonempty/provision and real integration. This is not Task5 acceptance.
 No Task5 native-positive/rich/Stable, unchanged suite
 replay, SQL replay or main deployment. Detailed chronology:
 [pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).

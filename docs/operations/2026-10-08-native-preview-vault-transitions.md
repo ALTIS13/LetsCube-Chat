@@ -1,6 +1,7 @@
 # Native Preview Vault Transitions
 
-2026-10-08. **INACTIVE_SOURCE_ACCEPTED / SDK_DEPENDENCY_COMPILED**. Approved D335 continuation,
+2026-10-08. **INACTIVE_SOURCE_ACCEPTED / SDK_DEPENDENCY_COMPILED /
+CONTROLLED_OFFLINE_TRANSITIONS_ACCEPTED**. Approved D335 continuation,
 extending the existing retained initializer and its sole worker. No second
 namespace writer, consumer wiring, credentials, consent or notification change.
 
@@ -79,12 +80,62 @@ outer class `7A7FD77FBA177C0BC1AD3E6E7FAC3309EA1A36E329A88F3121437B1A51C01C35`;
 InitializedState class `D478976D857524910D7C0D8923FA71719A6362AAA58C034E61FC372FD8750FB8`.
 This is changed-source SDK compatibility, not physical transition acceptance.
 
+## Controlled Offline Physical Transitions
+
+One new standalone, no-network diagnostic was built with the existing Android36
+tools, a separate package/UID and a fresh QA-only ephemeral signer. Actual binary
+manifest, definition-based DEX, alignment, signature and all14 source readbacks
+passed. Native normal-return handling and the host's protected-APK read limit
+were independently repaired after calibrated RED cases; both fixes and the final
+exact14-source binding were independently source-accepted before actual effects.
+The old failed inputs/receipts remain unchanged. Fictional VM buffers calibrate
+the host size guard; they are not presented as actual filesystem/native evidence.
+
+The reviewed host then read the real build receipt and APK, checked absent target
+in all users, preserved primary/Test/users, recorded a durable STREAMED_INSTALL
+acknowledgement, bound exact new incarnation UID10553 and ran TRANSITIONS once on
+Realme user0, PID21614. An ordinary owner-authorized UI unlock prepared the phone;
+fresh Awake/non-showing/unrestricted guards admitted the core. No lock settings,
+network, trust, services, personal screen or account data were changed/captured.
+
+All23 fixed native endpoint flags were true, framework code -1: actual target
+Application/main/resumed issuer, one initialized owner, marker and Keystore policy,
+authenticated EMPTY G0, own A retirement/EMPTY G1, own B retirement/EMPTY G2,
+identical non-main callback Thread objects, exact operations, no credential alias,
+initial key authenticating final record, unchanged marker, nondecreasing wall and
+successful owner/Activity disposal. Transient RETIRING is source/JVM ordering
+evidence, not a physically sampled intermediate file. No second writer or poller
+was used, and diagnostic lifecycle authority is not production Foreground wiring.
+
+Compulsory cleanup ran once after the core: exact incarnation uninstall SUCCESS,
+target absent in all users, primary UID/APK, installed Test UID/APK, host-local
+main/Test and user digest preserved. Prepare87025 and cleanup85302 both closed
+exit0. No diagnostic remains; no unchanged cold/key-loss case was repeated.
+
+| Actual input/result | SHA256 |
+| --- | --- |
+| Reviewed host | `6E6053B2D30AC81BACA407A202E478A4CB4B30C95612DE668C1F1373D0C8AD0C` |
+| Final binding review | `826451727EAFB4F84A70A6085435E6A637DD9B872FEB96D3AF48E66B78FCCED9` |
+| Builder / source14 digest | `DF0D93409A9843D08D2374BB2F340BCF4E08D74FE32208C1A2BA3C44B2F03250` / `EA9389106E363A50BC7A4277DE2D6AC09037E72984426A7338DE15F76F3A449D` |
+| Build result | `051002351150BE1615757D1AAE0B9E01C1ECCBDE1EC7CA82FBD877FF12EAC897` |
+| Offline APK,49,560 bytes | `C18270BBCF54A2F8AE5F3CE77C88595312F1B4B84D7000313F0E48E7D76E3C87` |
+| Fresh public QA certificate | `598723A4E979EDBC3103CD666FA9CC7BC94D3A5C305E6499CA054AA2BA2156A0` |
+| Fixed23-flag observation | `E1CE1F46ACD8BE310BDFEBAB045A6B7E1CF932E29F8A587DEDABADC87AED4178` |
+| Transitions receipt | `4DFD302819CA9527FC5712906D4A997E5A479B37999322DB88B115F9E0489307` |
+| Exact cleanup receipt | `7C9BC77095C53EAFB6F778135202544321069F352AE1BC23BC76B27D0EA51AF6` |
+
+These hashes reference private fixed receipts, not published signing material or
+personal data. This proves the credential-free diagnostic's changed-source
+endpoint transitions and cleanup, not Task5 networking/Auth/FCM/live authority.
+
 ## Acceptance Boundary
 
 Focused source controls compose the actual fence, envelope, checked journal and
 retained owner. Android lifecycle/UID/Keystore doubles are explicitly modeled,
-not native custody evidence. Source review and actual SDK compilation are accepted;
-the new isolated physical transition check remains next. Old initialization and
+not native custody evidence. Source review, actual SDK compilation and the new
+controlled offline credential-free endpoint transitions are accepted. Next is
+the inactive inner credential codec, then nonempty/provision/live integration.
+Old initialization and
 foreground receipts remain tied to their original source.
 
 This slice deletes no stored credential key and implements no provision/BEGIN,

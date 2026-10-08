@@ -78,8 +78,14 @@ promotion. No consumer is wired. Same-owner empty retirement `5920ED` is subsequ
 source-accepted: calibrated malformed/prewrite-auth RED repairs, separate 3/26/5/2
 affected runs and 14 compiled omissions, not a fresh 48/48 aggregate. One new real SDK
 compile passed with changed/fresh initializer and InitializedState, typed real
-Fence and preserved issuer/MainActivity/Capacitor/source/config/APK pins. Next:
-isolated physical transitions, then nonempty/provision and real integration.
+Fence and preserved issuer/MainActivity/Capacitor/source/config/APK pins. One
+controlled offline Realme transition core subsequently passed, UID10553/PID21614,
+23/23 endpoint flags: same owner/worker and authenticated EMPTY G0/G1/G2, exact
+operations, initial marker/key retained and disposal. Separate diagnostic APK/
+source14/QA signature and reviewed host binding were admitted before install;
+exact cleanup passed, target absent and primary/Test/users preserved. Old failures
+remain failed; no unchanged cold/key-loss replay. Next: inactive inner credential
+codec, then nonempty/provision and real integration. No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
 [Serialized transition scope and SDK result](operations/2026-10-08-native-preview-vault-transitions.md).
