@@ -65,12 +65,24 @@ SHA256 `04E463210864A81AB76871F3D4F60151B818BBC1E9D56FB26E9A171C4B2E6E6B`
 were installed once at03:44 Moscow and verified-postchecked with real owned-QA
 Auth/recipient, malformed selector200/[] and anonymous401/42501. Never reapply
 either installed migration. No actual SDK-device positive or rich rollout.
-Next: legitimate isolated Realme SDK binding, then native capability/vault/card
-acceptance. Client sidecar is
+Next source slice: verification-only MessagePreviews bridge, owned client handoff
+and isolated Realme normal-sign-in probe; three non-overlapping workers. The
+bridge verifies this app instance's own SDK endpoint through live Auth/resolver,
+does not retain a bearer or advertise display capability. Real device proof,
+vault/explicit choice/background card acceptance follow; no new permission gate.
+Verification-only native/client/probe source is independently accepted, including
+the malformed-newer-account retirement repair (RED5 then affected15/15). Candidate
+metadata is0.1.15/build16, not yet built/installed/published. Coordinator's next
+action: reviewed finite build, packaged logging/Firebase/signer/embedded web/test
+target inspection, then isolated Realme normal QA sign-in/verification/logout and
+read-only endpoint preservation witnesses. A063 excluded; all rich flags false.
+[Current native source evidence and execution gates](operations/2026-10-08-native-preview-verification-bridge.md).
+Client sidecar is
 SOURCE_ACCEPTED:61/61 including10 mutants, adjacent9+4 and typecheck0; independent
 review found no concrete P1/P2 and did not replay suites. Ordinary push/voice and native capability/consent/UI stay intact.
 [Client source evidence and remaining native gates](operations/2026-10-08-native-preview-device-binding-client.md).
 [Resolver rehearsal, installation and rollback](operations/2026-10-08-native-preview-device-binding-install.md).
+[Next native verification boundary](operations/2026-10-08-native-preview-verification-bridge-plan.md).
 [Device binding contract and source evidence](operations/2026-10-08-native-preview-device-binding-plan.md).
 Chronological details and backup/rollback limits are in the linked report.
 Permission is granted, not the blocker. D-342 universal recovery and unknown

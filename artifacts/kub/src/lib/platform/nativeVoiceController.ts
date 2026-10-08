@@ -38,6 +38,7 @@ export interface NativeVoiceDependencies {
   messagePreviewBinding?: {
     currentOwner(): MessagePreviewBindingOwner | null;
     resolve(tokenHash: string, signal: AbortSignal): PromiseLike<{ data: unknown; error: unknown }>;
+    onChanged?(binding: MessagePreviewBinding | null): void;
   };
 }
 
@@ -80,6 +81,7 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
     if (previewDeadline !== null) clearTimeout(previewDeadline);
     if (previewExpiry !== null) clearTimeout(previewExpiry);
     previewDeadline = previewExpiry = null;
+    try { deps.messagePreviewBinding?.onChanged?.(null); } catch { /* Optional handoff cannot affect registration. */ }
   };
   const isCurrentPreviewOwner = (expected: PreviewOwner | null): boolean => {
     if (!expected || !current(expected.generation) || disabled
@@ -129,6 +131,7 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
           const candidate = parseMessagePreviewDeviceBinding(response.data, owner);
           if (!candidate || !isCurrentPreviewOwner(owner)) return;
           previewCandidate = candidate;
+          try { deps.messagePreviewBinding?.onChanged?.({ ...candidate }); } catch { /* Optional handoff only. */ }
           previewExpiry = setTimeout(() => {
             if (previewOwner === owner) retirePreview();
           }, owner.expiresAt - deps.now());

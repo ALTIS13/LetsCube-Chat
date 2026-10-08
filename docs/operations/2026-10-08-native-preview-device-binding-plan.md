@@ -5,6 +5,8 @@ SOURCE_ACCEPTED. Actual PG17.6/PostgREST14.12 delta49/49 and rollback passed,
 followed by genuine QA-session API post-check. Next: isolated SDK-device binding,
 then native capability/vault/card acceptance. Native display remains disabled.
 [Installation and proof limits](2026-10-08-native-preview-device-binding-install.md).
+[Next verification-only native slice](2026-10-08-native-preview-verification-bridge-plan.md).
+[Native bridge source evidence and device gate](2026-10-08-native-preview-verification-bridge.md).
 No additional permission gate is needed; technical acceptance below is required.
 
 ## Accepted Baseline And Actual Gap
