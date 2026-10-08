@@ -31,12 +31,17 @@ unknown-client D-348/349 and preliminary tester86/87 remain separate.
 Chronological rehearsals, install/backup/rollback evidence and native limits:
 [Current gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).
 
-The next actual-device-ID prerequisite is now source-accepted: distinct read-only
+The actual-device-ID prerequisite is installed/postchecked: distinct read-only
 `native_push_device_binding(text)`,53/53 focused SQL cases/23 compiled mutants,
 independent no-P1/P2 review. Existing ACKs/endpoints/consent and applied D335 SQL
-stay unchanged. Resolver PG17/JWT delta and guarded installation are next; client/
-native/device stages remain open, rich/display flags false.
+stay unchanged. Actual PG17/JWT delta49/49/rollback and owned-copy cleanup passed.
+Migration `20261008004222_native_push_device_binding.sql`, SHA256
+`04E463210864A81AB76871F3D4F60151B818BBC1E9D56FB26E9A171C4B2E6E6B`, installed
+once and real QA-session/recipient/malformed-selector/anon API checks passed.
+Client retirement SOURCE_ACCEPTED61/61/10 mutants; actual isolated SDK device
+binding and native capability/vault/card acceptance remain next. No rich display.
 [Binding plan and tracked source proof](operations/2026-10-08-native-preview-device-binding-plan.md).
+[Resolver installation and proof limits](operations/2026-10-08-native-preview-device-binding-install.md).
 
 **Current source continuation,2026-10-05:** item76/D-335 native context
 preparation, D-346 listener lifecycle. v1 Android display stays generic locally,

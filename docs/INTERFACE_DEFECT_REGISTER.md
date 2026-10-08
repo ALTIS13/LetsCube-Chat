@@ -25007,9 +25007,17 @@ D-335 stays OPEN. See the linked rehearsal/install report above for exact limits
 `native_push_device_binding(text)` supplies the actual current-session owned FCM
 row UUID without changing old registration ACKs or writing endpoint/consent.
 Focused actual SQL53/53,23 compiled mutants and independent source review
-accepted, no P1/P2. This proposal is not installed; PG17/JWT delta/fresh backup/
-install/post-check, client retirement and real native/device proof remain.
+accepted, no P1/P2. Actual isolated PG17.6/PostgREST14.12 delta49/49, rollback,
+data/security preservation and cleanup passed after canonical catalog/strict
+denial-code repair. Migration `20261008004222_native_push_device_binding.sql`
+and byte-identical mirror installed once and verified-postchecked at03:44 Moscow,
+SHA256 `04E463210864A81AB76871F3D4F60151B818BBC1E9D56FB26E9A171C4B2E6E6B`.
+Real owned-QA Auth/recipient/malformed-selector/anonymous checks passed; no fake
+device/session rows. Client retirement SOURCE_ACCEPTED61/61/10 mutants.
+Actual SDK-device positive and native capability/vault/card proof remain;
+D-335 stays OPEN, all rich/display flags false. Never replay installed DDL.
 [Source contract and evidence](operations/2026-10-08-native-preview-device-binding-plan.md).
+[Installation and acceptance limits](operations/2026-10-08-native-preview-device-binding-install.md).
 
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 

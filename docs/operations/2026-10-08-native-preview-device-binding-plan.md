@@ -1,8 +1,10 @@
 # Native preview device binding plan - 2026-10-08
 
-Status: resolver source SOURCE_ACCEPTED; client/native implementation and live
-resolver proof remain open. Next: focused PG17/JWT delta and guarded installation,
-then bounded client integration.
+Status: resolver installed once and verified-postchecked; client retirement
+SOURCE_ACCEPTED. Actual PG17.6/PostgREST14.12 delta49/49 and rollback passed,
+followed by genuine QA-session API post-check. Next: isolated SDK-device binding,
+then native capability/vault/card acceptance. Native display remains disabled.
+[Installation and proof limits](2026-10-08-native-preview-device-binding-install.md).
 No additional permission gate is needed; technical acceptance below is required.
 
 ## Accepted Baseline And Actual Gap
@@ -252,8 +254,9 @@ not D335 native/display acceptance, FCM delivery or OS privacy proof.
 
 ## Task 1 Source Result - 2026-10-08
 
-This source checkpoint supersedes the initial design-only status for Task 1;
-client/native stages above remain unimplemented. BASE `f1613d13`. Added only the
+This historical source checkpoint superseded the initial design-only Task 1;
+the current status above and linked reports supersede its pending stages.
+BASE `f1613d13`. Added only the
 [SQL proposal](../../supabase/migration-proposals/native_push_device_binding.sql)
 and [focused actual-SQL test](../../tests/server/native-push-device-binding-db.test.mjs).
 Detailed implementation, calibration and evidence limits are in

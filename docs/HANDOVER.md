@@ -47,9 +47,30 @@ generic v1 is unchanged. Next: acknowledge an actual device UUID after normal
 registration, then native credentials/explicit choice/card/OS acceptance.
 The separate read-only UUID resolver is source-implemented with focused53/53
 SQL checks/23 compiled mutants and independent source acceptance, no P1/P2.
-Next: focused PG17/JWT delta, fresh-backup guarded installation/post-check, then
-client retirement and real device binding. It does not change registration ACKs
-or enable rich display; the resolver itself is not installed.
+PG17/JWT delta and guarded installation/post-check are now accepted; client
+retirement is source-accepted, real device binding is next. The resolver does not
+change registration ACKs or enable rich display.
+Continuation: exact PG17.6 target/foundation3/resolver0 read back; one current
+verified backup,15 checksums/full archive3200 TOC, current source schema/security
+before/after equal. Isolated resolver-delta harness and guarded install wrapper
+were independently reviewed. Actual isolated R3 restore
+passed full archive/effective security/fixed19 raw blocks/dispatch-off checks.
+Its delta stopped at the read-only catalog guard before install due to capture/
+guard formatting; owned copy cleanup confirmed absent. Canonical clone digest
+and exact PostgREST14.12 denial-code repairs passed independent R5 review. A
+distinct owned copy passed full restore, actual signed-JWT HTTP and rollback:
+49/49, zero skips, preserved data/security/definitions; copy and listener removed.
+Resolver migration `20261008004222_native_push_device_binding.sql` and mirror
+SHA256 `04E463210864A81AB76871F3D4F60151B818BBC1E9D56FB26E9A171C4B2E6E6B`
+were installed once at03:44 Moscow and verified-postchecked with real owned-QA
+Auth/recipient, malformed selector200/[] and anonymous401/42501. Never reapply
+either installed migration. No actual SDK-device positive or rich rollout.
+Next: legitimate isolated Realme SDK binding, then native capability/vault/card
+acceptance. Client sidecar is
+SOURCE_ACCEPTED:61/61 including10 mutants, adjacent9+4 and typecheck0; independent
+review found no concrete P1/P2 and did not replay suites. Ordinary push/voice and native capability/consent/UI stay intact.
+[Client source evidence and remaining native gates](operations/2026-10-08-native-preview-device-binding-client.md).
+[Resolver rehearsal, installation and rollback](operations/2026-10-08-native-preview-device-binding-install.md).
 [Device binding contract and source evidence](operations/2026-10-08-native-preview-device-binding-plan.md).
 Chronological details and backup/rollback limits are in the linked report.
 Permission is granted, not the blocker. D-342 universal recovery and unknown

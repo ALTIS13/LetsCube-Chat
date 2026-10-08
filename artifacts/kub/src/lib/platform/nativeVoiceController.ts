@@ -3,6 +3,9 @@ import {
   verifiedNativeVoiceBinding, type NativeVoiceAction, type NativeVoiceBinding, type NativeVoiceSession,
 } from "./nativeVoiceContract.ts";
 import type { NativePushResult, NativePushTokenRegistration } from "./nativePush";
+import { readMessagePreviewSession, type MessagePreviewBinding, type MessagePreviewSession } from "./nativeMessagePreviewContract.ts";
+import { messagePreviewRegistrationAck, messagePreviewRegistrationHash, parseMessagePreviewDeviceBinding,
+  type MessagePreviewBindingOwner } from "./nativeMessagePreviewBinding.ts";
 
 export interface NativeVoiceBridge {
   getCapabilities(): Promise<{ protocol: number }>;
@@ -32,6 +35,10 @@ export interface NativeVoiceDependencies {
   defer(work: () => void): void;
   onResult?(result: NativePushResult): void;
   onSessionChanged?(): void;
+  messagePreviewBinding?: {
+    currentOwner(): MessagePreviewBindingOwner | null;
+    resolve(tokenHash: string, signal: AbortSignal): PromiseLike<{ data: unknown; error: unknown }>;
+  };
 }
 
 const inactive = (): NativePushResult => ({ status: "native_inactive", message: "" });
@@ -45,6 +52,14 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
   let verified: NativeVoiceBinding | null = null;
   let begin: Promise<{ epoch: string } | null> = Promise.resolve(null);
   let token: string | null = null;
+  let tokenRevision = 0;
+  let previewSession: MessagePreviewSession | null = null;
+  type PreviewOwner = MessagePreviewBindingOwner & NativeVoiceContext & { tokenRevision: number; expiresAt: number };
+  let previewOwner: PreviewOwner | null = null;
+  let previewCandidate: MessagePreviewBinding | null = null;
+  let previewOperation: AbortController | null = null;
+  let previewDeadline: ReturnType<typeof setTimeout> | null = null;
+  let previewExpiry: ReturnType<typeof setTimeout> | null = null;
   let queuedRotation: { value: string; ticket: number } | null = null;
   let callsAllowed = true;
   let callsRevision = 0;
@@ -57,8 +72,81 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
   const registrations = new Set<number>();
 
   const current = (ticket: number) => !stopped && ticket === generation;
+  const retirePreview = () => {
+    previewCandidate = null;
+    previewOwner = null;
+    previewOperation?.abort();
+    previewOperation = null;
+    if (previewDeadline !== null) clearTimeout(previewDeadline);
+    if (previewExpiry !== null) clearTimeout(previewExpiry);
+    previewDeadline = previewExpiry = null;
+  };
+  const isCurrentPreviewOwner = (expected: PreviewOwner | null): boolean => {
+    if (!expected || !current(expected.generation) || disabled
+      || expected.identityRevision !== identityRevision || expected.tokenRevision !== tokenRevision
+      || expected.expiresAt <= deps.now() || session?.recipientId !== expected.recipientId
+      || session.recipientSessionId !== expected.recipientSessionId) return false;
+    try {
+      const owner = deps.messagePreviewBinding?.currentOwner();
+      return !!owner && owner.recipientId === expected.recipientId
+        && owner.recipientSessionId === expected.recipientSessionId && owner.accountEpoch === expected.accountEpoch;
+    } catch { return false; }
+  };
+  const capturePreviewOwner = (): PreviewOwner | null => {
+    const candidate = previewSession;
+    if (!candidate) return null;
+    try {
+      const owner = deps.messagePreviewBinding?.currentOwner();
+      if (!owner || !Number.isSafeInteger(owner.accountEpoch) || owner.accountEpoch < 0) return null;
+      const expected = { ...candidate, accountEpoch: owner.accountEpoch, generation, identityRevision, tokenRevision };
+      return isCurrentPreviewOwner(expected) ? expected : null;
+    } catch { return null; }
+  };
+  const syncMessagePreviewOwner = () => { if (previewOwner && !isCurrentPreviewOwner(previewOwner)) retirePreview(); };
+  const messagePreviewBindingSnapshot = (): MessagePreviewBinding | null => {
+    syncMessagePreviewOwner();
+    return previewCandidate ? { ...previewCandidate } : null;
+  };
+
+  // Optional owned read: neither its timeout nor response participates in push/voice success.
+  const resolvePreviewBinding = (owner: PreviewOwner | null, value: string, hash: string | null, data: unknown) => {
+    const selector = messagePreviewRegistrationHash(value, hash);
+    if (!owner || !selector || !deps.messagePreviewBinding || !isCurrentPreviewOwner(owner)
+      || !messagePreviewRegistrationAck(data, owner)) return;
+    retirePreview();
+    try {
+      const operation = new AbortController();
+      previewOperation = operation;
+      previewOwner = owner;
+      previewDeadline = setTimeout(() => {
+        if (previewOperation === operation) retirePreview();
+      }, Math.min(5_000, owner.expiresAt - deps.now()));
+      void (async () => {
+        try {
+          if (!isCurrentPreviewOwner(owner)) return;
+          const response = await deps.messagePreviewBinding!.resolve(selector, operation.signal);
+          if (previewOperation !== operation || !isCurrentPreviewOwner(owner) || response.error) return;
+          const candidate = parseMessagePreviewDeviceBinding(response.data, owner);
+          if (!candidate || !isCurrentPreviewOwner(owner)) return;
+          previewCandidate = candidate;
+          previewExpiry = setTimeout(() => {
+            if (previewOwner === owner) retirePreview();
+          }, owner.expiresAt - deps.now());
+        } catch { /* Optional lookup errors never expose a backend body or undo push. */ }
+        finally {
+          if (previewOperation === operation) {
+            previewOperation = null;
+            if (previewDeadline !== null) clearTimeout(previewDeadline);
+            previewDeadline = null;
+            if (!previewCandidate) previewOwner = null;
+          }
+        }
+      })();
+    } catch { retirePreview(); }
+  };
   const discardAction = () => { heldAction = null; ++actionRevision; };
   const clear = () => {
+    retirePreview();
     verified = null;
     discardAction();
     void deps.bridge.clearBinding().catch(() => undefined);
@@ -72,6 +160,7 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
   const isCurrentContext = (expected: NativeVoiceContext | null) => isCurrentSession(expected) && current(expected!.generation);
 
   const transition = () => {
+    retirePreview();
     const ticket = ++generation;
     verified = null;
     if (session?.recipientSessionId && !disabled) {
@@ -158,7 +247,9 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
       registrations.add(ticket);
       const registerToken: NativePushTokenRegistration = async (value) => {
         if (!current(ticket) || disabled) return inactive();
+        if (token !== value) { ++tokenRevision; retirePreview(); }
         token = value;
+        const previewRegistrationOwner = capturePreviewOwner();
         if (queuedRotation?.ticket === ticket && queuedRotation.value === value) queuedRotation = null;
         const metadata = await deps.registrationMetadata(value);
         if (!current(ticket)) return inactive();
@@ -185,6 +276,7 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
           if (!committed.applied) { clear(); return failed(); }
           verified = binding;
           void actionPending();
+          resolvePreviewBinding(previewRegistrationOwner, value, metadata.tokenHash, response.data);
         }
         return null;
       };
@@ -224,9 +316,13 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
 
   return {
     context, isCurrentContext, isCurrentSession, actionPending, refresh,
+    messagePreviewBindingSnapshot, syncMessagePreviewOwner,
     invalidate(): void { if (!stopped) transition(); },
     tokenChanged(value: string): void {
-      if (stopped || !session || disabled || value === token) return;
+      if (stopped || !session || disabled
+        || value === (queuedRotation?.ticket === generation ? queuedRotation.value : token)) return;
+      ++tokenRevision;
+      retirePreview();
       if (registrations.has(generation)) {
         queuedRotation = { value, ticket: generation };
         return;
@@ -236,6 +332,8 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
     },
     signalSession(value: unknown): void {
       if (stopped) return;
+      retirePreview();
+      previewSession = readMessagePreviewSession(value, deps.now());
       const next = readNativeVoiceSession(value);
       const changed = next?.recipientId !== session?.recipientId || next?.recipientSessionId !== session?.recipientSessionId;
       if (changed) {
@@ -278,6 +376,7 @@ export function createNativeVoiceController(deps: NativeVoiceDependencies) {
     },
     stop(): void {
       stopped = true;
+      previewSession = null;
       ++generation;
       token = null;
       queuedRotation = null;
