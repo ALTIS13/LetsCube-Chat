@@ -52,13 +52,19 @@ core subsequently passed once on Realme UID10553/PID21614, all23 endpoint flags:
 one retained owner/worker, authenticated EMPTY G0/G1/G2, exact operations, retained
 original marker/key and disposal. Exact diagnostic cleanup passed; primary/Test/
 users preserved. Reviewed source/host fixes and14-pin binding preceded effects;
-old failures remain failed. No diagnostic/device job remains. Next: inactive inner
-credential codec, then nonempty/provision and real integration. This is not Task5 acceptance.
+old failures remain failed. No diagnostic/device job remains. The inactive inner
+credential codec3B0411 is now independently source-accepted: actual JCA/external
+wire oracle, separate2/47/27/4 selections and28 compiled omissions, not a fresh
+aggregate. One actual Android36 API compile passed: four production sources,
+five fresh class files, preserved source/tools/main-Test APKs; resultCA400D.
+No consumer/key/storage integration or Task5 acceptance. Next: exact credential-
+key custody, then nonempty/provision and real integration.
 No Task5 native-positive/rich/Stable, unchanged suite
 replay, SQL replay or main deployment. Detailed chronology:
 [pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Passive authority and actual SDK limits](operations/2026-10-08-native-preview-foreground-authority.md).
 [Serialized transitions and current limits](operations/2026-10-08-native-preview-vault-transitions.md).
+[Credential format and actual SDK limits](operations/2026-10-08-native-preview-credential-envelope.md).
 
 Active stage,2026-10-08 Moscow: D-335 recipient-bound native previews,
 coordinator-owned. Server-only default-none schema is installed once and

@@ -84,11 +84,16 @@ controlled offline Realme transition core subsequently passed, UID10553/PID21614
 operations, initial marker/key retained and disposal. Separate diagnostic APK/
 source14/QA signature and reviewed host binding were admitted before install;
 exact cleanup passed, target absent and primary/Test/users preserved. Old failures
-remain failed; no unchanged cold/key-loss replay. Next: inactive inner credential
-codec, then nonempty/provision and real integration. No diagnostic/device job remains.
+remain failed; no unchanged cold/key-loss replay. Inactive inner credential codec
+3B0411 is independently source-accepted: actual JCA/external wire oracle, separate
+2/47/27/4 selections and28 compiled omissions, not a fresh aggregate. One actual
+Android36 API compile passed, resultCA400D: four production sources/five fresh
+classes and preserved source/tools/main-Test APKs. Next: exact credential-key
+custody, then nonempty/provision and real integration. No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
 [Serialized transition scope and SDK result](operations/2026-10-08-native-preview-vault-transitions.md).
+[Credential format and actual SDK limits](operations/2026-10-08-native-preview-credential-envelope.md).
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
