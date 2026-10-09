@@ -64,9 +64,16 @@ inventory, literal key policy, one-use requests and no catch-time repair. A draf
 final-key-loss RED was repaired with an affected3/3 selection;76 behavior/29
 compiled cases plus presence are chronological reused evidence, not106/106 fresh.
 One actual Android36 compile passed, resultD842B9: six production sources/nine
-fresh checked definitions, preserved source/tools/main-Test APKs. No real
-provider proof or integration; next is one controlled offline exact key-create/
-delete Realme case, then nonempty/provision and genuine Task5 integration.
+fresh checked definitions, preserved source/tools/main-Test APKs. One controlled
+offline key-create/delete case subsequently passed2026-10-09,09:26 Moscow on
+Realme/user0/new UID10554/PID23904, all18 flags. Actual provider/Reader/AtomicBackend/
+PENDING/RETIRING, randomized-policy conjunction, same spent request refusal and
+retained metadata/marker measured. Exact cleanup passed; primary/local-Test/
+installed-Test/users preserved, no diagnostic remains. APK155B07/41369B/new QA
+signer5840E8, core043E06/cleanupF6120F; reviewed binding preceded effects. Initial
+malformed-tool-literal preallocation refusal stays failed; changed-input build
+passed after exact reviewed repair. No production worker/Gate or integration;
+next nonempty/provision and genuine Task5 recipient/device integration.
 No Task5 native-positive/rich/Stable, unchanged suite
 replay, SQL replay or main deployment. Detailed chronology:
 [pristine initializer](operations/2026-10-08-native-preview-pristine-initializer.md).

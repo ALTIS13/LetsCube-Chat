@@ -94,9 +94,14 @@ authenticated PENDING/RETIRING, bounded inventory, one-use create/exact delete,
 literal policy and no repair. Draft final-key-loss RED repaired, affected3/3;
 76 behavior/29 compiled cases plus presence are chronological, not a fresh106
 aggregate. One actual Android36 compile passedD842B9, six real sources/nine fresh
-checked definitions, protected source/tool/main-Test APKs preserved. Actual
-provider and integration remain unproven. Next: one controlled offline Realme
-key-create/delete case, then nonempty/provision and genuine Task5 integration.
+checked definitions, protected source/tool/main-Test APKs preserved. One exact
+offline Realme case passed2026-10-09,09:26 Moscow/user0/new UID10554/PID23904,
+all18 flags: real provider/key policy/Reader/authenticated PENDING/RETIRING,
+randomized-policy conjunction, exact delete/spent request and retained metadata/
+marker. Exact cleanup passed with protected APKs/users preserved. Reviewed
+APK155B07/core043E06/cleanupF6120F; initial tool-literal refusal remains failed,
+changed-input build after reviewed repair. No production authority/integration.
+Next: nonempty/provision and genuine Task5 integration; no old case replay.
 No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).

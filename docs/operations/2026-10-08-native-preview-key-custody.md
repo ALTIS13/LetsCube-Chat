@@ -94,13 +94,34 @@ but was freshly generated under this distinct exclusive attempt/intent/result.
 Raw diagnostics were neither printed nor retained. Finite session36115 completed
 exit0. This establishes API compatibility, not actual provider/KeyStore proof.
 
+## Actual Offline Provider Case
+
+2026-10-09,09:26 Moscow. A separate no-Activity/no-INTERNET diagnostic compiled
+all nine full production sources plus its runner; actual13 required DEX
+definitions/binary manifest/v2 signature checked. APK155B07,41369B, fresh own QA
+signer5840E8, build receiptAD91BB. Independent diagnostic sourceBE2503 and final
+host binding5CDBCA accepted before effects. Initial malformed65-character aapt2
+pin refused before any output/tool allocation; exact literal RED/repair and
+independent307BBC review preceded the changed-input build. Failure stays failed.
+
+One exact Realme/user0 batch passed, new UID10554/PID23904, all18 measured flags:
+authenticated G0/PENDING G1/RETIRING G2, actual AndroidKeyStore create/Reader/key
+policy, healthy no-IV plus valid caller-IV rejection consistent with randomized
+policy, exact alias delete and still-current same consumed Request refusal.
+Metadata/original marker/authenticated RETIRING remain; worker actually settled.
+Synthetic diagnostic Gate/owner is explicit, not production authority. Core
+receipt043E06, observationA863E6, final outcome5AB1B7.
+
+Mandatory exact diagnostic cleanup passed in the same --prepare batch,
+receiptF6120F: target absent in all users, primary/local-Test/installed-Test/
+users preserved. Streamed install/SUCCESS uninstall ACKs were durable before
+admission/result; no clear/replacement/stop of protected apps. Finite sessions
+15052/64512 closed. No personal capture, network/account/global toolchain change
+or paid rental. Actual logical absence is not flash erasure/handle revocation.
+
 ## Remaining Acceptance
 
-The later one-case offline Realme diagnostic is preparation only; no build,
-installation or key operation has occurred for this leaf.
-
-Next: real provider/AtomicBackend conditional create/delete proof, then retained
-worker composition, checked nonempty/provision ordering and genuine Task5
+Next: retained worker composition, checked nonempty/provision ordering and genuine Task5
 recipient/device integration. No native-positive, protocol1, background fetch,
 consent, rich-preview or Stable promotion follows. Generic notifications and
 the installed product remain unchanged.
