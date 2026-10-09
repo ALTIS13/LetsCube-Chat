@@ -12,6 +12,10 @@ final class MessagePreviewVaultProvisioning {
         // Trusted memory-current check only; the fresh invocation below owns bounded verification I/O.
         void requireCurrent(Identity exactIdentity) throws Exception;
         Verification verify(Identity exactIdentity, String borrowedAccess, long deadlineElapsedMillis) throws Exception;
+        default Verification verify(Identity exactIdentity, String borrowedAccess, long deadlineElapsedMillis,
+                Current current) throws Exception {
+            return verify(exactIdentity, borrowedAccess, deadlineElapsedMillis);
+        }
     }
     interface Current {
         void requireCurrent() throws Exception;
@@ -34,9 +38,15 @@ final class MessagePreviewVaultProvisioning {
         private final Identity identity;
         private final String input;
         private final long expiry;
+        private final MessagePreviewVerificationState.ProducerPermit producerPermit;
         private boolean consumed;
         Verification(Identity identity, String input, long validatedExpiry) {
+            this(identity, input, validatedExpiry, null);
+        }
+        Verification(Identity identity, String input, long validatedExpiry,
+                MessagePreviewVerificationState.ProducerPermit producerPermit) {
             this.identity=identity; this.input=input; expiry=validatedExpiry;
+            this.producerPermit=producerPermit;
         }
         private synchronized long consume(Identity expected, String access) throws Exception {
             require(!consumed); consumed=true;
@@ -62,6 +72,7 @@ final class MessagePreviewVaultProvisioning {
         boolean oldDeleted, candidateEntered, keyRequestEntered, completed;
         Work unmaterializedPredecessor;
         long effectiveWall, wallElapsed, validatedExpiry;
+        MessagePreviewVerificationState.ProducerPermit producerPermit;
         Work(MessagePreviewVaultFence.Operation operation, Identity identity,
                 MessagePreviewMetadataEnvelope.Record original, long admitted, long deadline, String candidate) {
             this.operation=operation; this.identity=identity; this.original=original;
@@ -199,10 +210,14 @@ final class MessagePreviewVaultProvisioning {
         require(equal(read(), work.checked));
         current.requireCurrent(); long now=SystemClock.elapsedRealtime(); current.requireCurrent();
         long verifyDeadline=Math.min(work.deadline, now+8_000);
-        Verification verification=authority.verify(work.identity, access, verifyDeadline);
+        Verification verification=authority.verify(work.identity, access, verifyDeadline, current);
         current.requireCurrent(); now=SystemClock.elapsedRealtime(); current.requireCurrent();
         require(now < verifyDeadline && verification != null);
         long expiry=verification.consume(work.identity, access);
+        require(verification.producerPermit==null || (safe(verification.producerPermit.deadline)
+            && verification.producerPermit.deadline>0 && verification.producerPermit.deadline<=verifyDeadline
+            && !verification.producerPermit.revoked));
+        work.producerPermit=verification.producerPermit;
         work.validatedExpiry=expiry;
         current.requireCurrent(); require(expiry > wall());
         MessagePreviewCredentialKeyCustody custody=custody();

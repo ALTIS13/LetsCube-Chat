@@ -9,6 +9,10 @@ final class MessagePreviewVerificationRuntime {
     interface TokenSource { String token(long deadline) throws Exception; }
     interface Transport { Object request(boolean user, String access, String key, String hash, long deadline) throws Exception; void cancel(); }
     interface JwtDecoder { Map<String,Object> decode(String value) throws Exception; }
+    interface Producer<T> {
+        void current() throws Exception;
+        T complete(long validatedExpiry, MessagePreviewVerificationState.ProducerPermit permit) throws Exception;
+    }
     private final MessagePreviewVerificationState state;
     private final TokenSource tokens;
     private final Transport transport;
@@ -31,31 +35,77 @@ final class MessagePreviewVerificationRuntime {
         transport.cancel(); return true;
     }
     boolean verifyBinding(long revision, String epoch, String user, String session, long accountEpoch, String device, String access, String key) {
+        return verify(revision, epoch, user, session, accountEpoch, device, access, key, null, null, 0) != null;
+    }
+    private static final class Completed<T> {
+        final T result;
+        Completed(T result) { this.result = result; }
+    }
+    synchronized boolean admitProducer(Object producer, long revision, String epoch, String user,
+            String session, long accountEpoch, String device) {
+        return !closed && state.admitProducer(producer, revision, epoch, user, session, accountEpoch, device);
+    }
+    synchronized boolean producerCurrent(Object producer, long revision, String epoch, String user,
+            String session, long accountEpoch, String device) {
+        return !closed && state.producerCurrent(producer, revision, epoch, user, session, accountEpoch, device);
+    }
+    synchronized void retireProducer(Object producer) {
+        if (state.invalidateProducer(producer)) transport.cancel();
+    }
+    <T> T verifyProducer(Object producer, long revision, String epoch, String user, String session, long accountEpoch,
+            String device, String access, String key, long deadline, Producer<T> current) {
+        Completed<T> result = verify(revision, epoch, user, session, accountEpoch, device, access, key, producer, current, deadline);
+        return result == null ? null : result.result;
+    }
+    private void producerBoundary(MessagePreviewVerificationState.Ticket ticket,
+            Producer<?> current) throws Exception {
+        if (current != null) {
+            current.current();
+            if (!state.active(ticket)) throw new IllegalStateException("UNAVAILABLE");
+        }
+    }
+    private <T> Completed<T> verify(long revision, String epoch, String user, String session, long accountEpoch,
+            String device, String access, String key, Object producer, Producer<T> current, long deadline) {
         MessagePreviewVerificationState.Ticket ticket;
         synchronized (this) {
-            if (closed) return false;
-            ticket = state.start(revision, epoch, user, session, accountEpoch, device);
-            if (ticket == null) return false;
-            if (!busy.compareAndSet(false, true)) { state.fail(ticket); return false; }
+            if (closed || (producer != null && current == null)) return null;
+            ticket = producer == null ? state.start(revision, epoch, user, session, accountEpoch, device)
+                : state.startProducer(producer, revision, epoch, user, session, accountEpoch, device, deadline);
+            if (ticket == null) return null;
+            if (!busy.compareAndSet(false, true)) { state.fail(ticket); return null; }
         }
         boolean verified = false;
         try {
-            if (!header(access, 8192) || !header(key, 4096)) return false;
+            if (!header(access, 8192) || !header(key, 4096)) return null;
+            producerBoundary(ticket, current);
             long expires = MessagePreviewResponseParser.accessExpiry(decoder.decode(access), user, session, state.now());
+            producerBoundary(ticket, current);
             Map<String,Object> keyClaims = key.startsWith("sb_publishable_") ? null : decoder.decode(key);
-            if (expires == 0 || !MessagePreviewResponseParser.publicKey(key, keyClaims) || !state.authorizeTime(ticket, expires)) return false;
+            producerBoundary(ticket, current);
+            if (expires == 0 || (producer != null && !MessagePreviewVerificationState.safe(expires))
+                || !MessagePreviewResponseParser.publicKey(key, keyClaims) || !state.authorizeTime(ticket, expires)) return null;
+            producerBoundary(ticket, current);
             Object auth = transport.request(true, access, key, null, ticket.deadline);
-            if (!state.active(ticket) || !MessagePreviewResponseParser.authUser(auth, user)) return false;
+            producerBoundary(ticket, current);
+            if (!state.active(ticket) || !MessagePreviewResponseParser.authUser(auth, user)) return null;
             String first = tokens.token(ticket.deadline);
-            if (!state.active(ticket) || !sdkToken(first)) return false;
+            producerBoundary(ticket, current);
+            if (!state.active(ticket) || !sdkToken(first)) return null;
             String hash = hash(first);
+            producerBoundary(ticket, current);
             Object response = transport.request(false, access, key, hash, ticket.deadline);
-            if (!state.active(ticket) || !MessagePreviewResponseParser.binding(response, user, session, device)) return false;
+            producerBoundary(ticket, current);
+            if (!state.active(ticket) || !MessagePreviewResponseParser.binding(response, user, session, device)) return null;
             String second = tokens.token(ticket.deadline);
-            if (!state.active(ticket) || !first.equals(second)) return false;
-            verified = state.finish(ticket, expires);
-            return verified;
-        } catch (Exception refused) { return false; }
+            producerBoundary(ticket, current);
+            if (!state.active(ticket) || !first.equals(second) || !state.finish(ticket, expires)) return null;
+            producerBoundary(ticket, current);
+            T produced = current == null ? null : current.complete(expires, ticket.producerPermit);
+            producerBoundary(ticket, current);
+            if (producer != null && produced == null) return null;
+            verified = true;
+            return new Completed<>(produced);
+        } catch (Exception refused) { return null; }
         finally {
             if (!verified) state.fail(ticket);
             busy.set(false);

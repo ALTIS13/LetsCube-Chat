@@ -733,6 +733,8 @@ final class MessagePreviewPristineInitializer {
             ? !work.state.fence.canContinue(program.operation) : !work.state.fence.canErase(program.operation))))
             throw new Unavailable();
         if (!work.observe && program.validatedExpiry>0 && !program.unexpiredAt(program.validatedExpiry, now)) throw new Unavailable();
+        if (!work.observe && program.producerPermit!=null
+            && (program.producerPermit.revoked || now>=program.producerPermit.deadline)) throw new Unavailable();
         work.state.lastMillis=now;
     }
     private void acquiringCurrent(AcquiringTask work) throws Exception {
