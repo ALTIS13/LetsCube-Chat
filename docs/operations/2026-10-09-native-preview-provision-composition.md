@@ -89,6 +89,9 @@ after settlement the branch remains INCOMPLETE/uncertain, without guessed record
 key deletion, positive EMPTY or successor acquisition. A separately reviewed
 retirement-only basis extension is required for positive cleanup of that branch;
 it is the next approved D4 implementation slice, not covered by D3 acceptance.
+That later [D4 source and changed-input SDK stage](2026-10-09-native-preview-unmaterialized-retirement.md)
+is now accepted separately. The limitation above describes the frozen D3
+snapshot; its historical compiler result is not rebound to D4.
 
 Existing Task5 returns only a Boolean and its verification ticket is attempted
 once. A cached flag, raw expiry, reset or second verifier cannot supply this

@@ -108,8 +108,16 @@ behavior controls/four calibrated omissions, not a new aggregate. One actual
 Android36 compile passed2026-10-09,11:09 Moscow:13 full sources/69 required fresh
 named major52 definitions, resultEB609DA8, protected source/tools/main-Test APKs
 preserved. No provider/physical D3 or genuine Task5 authority is inferred.
-Next D4: exact no-phase acquisition retirement, then genuine Task5 integration;
-no old case replay. Item93 records the new search-motion tester symptom.
+D4 exact no-phase BEGIN/REFUSED retirement is subsequently independently
+source-accepted46FE5B01, candidate81785582:21 distinct incremental affected
+behavior controls/10 calibrated omissions, not a fresh aggregate. One actual
+Android36 compile passed, observed2026-10-09,12:09 Moscow:13 full sources/69
+required fresh named major52 definitions, result84C49882, protected input/main-
+localTest APK bytes unchanged. Current closure/final binding66DEB124 accepted;
+interim audit shorthand corrected separately, frozen evidence retained. No
+provider/physical D4 or genuine Task5 authority is inferred. Next dormant genuine
+same-invocation producer, then real device/physical/consent/card acceptance.
+No old case replay. Item93 records the new search-motion tester symptom.
 No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
@@ -117,6 +125,7 @@ No Task5 native-positive/rich/Stable promotion.
 [Credential format and actual SDK limits](operations/2026-10-08-native-preview-credential-envelope.md).
 [Conditional key custody and actual SDK limits](operations/2026-10-08-native-preview-key-custody.md).
 [Nonempty composition, fixes and actual SDK limits](operations/2026-10-09-native-preview-provision-composition.md).
+[Exact unmaterialized retirement and actual SDK limits](operations/2026-10-09-native-preview-unmaterialized-retirement.md).
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
