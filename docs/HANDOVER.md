@@ -1,5 +1,21 @@
 # LETSCUBE — handover
 
+**Current continuation,2026-10-10:** coordinator; narrow main-based publication
+of D-355. Session deletion now retires exact UID+SID push endpoints before the
+FK clears SID, and registration refuses deleted-SID JWTs. SQL15/15 incl mutants
+and rollback drift, actual PG17 rollback and six ordered concurrent cases pass.
+Fresh before backup verified; production SQL installed exactly once. Independent
+OID/catalog readback resolved the original regclass pretty-printing observer
+refusal without replay. Genuine isolated Realme ordinary Auth/native binding/
+logout and server retirement passed; all three exact-owned QA packages removed,
+primary/test data and users preserved. AndroidStable0.1.14/build15 unchanged.
+Git publication pending; unfinished native-preview feature commits excluded.
+Next: actual native credential/explicit-choice/composition acceptance in the
+feature worktree, not another ordinary binding/logout rerun. No natural FCM,
+OS-card, rich preview or full restore acceptance.
+[Server cause and exact boundaries](operations/2026-10-10-push-session-retirement.md).
+[Genuine Task5 artifact and normal Auth](operations/2026-10-09-task5-firebase-qa.md).
+
 **2026-10-09 narrow web candidate:** search opacity now follows existing motion
 tokens, including the reduced-motion1ms setting. Calibrated RED, candidate GREEN,
 page-only regression kill, both-theme fictional pixels and focused3/3 portable

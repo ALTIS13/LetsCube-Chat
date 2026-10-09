@@ -25453,6 +25453,30 @@ absence/access denial. Fence task/account/session/request replacements and
 validate actual modal/checklist lifecycle with fictional backend data. No
 production mutation, deployment or claim of fixing tester items86/87 yet.
 
+## D-355 `[x]` Logged-out native push device remains active after Auth session deletion
+
+**Severity:** high account-boundary risk; actual owned-QA Realme flow,
+2026-10-10. No personal message or unintended delivery was captured or inferred.
+
+**Observed cause:** ordinary QA Auth/native binding/logout passes, but bounded
+account/time postcheck found an active orphan FCM endpoint. Live FK clears SID
+without retirement. Seven-argument legacy registration accepted deleted-SID JWTs.
+A frontend pre-signout draft was withdrawn after race review, never deployed.
+
+**Installed fix:** private definer BEFORE DELETE retires exact UID+SID endpoints
+before SET NULL; registration with a SID claim requires a live matching session.
+Other sessions/users and truly SID-less legacy rows remain unchanged. No broad
+orphan backfill. SQL15/15 incl five mutants/four rollback drift cases, fresh
+before backup, actual PG17 rollback and six ordered concurrency cases passed.
+Canonical/mirror SQL839f13fd installed once; independent OID/catalog readback
+resolved the original pretty-printing observer refusal without SQL replay.
+Fresh ordinary Realme Auth/binding/logout passed server retirement, including
+the original QA orphan through normal re-registration/logout. Three exact-owned
+QA packages removed, protected apps and users preserved. Narrow Git publication
+pending; unfinished native-preview commits excluded. Offline logout, natural
+FCM/OS display and rich-preview acceptance are outside this fix.
+[Evidence](operations/2026-10-10-push-session-retirement.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

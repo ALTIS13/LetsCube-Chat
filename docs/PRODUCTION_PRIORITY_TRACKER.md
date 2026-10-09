@@ -1,6 +1,15 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-07.
+Status: active production-hardening tracker, updated 2026-10-10.
+
+**Current continuation,2026-10-10:** D-355 installed once after SQL15/15,
+fresh before backup and actual PG17 rollback/six ordered concurrent cases.
+Independent OID/catalog readback and new genuine Realme ordinary Auth/binding/
+logout with server retirement passed; three QA packages removed, protected apps
+and users unchanged. Narrow main-based Git publication pending, native-preview
+feature commits excluded. AndroidStable0.1.14/build15 unchanged; no natural FCM,
+OS-card, rich preview or full restore acceptance.
+[Evidence](operations/2026-10-10-push-session-retirement.md).
 
 **Current continuation, 2026-10-07:** item89/D-351 and91/D-353 native cleanup
 accepted on web/main `36f313dc` and nonmandatory AndroidStable0.1.13/build14
@@ -4266,6 +4275,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     confirm the transitions, not rendered draft loss or the unidentified tester
     reports86/87. Narrow initial/refresh/error/owner separation and mounted
     actual modal/checklist regression are in progress. No deploy yet.
+
+94. `[x]` Logout must retire session-bound native push endpoints, **D-355**.
+    Genuine ordinary Realme Auth/binding/logout exposed an active owned orphan.
+    FK SET NULL lacked retirement; legacy registration accepted deleted-SID JWT.
+    Private BEFORE DELETE exact UID+SID hook and SID refusal are installed once,
+    preserving successor sessions and truly SID-less legacy endpoints. No broad
+    orphan backfill. SQL15/15 incl five mutants/four rollback drift cases, fresh
+    verified before backup, actual PG17 rollback and six concurrent cases pass.
+    Independent OID/catalog readback, new normal Realme server retirement and
+    exact three-package cleanup pass. Original QA orphan retired by ordinary
+    re-registration/logout. No offline logout/natural FCM/OS-card/rich preview
+    or new native release acceptance. Narrow Git publication pending.
+    [Cause and proof boundary](operations/2026-10-10-push-session-retirement.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
