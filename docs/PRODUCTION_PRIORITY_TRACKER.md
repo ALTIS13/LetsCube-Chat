@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-08.
+Status: active production-hardening tracker, updated 2026-10-09.
 
 **Current continuation,2026-10-08 Moscow:** coordinator, branch
 `codex/bot-inline-media-20261002`. Latest product acceptance is item92/D-354:
@@ -101,13 +101,22 @@ randomized-policy conjunction, exact delete/spent request and retained metadata/
 marker. Exact cleanup passed with protected APKs/users preserved. Reviewed
 APK155B07/core043E06/cleanupF6120F; initial tool-literal refusal remains failed,
 changed-input build after reviewed repair. No production authority/integration.
-Next: nonempty/provision and genuine Task5 integration; no old case replay.
+Conditional nonempty/provision composition is now independently source-accepted
+after R1 live-clock ordering, R2 exact completed acquisition detach and R3 actual
+JIO-preauthentication coverage repairs. Source candidatea0e0fc27: incremental13
+behavior controls/four calibrated omissions, not a new aggregate. One actual
+Android36 compile passed2026-10-09,11:09 Moscow:13 full sources/69 required fresh
+named major52 definitions, resultEB609DA8, protected source/tools/main-Test APKs
+preserved. No provider/physical D3 or genuine Task5 authority is inferred.
+Next D4: exact no-phase acquisition retirement, then genuine Task5 integration;
+no old case replay. Item93 records the new search-motion tester symptom.
 No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
 [Serialized transition scope and SDK result](operations/2026-10-08-native-preview-vault-transitions.md).
 [Credential format and actual SDK limits](operations/2026-10-08-native-preview-credential-envelope.md).
 [Conditional key custody and actual SDK limits](operations/2026-10-08-native-preview-key-custody.md).
+[Nonempty composition, fixes and actual SDK limits](operations/2026-10-09-native-preview-provision-composition.md).
 [Initializer scope and next actual gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 [Platform attempts and preservation](operations/2026-10-08-native-preview-platform.md).
 [Checked journal and remaining platform gates](operations/2026-10-08-native-preview-journal-io.md).
@@ -4397,6 +4406,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     explicitly reused for unchanged native source, not counted as fresh cases.
     Tester86/87 and physical iPhone acceptance are not claimed repaired.
     [Evidence and publication boundary](operations/2026-10-07-task-detail-recovery.md).
+
+93. `[ ]` Search expand/collapse motion and input responsiveness. Owner intake,
+    2026-10-09: testers report lag when the search field opens and closes. This
+    is a reported symptom, not a reproduced cause or an accepted fix. Identify
+    the actual affected search surface/client before changing shared motion.
+    Measure opening, closing, rapid reversal, focus/keyboard and typing under
+    both themes at desktop/mobile sizes; verify Web, Windows, Android and the
+    separately owned installed iOS PWA where feasible. Keep search results,
+    query state, chat position and navigation intact. Reuse existing motion
+    tokens and respect reduced motion; avoid expensive layout/backdrop work
+    without measured need. Record frame/geometry evidence, add a regression
+    against the observed cause, then verify the affected client. Do not repeat
+    unrelated suites or interrupt the current native-preview stage for this
+    intake. Rental checks remain targeted and minute-bounded.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

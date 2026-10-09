@@ -30,6 +30,19 @@ controlled-snapshot integration belong to0.1.13; reuse is explicitly hash-bound
 to unchanged native source, not new tests. Natural OS timing remains NOT PROVEN.
 A063 untouched; no personal capture/login or paid rental.
 
+**Current source checkpoint,2026-10-09:** coordinator; local source candidate
+`a0e0fc27` on `codex/bot-inline-media-20261002`. Inactive D3 nonempty provisioning
+is independently source-accepted after three focused fixes; incremental13
+behavior controls/four calibrated omissions, not a fresh aggregate. One actual
+Android36 compile passed11:09 Moscow:13 full sources/69 required fresh named
+major52 definitions, resultEB609DA8, protected main/Test APK bytes unchanged.
+Next D4: exact unmaterialized BEGIN/REFUSED retirement; source TDD in progress.
+Genuine Task5 producer/device, physical composition and consent/card gates remain
+open; nativePositive/rich/Stable false. No main deploy/SQL/rental/APK replacement.
+Owner intake item93 now records search expand/collapse lag, not yet reproduced;
+it does not interrupt this stage.
+[Source, fixes and SDK boundary](operations/2026-10-09-native-preview-provision-composition.md).
+
 **Latest device checkpoint,2026-10-08:** controlled offline full-initializer
 PREPARE/COLD/KEY_LOSS passed on Realme, separate UID10552 and PIDs7715/9383/3908:
 actual resumed/main/single owner, authenticated EMPTY/G0, repeat-init refusal,
