@@ -126,7 +126,8 @@ final class MessagePreviewVaultProvisioning {
     }
     private long wall() throws Exception {
         current.requireCurrent(); long observed=System.currentTimeMillis(); long elapsed=SystemClock.elapsedRealtime();
-        current.requireCurrent(); return work.advanceWall(elapsed, observed);
+        work.advanceWall(elapsed, observed);
+        current.requireCurrent(); return work.effectiveWall;
     }
     private MessagePreviewMetadataEnvelope.Header header(MessagePreviewMetadataEnvelope.Kind kind, String alias, long expiry) throws Exception {
         MessagePreviewVaultFence.Operation op=work.operation;

@@ -24,6 +24,7 @@ import javax.crypto.spec.SecretKeySpec;
 public final class MessagePreviewVaultProvisioningProbe {
     private static final String A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     private static final String C="cccccccccccccccccccccccccccccccc", D="dddddddddddddddddddddddddddddddd";
+    private static final String E="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
     private static final String ACCESS="fictional-access-only";
     private static final Map<String, Borrowed> keys=Collections.synchronizedMap(new LinkedHashMap<String, Borrowed>());
     private static final List<String> trace=Collections.synchronizedList(new ArrayList<String>());
@@ -34,17 +35,24 @@ public final class MessagePreviewVaultProvisioningProbe {
         CAPTURED.session,"44444444-4444-4444-8444-444444444444",2);
     private static String scenario, installation, holdEvent;
     private static String metadataAlias;
-    private static int generates, deletes, verifies;
+    private static int generates, deletes, verifies, credentialInits, preauthStarts, aStartsAfterPreauthentication;
     private static App app;
     private static MessagePreviewPristineInitializer owner;
     private static final CountDownLatch held=new CountDownLatch(1), release=new CountDownLatch(1);
     private static boolean armed, heldOnce, failFinish;
-    private static boolean credentialVerified;
+    private static boolean credentialVerified, actualWritePreauthentication;
     private static byte[] originalG0;
     private static byte[] firstTombstone;
     private static void require(boolean value, String tag) { if (!value) throw new AssertionError(tag); }
+    private static boolean inFrame(String type, String method) {
+        for (StackTraceElement frame:Thread.currentThread().getStackTrace())
+            if (frame.getClassName().equals("com.kub.messenger."+type) && frame.getMethodName().equals(method)) return true;
+        return false;
+    }
     private static void event(String name) {
         trace.add(name);
+        if (scenario.equals("held-jio-preauthentication") && heldOnce && name.equals("journal-start")
+            && inFrame("MessagePreviewVaultProvisioning","begin")) aStartsAfterPreauthentication++;
         if (installation!=null && name.equals("journal-read") && firstTombstone==null) {
             try { if (record().header.kind==MessagePreviewMetadataEnvelope.Kind.RETIRING) firstTombstone=Files.readAllBytes(journal()); }
             catch(Exception error) { throw new AssertionError("FIXTURE_CAPTURE"); }
@@ -100,11 +108,14 @@ public final class MessagePreviewVaultProvisioningProbe {
         public MessagePreviewVaultProvisioning.Verification verify(MessagePreviewVaultProvisioning.Identity identity,
                 String access,long deadline) {
             verifies++; require(access.equals(ACCESS),"EXACT_FICTIONAL_INPUT");
-            require(deadline==8100 || deadline==15100,"CLIPPED_VERIFY_DEADLINE"); event("verify");
+            require(scenario.startsWith("rising-") ? deadline>8100 && deadline<10100
+                : deadline==8100 || deadline==15100,"CLIPPED_VERIFY_DEADLINE"); event("verify");
             if (scenario.equals("verify-timeout")) SystemClock.value=deadline;
             long expiry=System.currentTimeMillis()+60000;
             if (scenario.equals("expired") || scenario.equals("failed-ticket-replay")) expiry=1;
-            if (scenario.equals("expiry-delta") || scenario.equals("expiry-before-mint")) expiry=System.currentTimeMillis()+1000;
+            if (scenario.equals("expiry-delta") || scenario.equals("expiry-before-mint"))
+                expiry=System.currentTimeMillis()+1000;
+            if (scenario.equals("rising-expiry")) expiry=System.currentTimeMillis()+5000;
             if (scenario.equals("foreign-verification")) identity=new MessagePreviewVaultProvisioning.Identity(A,0,0,CAPTURED,TUPLE);
             return new MessagePreviewVaultProvisioning.Verification(identity,access,expiry);
         }
@@ -150,6 +161,11 @@ public final class MessagePreviewVaultProvisioningProbe {
         protected void engineInit(int n,SecureRandom r) { throw new AssertionError("EXACT_POLICY"); }
         protected void engineInit(AlgorithmParameterSpec spec,SecureRandom r) {
             policy=(KeyGenParameterSpec)spec;
+            if (policy.alias.startsWith("letscube.nmpv.credential.")) {
+                credentialInits++;
+                if (scenario.equals("rising-expiry")) SystemClock.value+=6000;
+                if (scenario.equals("rising-regression")) SystemClock.value-=100;
+            }
             if (armed && scenario.equals("expiry-before-mint") && policy.alias.startsWith("letscube.nmpv.credential.")) SystemClock.value=2100;
         }
         protected SecretKey engineGenerateKey() {
@@ -177,7 +193,7 @@ public final class MessagePreviewVaultProvisioningProbe {
     }
     public static final class Gcm extends CipherSpi {
         private final Cipher actual;
-        private boolean credentialDecrypt;
+        private boolean credentialDecrypt, metadataDecrypt;
         public Gcm() throws Exception { actual=Cipher.getInstance("AES/GCM/NoPadding","SunJCE"); }
         protected void engineSetMode(String m) { require(m.equals("GCM"),"GCM"); }
         protected void engineSetPadding(String p) { require(p.equals("NoPadding"),"NO_PADDING"); }
@@ -190,7 +206,10 @@ public final class MessagePreviewVaultProvisioningProbe {
         protected void engineInit(int o,Key k,AlgorithmParameterSpec p,SecureRandom r) throws InvalidKeyException,InvalidAlgorithmParameterException {
             actual.init(o,backing(k),p,r);
             if (o==Cipher.DECRYPT_MODE) synchronized(keys) {
-                for (Map.Entry<String,Borrowed> e:keys.entrySet()) if(e.getValue()==k && e.getKey().startsWith("letscube.nmpv.credential.")) credentialDecrypt=true;
+                for (Map.Entry<String,Borrowed> e:keys.entrySet()) if(e.getValue()==k) {
+                    credentialDecrypt=e.getKey().startsWith("letscube.nmpv.credential.");
+                    metadataDecrypt=e.getKey().startsWith("letscube.nmpv.metadata.");
+                }
             }
         }
         protected void engineInit(int o,Key k,AlgorithmParameters p,SecureRandom r) throws InvalidKeyException,InvalidAlgorithmParameterException { actual.init(o,backing(k),p,r); }
@@ -199,6 +218,12 @@ public final class MessagePreviewVaultProvisioningProbe {
         protected int engineUpdate(byte[] b,int o,int n,byte[] d,int x) throws ShortBufferException { return actual.update(b,o,n,d,x); }
         protected byte[] engineDoFinal(byte[] b,int o,int n) throws IllegalBlockSizeException,BadPaddingException {
             byte[] result=actual.doFinal(b,o,n);
+            if (armed && scenario.equals("held-jio-preauthentication") && !heldOnce && metadataDecrypt
+                && inFrame("MessagePreviewJournalIO","write")) {
+                actualWritePreauthentication=true;
+                require(AtomicFile.starts==preauthStarts,"PREAUTHENTICATION_BEFORE_STORAGE_EFFECT");
+                event("jio-preauthentication");
+            }
             if (credentialDecrypt) {
                 credentialVerified=true;
                 if (scenario.equals("readback-mismatch")) result[result.length-1]^=1;
@@ -261,14 +286,18 @@ public final class MessagePreviewVaultProvisioningProbe {
             && credentialCount()==0 && keys.containsKey(metadataAlias) && keys.containsKey("unrelated.fixture"),"LITERAL_EMPTY_PRESERVED");
     }
     private static void heldCase() throws Exception {
-        boolean beforeBegin=scenario.equals("unmaterialized") || scenario.equals("held-prewrite");
+        boolean beforeBegin=scenario.equals("unmaterialized") || scenario.equals("held-initial-read")
+            || scenario.equals("held-jio-preauthentication");
         MessagePreviewPristineInitializer.ProvisionResult p=beforeBegin ? null : pending(A,0,0);
         holdEvent=scenario.equals("held-generate") ? "credential-generate" : scenario.equals("held-readback") ? "journal-finish"
-            : scenario.equals("held-prewrite") ? "journal-read" : scenario.equals("unmaterialized") ? "current"
+            : scenario.equals("held-initial-read") ? "journal-read" : scenario.equals("held-jio-preauthentication") ? "jio-preauthentication"
+            : scenario.equals("unmaterialized") ? "current"
             : scenario.equals("held-ack") ? "final-current" : "verify";
-        armed=true;
+        preauthStarts=AtomicFile.starts; armed=true;
         Await pending=beforeBegin ? begin(A,0,0,TUPLE) : provision(A,p.ticket);
         require(held.await(3,TimeUnit.SECONDS),"HELD_ENTERED");
+        if (scenario.equals("held-jio-preauthentication")) require(actualWritePreauthentication
+            && AtomicFile.starts==preauthStarts,"ACTUAL_JIO_WRITE_PREAUTHENTICATION_HELD");
         if (scenario.equals("queue-expired")) SystemClock.value=5100;
         Erase e=erase(B,1,0,new MessagePreviewVaultFence.Correlation(A,0));
         Await successor=begin(C,2,1,TUPLE); require(successor.get().status==MessagePreviewPristineInitializer.ProvisionStatus.BUSY,"NO_SUCCESSOR_WHILE_HELD");
@@ -279,15 +308,61 @@ public final class MessagePreviewVaultProvisioningProbe {
         if (scenario.equals("queue-expired")) SystemClock.value=15100;
         release.countDown(); require(pending.get().status==MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE,"NO_LATE_ACQUISITION_ACK");
         MessagePreviewPristineInitializer.TransitionResult er=e.get();
-        if (scenario.equals("unmaterialized") || scenario.equals("held-prewrite") || scenario.equals("queue-expired")) {
+        if (scenario.equals("held-jio-preauthentication"))
+            require(aStartsAfterPreauthentication==0,"NO_A_START_WRITE_AFTER_JIO_PREAUTH");
+        if (scenario.equals("unmaterialized") || scenario.equals("held-initial-read")
+            || scenario.equals("held-jio-preauthentication") || scenario.equals("queue-expired")) {
             require(er.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && er.generation==null,"NO_INVENTED_EMPTY_OR_RENEWAL");
             require(deletes==0 && record().header.generation==(beforeBegin ? 0 : 1),"UNRESOLVED_RESIDUE_RETAINED");
             require(begin(C,2,2,TUPLE).get().status==MessagePreviewPristineInitializer.ProvisionStatus.UNAVAILABLE,"UNCERTAIN_REFUSES_SUCCESSOR");
             require(erase(D,2,2,null).get().status==MessagePreviewPristineInitializer.TransitionStatus.UNAVAILABLE,"UNRESOLVED_CLEANUP_IDENTITY_RETAINED");
+            Await observed=new Await(); owner.observeOwned(A,observed);
+            require(observed.get().status==MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE
+                && observed.result.ticket==null,"UNRESOLVED_HISTORY_OBSERVABLE");
         } else {
             require(er.status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED && er.generation==2,"ORDERED_ERASURE_AFTER_SETTLEMENT");
             require(credentialCount()==0 && record().header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY,"NO_STALE_KEY_OR_COMMIT");
         }
+    }
+    private static void repeatedErasure() throws Exception {
+        MessagePreviewPristineInitializer.ProvisionResult p=pending(A,0,0);
+        require(provision(A,p.ticket).get().status==MessagePreviewPristineInitializer.ProvisionStatus.COMMITTED,"ACTUAL_NONEMPTY_G1");
+        Erase first=erase(B,1,1,null);
+        require(first.get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+            && first.result.generation==2 && record().header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY,"CHECKED_EMPTY_G2");
+        int starts=AtomicFile.starts, calls=verifies;
+        Erase observed=new Erase(); owner.observeRetirement(B,observed);
+        require(observed.get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+            && observed.result.generation==2 && AtomicFile.starts==starts && verifies==calls,"COMPLETED_RETIRE_READ_ONLY_OBSERVATION");
+        Erase second=erase(C,2,2,null);
+        require(second.get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+            && second.result.generation==3,"CHECKED_EMPTY_G3");
+        MessagePreviewMetadataEnvelope.Record head=record();
+        require(head.header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY && head.header.generation==3
+            && head.header.baseGeneration==2 && head.header.operationId.equals(C) && head.header.vaultRevision==2
+            && head.header.alias.isEmpty() && head.credentialBytes().length==0,"LITERAL_COMPLETED_EMPTY_G3");
+        starts=AtomicFile.starts;
+        Await old=new Await(); owner.observeOwned(A,old);
+        require(old.get().status==MessagePreviewPristineInitializer.ProvisionStatus.UNKNOWN && old.result.ticket==null
+            && AtomicFile.starts==starts && verifies==calls,"COMPLETED_ACQUISITION_DETACHED_NO_EFFECTS");
+        p=pending(D,3,3);
+        MessagePreviewPristineInitializer.ProvisionResult next=provision(D,p.ticket).get();
+        require(next.status==MessagePreviewPristineInitializer.ProvisionStatus.COMMITTED && next.generation==4
+            && record().header.kind==MessagePreviewMetadataEnvelope.Kind.COMMITTED && credentialCount()==1,"SUCCESSOR_WITHOUT_REINITIALIZATION");
+        Await current=new Await(); owner.observeOwned(D,current);
+        require(current.get().status==MessagePreviewPristineInitializer.ProvisionStatus.DORMANT
+            && current.result.ticket==null && verifies==2,"SUCCESSOR_DORMANT_OBSERVATION");
+        Erase last=erase(E,4,4,null);
+        require(last.get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+            && last.result.generation==5 && credentialCount()==0 && record().header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY,"SUCCESSOR_ERASURE_G5");
+    }
+    private static void risingRefusal() throws Exception {
+        MessagePreviewPristineInitializer.ProvisionResult p=pending(A,0,0);
+        MessagePreviewPristineInitializer.ProvisionResult result=provision(A,p.ticket).get();
+        require(credentialInits==1 && verifies==1,"RISING_REFUSAL_REACHED_KEY_INIT");
+        require(result.status==MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE && result.ticket==null
+            && generates==1 && credentialCount()==0 && record().header.kind==MessagePreviewMetadataEnvelope.Kind.PENDING,
+            "RISING_EXPIRY_OR_REGRESSION_REFUSES_MINT");
     }
     private static void boundaries() throws Exception {
         if (scenario.equals("refused-context-loss")) {
@@ -394,7 +469,10 @@ public final class MessagePreviewVaultProvisioningProbe {
             AtomicFile.onEvent=MessagePreviewVaultProvisioningProbe::event;
             owner=MessagePreviewPristineInitializer.getOrCreate(app,new Passive(),scenario.equals("unbound") ? null : new Conditional());
             initialized();
-            if (scenario.equals("healthy") || scenario.equals("replace")) positive(scenario.equals("replace"));
+            if (scenario.startsWith("rising-")) SystemClock.ticking=true;
+            if (scenario.equals("healthy") || scenario.equals("replace") || scenario.equals("rising-healthy")) positive(scenario.equals("replace"));
+            else if (scenario.equals("rising-expiry") || scenario.equals("rising-regression")) risingRefusal();
+            else if (scenario.equals("repeat-erase")) repeatedErasure();
             else if (scenario.startsWith("held-") || scenario.equals("unmaterialized") || scenario.equals("queue-expired")) heldCase();
             else if (scenario.equals("live-wall")) liveWall();
             else boundaries();

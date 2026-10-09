@@ -637,6 +637,9 @@ final class MessagePreviewPristineInitializer {
                 transitionMemory(work, now);
                 if (!work.target.completed && !work.state.fence.complete(work.target.operation)) throw new Unavailable();
                 work.target.completed=true; work.state.checkedHead=readback; work.state.uncertain=false;
+                // Completed erasure owns the checked head; unresolved acquisition history stays retained on refusal.
+                if (work.state.acquisition != null && work.state.acquisition.program == work.target.predecessorProgram)
+                    work.state.acquisition=null;
                 finished=true;
                 result=new TransitionResult(TransitionStatus.RETIRED, readback.header.generation);
             }

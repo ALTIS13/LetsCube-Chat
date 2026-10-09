@@ -50,9 +50,10 @@ test('compiled D3 feature availability (absence, not a shipped regression)', () 
 });
 for (const scenario of ['healthy', 'replace', 'unbound', 'invalid-owner', 'empty-retire', 'no-match', 'lost-begin',
   'ticket-replay', 'expired', 'foreign-verification', 'verify-timeout', 'ticket-deadline', 'invalidate',
-  'held-verifier', 'held-generate', 'held-readback', 'held-prewrite', 'unmaterialized', 'queue-expired',
+  'held-verifier', 'held-generate', 'held-readback', 'held-initial-read', 'held-jio-preauthentication', 'unmaterialized', 'queue-expired',
   'key-loss', 'fallback', 'drift', 'unknown-finish', 'live-wall', 'expiry-delta', 'rejected-context', 'expiry-before-mint',
-  'held-ack', 'failed-ticket-replay', 'clipped-create', 'readback-mismatch', 'invalidate-erase', 'refused-context-loss', 'phase-rollback']) {
+  'held-ack', 'failed-ticket-replay', 'clipped-create', 'readback-mismatch', 'invalidate-erase', 'refused-context-loss', 'phase-rollback',
+  'rising-healthy', 'rising-expiry', 'rising-regression', 'repeat-erase']) {
   test(`actual conditional provisioning graph: ${scenario}`, () => {
     const result = run(out, scenario); assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), `PASS ${scenario}`);
@@ -84,10 +85,19 @@ const mutations = [
     '', 'readback-mismatch', 'REFUSAL_NO_COMMIT_ACK'],
   ['erasure-only refused continuation', ownerName, '&& initialized.acquisition.program.operation.kind==MessagePreviewVaultFence.Kind.BEGIN)',
     ')', 'refused-context-loss', 'REFUSED_ERASURE_SURVIVES_CONTEXT_LOSS'],
+  ['R1 sample merged before post-current', moduleName,
+    'work.advanceWall(elapsed, observed);\n        current.requireCurrent(); return work.effectiveWall;',
+    'current.requireCurrent(); return work.advanceWall(elapsed, observed);', 'rising-healthy', 'ACTUAL_NONEMPTY_G1'],
+  ['R1 calibrated expiry sample ordering', moduleName,
+    'work.advanceWall(elapsed, observed);\n        current.requireCurrent(); return work.effectiveWall;',
+    'current.requireCurrent(); return work.advanceWall(elapsed, observed);', 'rising-expiry', 'RISING_REFUSAL_REACHED_KEY_INIT'],
+  ['R2 completed acquisition detached', ownerName, 'work.state.acquisition=null;', '', 'repeat-erase', 'CHECKED_EMPTY_G3'],
+  ['R3 acquiring JIO startWrite barrier', ownerName, 'if (acquiring != null) acquiringCurrent(acquiring);', '',
+    'held-jio-preauthentication', 'NO_A_START_WRITE_AFTER_JIO_PREAUTH'],
 ];
 for (const [name, target, before, after, scenario, oracle] of mutations) {
   test(`compiled literal omission: ${name}`, () => {
-    const text = readFileSync(path.join(base, `${target}.java`), 'utf8');
+    const text = readFileSync(path.join(base, `${target}.java`), 'utf8').replaceAll('\r\n', '\n');
     assert.equal(text.split(before).length, 2, 'one exact literal production rule');
     const healthy = run(out, scenario); assert.equal(healthy.status, 0, healthy.stderr);
     const mutant = compile({ name: target, text: text.replace(before, after) });

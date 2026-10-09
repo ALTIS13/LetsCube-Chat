@@ -5,6 +5,12 @@ import { initializerStubs } from './message-preview-pristine-initializer-stubs.f
 export const provisioningStubs = {
   ...initializerStubs,
   'android/app/Application.java': 'package android.app; public abstract class Application extends android.content.Context {}',
+  'android/os/SystemClock.java': `package android.os;
+public final class SystemClock {
+  public static volatile long value=100;
+  public static volatile boolean ticking;
+  public static synchronized long elapsedRealtime() { return ticking ? ++value : value; }
+}`,
 };
 for (const name of ['KeyInfo', 'KeyProperties']) {
   provisioningStubs[`android/security/keystore/${name}.java`] = readFileSync(new URL(
