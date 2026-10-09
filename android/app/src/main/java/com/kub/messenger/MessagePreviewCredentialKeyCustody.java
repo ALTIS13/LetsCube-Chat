@@ -30,6 +30,7 @@ final class MessagePreviewCredentialKeyCustody {
         final MessagePreviewCredentialKeyCustody custody;
         final MessagePreviewVaultFence fence;
         final MessagePreviewVaultFence.Operation operation;
+        final MessagePreviewVaultFence.Operation unmaterializedAllocation;
         final MessagePreviewMetadataEnvelope.Record retainedPredecessor, expectedHead;
         final long admittedAtElapsedMillis, deadlineElapsedMillis;
         private boolean consumed;
@@ -38,14 +39,28 @@ final class MessagePreviewCredentialKeyCustody {
                 MessagePreviewVaultFence.Operation operation, MessagePreviewMetadataEnvelope.Record retainedPredecessor,
                 MessagePreviewMetadataEnvelope.Record expectedHead, long admittedAtElapsedMillis,
                 long deadlineElapsedMillis) throws Unavailable {
+            this(custody, fence, operation, retainedPredecessor, expectedHead, admittedAtElapsedMillis, deadlineElapsedMillis, null);
+        }
+        private Request(MessagePreviewCredentialKeyCustody custody, MessagePreviewVaultFence fence,
+                MessagePreviewVaultFence.Operation operation, MessagePreviewMetadataEnvelope.Record retainedPredecessor,
+                MessagePreviewMetadataEnvelope.Record expectedHead, long admittedAtElapsedMillis,
+                long deadlineElapsedMillis, MessagePreviewVaultFence.Operation abandoned) throws Unavailable {
             require(custody != null && fence != null && operation != null && retainedPredecessor != null && expectedHead != null);
             require(admittedAtElapsedMillis >= 0 && deadlineElapsedMillis > admittedAtElapsedMillis
                 && deadlineElapsedMillis - admittedAtElapsedMillis <= 10000);
             this.custody = custody; this.fence = fence; this.operation = operation;
             this.retainedPredecessor = retainedPredecessor; this.expectedHead = expectedHead;
+            unmaterializedAllocation = abandoned;
             this.admittedAtElapsedMillis = admittedAtElapsedMillis; this.deadlineElapsedMillis = deadlineElapsedMillis;
             lastElapsed = admittedAtElapsedMillis;
             custody.shape(this);
+        }
+        static Request retireUnmaterialized(MessagePreviewCredentialKeyCustody custody, MessagePreviewVaultFence fence,
+                MessagePreviewVaultFence.Operation retire, MessagePreviewMetadataEnvelope.Record predecessor,
+                MessagePreviewVaultFence.Operation abandoned, MessagePreviewMetadataEnvelope.Record retiring,
+                long admitted, long deadline) throws Unavailable {
+            require(abandoned != null);
+            return new Request(custody, fence, retire, predecessor, retiring, admitted, deadline, abandoned);
         }
     }
     private final Context application;
@@ -89,7 +104,18 @@ final class MessagePreviewCredentialKeyCustody {
             && safe(h.wallHighWaterMillis) && hex32(h.operationId)
             && h.generation == op.generation && h.baseGeneration == op.baseGeneration
             && h.operationId.equals(op.operationId) && h.vaultRevision == op.vaultRevision
-            && p.generation == op.baseGeneration && r.expectedHead.credentialBytes().length == 0);
+            && r.expectedHead.credentialBytes().length == 0);
+        if (r.unmaterializedAllocation == null) require(p.generation == op.baseGeneration);
+        else {
+            MessagePreviewVaultFence.Operation a = r.unmaterializedAllocation;
+            require(op.kind == MessagePreviewVaultFence.Kind.RETIRE && h.kind == MessagePreviewMetadataEnvelope.Kind.RETIRING
+                && (a.kind == MessagePreviewVaultFence.Kind.BEGIN || a.kind == MessagePreviewVaultFence.Kind.REFUSED)
+                && safe(a.baseGeneration) && a.baseGeneration < 9007199254740991L && safe(a.generation)
+                && p.generation == a.baseGeneration && a.generation == a.baseGeneration + 1
+                && a.generation == op.baseGeneration && op.generation == op.baseGeneration + 1
+                && hex32(a.operationId) && !a.operationId.equals(op.operationId)
+                && safe(a.vaultRevision) && op.vaultRevision > a.vaultRevision);
+        }
         require((h.kind == MessagePreviewMetadataEnvelope.Kind.PENDING && alias(h.alias))
             || (h.kind == MessagePreviewMetadataEnvelope.Kind.RETIRING && (h.alias.isEmpty() || alias(h.alias))));
         require(p.alias.isEmpty() || alias(p.alias));
@@ -171,7 +197,7 @@ final class MessagePreviewCredentialKeyCustody {
     SecretKey createPendingKey(Request request) throws Unavailable {
         consume(request);
         try {
-            require(request.operation.kind == MessagePreviewVaultFence.Kind.BEGIN
+            require(request.unmaterializedAllocation == null && request.operation.kind == MessagePreviewVaultFence.Kind.BEGIN
                 && request.expectedHead.header.kind == MessagePreviewMetadataEnvelope.Kind.PENDING);
             current(request);
             KeyStore store = store(request);

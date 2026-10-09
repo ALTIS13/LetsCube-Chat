@@ -13,7 +13,10 @@ final class MessagePreviewVaultProvisioning {
         void requireCurrent(Identity exactIdentity) throws Exception;
         Verification verify(Identity exactIdentity, String borrowedAccess, long deadlineElapsedMillis) throws Exception;
     }
-    interface Current { void requireCurrent() throws Exception; }
+    interface Current {
+        void requireCurrent() throws Exception;
+        default void requireUnmaterialized(Work abandoned) throws Exception { throw new Unavailable(); }
+    }
     static final class Identity {
         final String operationId;
         final long vaultRevision, baseGeneration, generation;
@@ -56,7 +59,8 @@ final class MessagePreviewVaultProvisioning {
         final MessagePreviewMetadataEnvelope.Record[] attempted=new MessagePreviewMetadataEnvelope.Record[4];
         int attempts;
         MessagePreviewMetadataEnvelope.Record checked;
-        boolean oldDeleted, candidateEntered, completed;
+        boolean oldDeleted, candidateEntered, keyRequestEntered, completed;
+        Work unmaterializedPredecessor;
         long effectiveWall, wallElapsed, validatedExpiry;
         Work(MessagePreviewVaultFence.Operation operation, Identity identity,
                 MessagePreviewMetadataEnvelope.Record original, long admitted, long deadline, String candidate) {
@@ -149,6 +153,13 @@ final class MessagePreviewVaultProvisioning {
             new MessagePreviewCredentialKeyCustody.Gate() {
                 @Override public void requireCurrent(MessagePreviewCredentialKeyCustody.Request request) throws Exception {
                     require(request == enteredRequest); current.requireCurrent();
+                    if (request.unmaterializedAllocation != null) {
+                        Work abandoned=work.unmaterializedPredecessor;
+                        require(abandoned != null && request.operation == work.operation
+                            && request.fence == fence && request.unmaterializedAllocation == abandoned.operation
+                            && request.retainedPredecessor == abandoned.original && request.expectedHead == work.checked);
+                        current.requireUnmaterialized(abandoned);
+                    }
                 }
             });
     }
@@ -159,12 +170,21 @@ final class MessagePreviewVaultProvisioning {
         enteredRequest=new MessagePreviewCredentialKeyCustody.Request(custody, fence, work.operation, predecessor, head, now, deadline);
         return enteredRequest;
     }
+    private MessagePreviewCredentialKeyCustody.Request unmaterializedRequest(MessagePreviewCredentialKeyCustody custody,
+            MessagePreviewMetadataEnvelope.Record head) throws Exception {
+        Work abandoned=work.unmaterializedPredecessor;
+        require(abandoned != null); current.requireUnmaterialized(abandoned);
+        enteredRequest=MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(custody, fence, work.operation,
+            abandoned.original, abandoned.operation, head, work.admitted, work.deadline);
+        return enteredRequest;
+    }
     MessagePreviewMetadataEnvelope.Record begin() throws Exception {
         require(authority != null || work.operation.kind == MessagePreviewVaultFence.Kind.REFUSED);
         require(equal(read(), work.original) && work.original.header.generation==work.operation.baseGeneration);
         MessagePreviewMetadataEnvelope.Record tombstone=write(header(MessagePreviewMetadataEnvelope.Kind.RETIRING,
             work.original.header.alias, 0), new byte[0]);
         MessagePreviewCredentialKeyCustody custody=custody();
+        work.keyRequestEntered=true;
         custody.deleteRetiringKey(request(custody, work.original, tombstone));
         current.requireCurrent(); work.oldDeleted=true;
         return write(header(work.operation.kind == MessagePreviewVaultFence.Kind.BEGIN
@@ -187,7 +207,7 @@ final class MessagePreviewVaultProvisioning {
         current.requireCurrent(); require(expiry > wall());
         MessagePreviewCredentialKeyCustody custody=custody();
         MessagePreviewCredentialKeyCustody.Request request=request(custody, work.original, work.checked);
-        work.candidateEntered=true;
+        work.candidateEntered=true; work.keyRequestEntered=true;
         SecretKey credential=custody.createPendingKey(request);
         current.requireCurrent(); require(expiry > wall());
         MessagePreviewMetadataEnvelope.Header committed=header(MessagePreviewMetadataEnvelope.Kind.COMMITTED, work.candidate, expiry);
@@ -205,19 +225,28 @@ final class MessagePreviewVaultProvisioning {
         MessagePreviewMetadataEnvelope.Record predecessor=work.original;
         if (predecessorWork != null) {
             require(predecessorWork.recognizes(actual));
-            // Only an exact materialized phase can be D2's allocation predecessor.
-            // A reserved/unmaterialized generation stays INCOMPLETE, never synthesized.
-            require(actual.header.generation==work.operation.baseGeneration);
-            predecessor=actual;
-            if (predecessorWork.candidateEntered) require(predecessor.header.alias.equals(predecessorWork.candidate));
-            else if (!predecessorWork.oldDeleted) require(predecessor.header.alias.equals(predecessorWork.original.header.alias));
+            if (actual.header.generation != work.operation.baseGeneration) {
+                require(predecessorWork.attempts==0 && !predecessorWork.keyRequestEntered && !predecessorWork.candidateEntered
+                    && equal(actual, predecessorWork.original) && work.original == predecessorWork.original);
+                current.requireUnmaterialized(predecessorWork);
+                require(work.unmaterializedPredecessor == null);
+                work.unmaterializedPredecessor=predecessorWork;
+                predecessor=predecessorWork.original;
+            } else {
+                predecessor=actual;
+                if (predecessorWork.candidateEntered) require(predecessor.header.alias.equals(predecessorWork.candidate));
+                else if (!predecessorWork.oldDeleted) require(predecessor.header.alias.equals(predecessorWork.original.header.alias));
+            }
         } else require(equal(actual, predecessor));
-        require(predecessor.header.generation==work.operation.baseGeneration);
+        if (work.unmaterializedPredecessor == null) require(predecessor.header.generation==work.operation.baseGeneration);
         work.effectiveWall=Math.max(work.effectiveWall, predecessor.header.wallHighWaterMillis);
         MessagePreviewMetadataEnvelope.Record tombstone=write(header(MessagePreviewMetadataEnvelope.Kind.RETIRING,
             predecessor.header.alias, 0), new byte[0]);
         MessagePreviewCredentialKeyCustody custody=custody();
-        custody.deleteRetiringKey(request(custody, predecessor, tombstone));
+        MessagePreviewCredentialKeyCustody.Request request=work.unmaterializedPredecessor == null
+            ? request(custody, predecessor, tombstone) : unmaterializedRequest(custody, tombstone);
+        work.keyRequestEntered=true;
+        custody.deleteRetiringKey(request);
         current.requireCurrent();
         return write(header(MessagePreviewMetadataEnvelope.Kind.EMPTY, "", 0), new byte[0]);
     }

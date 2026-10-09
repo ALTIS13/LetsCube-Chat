@@ -599,6 +599,25 @@ final class MessagePreviewPristineInitializer {
             || (!work.state.fence.canErase(work.target.operation) && !(work.observe && work.target.completed)))
             throw new Unavailable();
         work.state.lastMillis=now;
+        if (!work.observe && work.target.program != null && work.target.program.unmaterializedPredecessor != null)
+            unmaterializedMemory(work, work.target.program.unmaterializedPredecessor);
+    }
+    private void unmaterializedMemory(TransitionWork work, MessagePreviewVaultProvisioning.Work abandoned) throws Unavailable {
+        MessagePreviewVaultProvisioning.Work retiring=work.target.program;
+        if (Thread.currentThread()!=worker || activeAcquiring!=null || pendingAcquiring!=null || queuedErasure!=null
+            || work.observe || retiring==null || retiring.operation!=work.target.operation
+            || work.target.predecessorProgram!=abandoned || work.state.acquisition==null
+            || work.state.acquisition.program!=abandoned || !work.state.acquisition.cancelled
+            || work.state.acquisition.ticket!=null || retiring.original!=abandoned.original
+            || abandoned.attempts!=0 || abandoned.keyRequestEntered || abandoned.candidateEntered
+            || abandoned.checked!=null || abandoned.oldDeleted)
+            throw new Unavailable();
+        MessagePreviewVaultFence.Operation a=abandoned.operation, r=retiring.operation;
+        if ((a.kind!=MessagePreviewVaultFence.Kind.BEGIN && a.kind!=MessagePreviewVaultFence.Kind.REFUSED)
+            || r.kind!=MessagePreviewVaultFence.Kind.RETIRE || r.baseGeneration!=a.generation
+            || abandoned.original.header.generation!=a.baseGeneration || a.generation!=a.baseGeneration+1
+            || r.generation!=r.baseGeneration+1 || r.operationId.equals(a.operationId) || r.vaultRevision<=a.vaultRevision)
+            throw new Unavailable();
     }
     private void transitionCurrent(TransitionWork work) throws Exception {
         long now=SystemClock.elapsedRealtime();
@@ -659,6 +678,10 @@ final class MessagePreviewPristineInitializer {
                 work.state.journal, work.state.fence, work.target.program,
                 new MessagePreviewVaultProvisioning.Current() {
                     @Override public void requireCurrent() throws Exception { transitionCurrent(work); }
+                    @Override public void requireUnmaterialized(MessagePreviewVaultProvisioning.Work abandoned) throws Exception {
+                        transitionCurrent(work);
+                        synchronized (MessagePreviewPristineInitializer.this) { unmaterializedMemory(work, abandoned); }
+                    }
                 }, null);
             MessagePreviewMetadataEnvelope.Record result=program.retire(work.target.predecessorProgram);
             work.target.expectedFinal=result.header;

@@ -19,11 +19,13 @@ const names = ['MessagePreviewVerificationState', 'MessagePreviewVaultFence', 'M
   'MessagePreviewVaultProvisioning'];
 function compile(replacement) {
   const out = directory('nmpv-d3-');
+  const replacements = replacement ? (Array.isArray(replacement) ? replacement : [replacement]) : [];
   const files = Object.entries(provisioningStubs).map(([name, text]) => {
     const file = path.join(out, 'stubs', name); mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); return file;
   });
   const sources = names.filter(name => existsSync(path.join(base, `${name}.java`))).map(name => {
-    if (replacement?.name === name) { const file = path.join(out, `${name}.java`); writeFileSync(file, replacement.text); return file; }
+    const changed = replacements.find(value => value.name === name);
+    if (changed) { const file = path.join(out, `${name}.java`); writeFileSync(file, changed.text); return file; }
     return path.join(base, `${name}.java`);
   });
   const result = spawnSync(path.join(bin, process.platform === 'win32' ? 'javac.exe' : 'javac'),
@@ -53,7 +55,10 @@ for (const scenario of ['healthy', 'replace', 'unbound', 'invalid-owner', 'empty
   'held-verifier', 'held-generate', 'held-readback', 'held-initial-read', 'held-jio-preauthentication', 'unmaterialized', 'queue-expired',
   'key-loss', 'fallback', 'drift', 'unknown-finish', 'live-wall', 'expiry-delta', 'rejected-context', 'expiry-before-mint',
   'held-ack', 'failed-ticket-replay', 'clipped-create', 'readback-mismatch', 'invalidate-erase', 'refused-context-loss', 'phase-rollback',
-  'rising-healthy', 'rising-expiry', 'rising-regression', 'repeat-erase']) {
+  'rising-healthy', 'rising-expiry', 'rising-regression', 'repeat-erase', 'no-phase-zero', 'no-phase-nonzero',
+  'no-phase-old-key-absent', 'no-phase-refused', 'no-phase-expired', 'no-phase-drift', 'no-phase-missing-metadata',
+  'no-phase-unknown-finish', 'no-phase-unknown-delete', 'no-phase-foreign-correlation',
+  'no-phase-foreign-history', 'entered-key-original-rewind', 'basis-ordinary-gap', 'basis-lineage', 'basis-no-create', 'basis-foreign-gate']) {
   test(`actual conditional provisioning graph: ${scenario}`, () => {
     const result = run(out, scenario); assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), `PASS ${scenario}`);
@@ -62,6 +67,7 @@ for (const scenario of ['healthy', 'replace', 'unbound', 'invalid-owner', 'empty
 
 const moduleName = 'MessagePreviewVaultProvisioning';
 const ownerName = 'MessagePreviewPristineInitializer';
+const custodyName = 'MessagePreviewCredentialKeyCustody';
 const mutations = [
   ['exact verification identity', moduleName, 'identity == expected && access.equals(input)', 'access.equals(input)', 'foreign-verification', 'REFUSAL_NO_COMMIT_ACK'],
   ['fresh verification invocation', moduleName, 'authority.verify(work.identity, access, verifyDeadline)',
@@ -94,6 +100,27 @@ const mutations = [
   ['R2 completed acquisition detached', ownerName, 'work.state.acquisition=null;', '', 'repeat-erase', 'CHECKED_EMPTY_G3'],
   ['R3 acquiring JIO startWrite barrier', ownerName, 'if (acquiring != null) acquiringCurrent(acquiring);', '',
     'held-jio-preauthentication', 'NO_A_START_WRITE_AFTER_JIO_PREAUTH'],
+  ['D4 ordinary exact predecessor', custodyName, 'if (r.unmaterializedAllocation == null) require(p.generation == op.baseGeneration);',
+    'if (r.unmaterializedAllocation == null) { }',
+    'basis-ordinary-gap', 'ORDINARY_EXACT_BASIS_REQUIRED'],
+  ['D4 single skipped base', custodyName, 'p.generation == a.baseGeneration && ', '',
+    'basis-lineage', 'ONE_UNMATERIALIZED_BASE_REQUIRED'],
+  ['D4 nonnull deletion basis', custodyName, 'require(abandoned != null);', '', 'basis-lineage', 'NULL_BASIS_NOT_RETIRE_AUTHORITY'],
+  ['D4 deletion-only factory', custodyName,
+    'op.kind == MessagePreviewVaultFence.Kind.RETIRE && h.kind == MessagePreviewMetadataEnvelope.Kind.RETIRING\n                && ',
+    '', 'basis-no-create', 'UNMATERIALIZED_FACTORY_REJECTS_ACQUISITION'],
+  ['D4 exact predecessor alias', custodyName,
+    'if (h.kind == MessagePreviewMetadataEnvelope.Kind.RETIRING) require(h.alias.equals(p.alias));',
+    'if (h.kind == MessagePreviewMetadataEnvelope.Kind.RETIRING) { }', 'basis-lineage', 'UNMATERIALIZED_ALIAS_MUST_EQUAL_P'],
+  ['D4 real no-phase owner identity', ownerName, '|| work.state.acquisition.program!=abandoned ', '',
+    'no-phase-foreign-history', 'NO_PHASE_FOREIGN_HISTORY_NOT_AUTHORITY'],
+  ['D4 original erase admission deadline', ownerName,
+    '|| now < work.state.lastMillis || now < 0 || now >= work.deadline', '|| now < work.state.lastMillis || now < 0',
+    'no-phase-expired', 'NO_PHASE_ERASE_DEADLINE_NOT_RENEWED'],
+  ['D4 explicit unmaterialized request route', moduleName,
+    'enteredRequest=MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(custody, fence, work.operation,\n            abandoned.original, abandoned.operation, head, work.admitted, work.deadline);',
+    'enteredRequest=new MessagePreviewCredentialKeyCustody.Request(custody, fence, work.operation, abandoned.original, head, work.admitted, work.deadline);',
+    'no-phase-zero', 'NO_PHASE_EXACT_EMPTY_RETIREMENT_REQUIRED'],
 ];
 for (const [name, target, before, after, scenario, oracle] of mutations) {
   test(`compiled literal omission: ${name}`, () => {
@@ -101,6 +128,31 @@ for (const [name, target, before, after, scenario, oracle] of mutations) {
     assert.equal(text.split(before).length, 2, 'one exact literal production rule');
     const healthy = run(out, scenario); assert.equal(healthy.status, 0, healthy.stderr);
     const mutant = compile({ name: target, text: text.replace(before, after) });
+    const result = run(mutant, scenario);
+    assert.equal(result.status, 1, 'calibrated runtime assertion, not setup/timeout');
+    assert.equal(result.stderr.trim(), `FAIL ${oracle}`); assert.equal(result.stdout, '');
+  });
+}
+
+for (const [name, edits, scenario, oracle] of [
+  ['D4 full authenticated P equality', [
+    [moduleName, 'require(predecessorWork.recognizes(actual));', ''],
+    [moduleName, '&& equal(actual, predecessorWork.original) ', ''],
+  ], 'no-phase-drift', 'NO_PHASE_UNTRUSTED_PREDECESSOR_NO_EFFECTS'],
+  ['D4 attempted preauthentication is not no-phase', [
+    [moduleName, 'predecessorWork.attempts==0 && ', ''],
+    [ownerName, 'abandoned.attempts!=0 || ', ''],
+  ], 'held-jio-preauthentication', 'NO_INVENTED_EMPTY_OR_RENEWAL'],
+]) {
+  test(`compiled literal omission: ${name}`, () => {
+    const healthy = run(out, scenario); assert.equal(healthy.status, 0, healthy.stderr);
+    const changed = new Map();
+    for (const [target, before, after] of edits) {
+      const text = changed.get(target) ?? readFileSync(path.join(base, `${target}.java`), 'utf8').replaceAll('\r\n', '\n');
+      assert.equal(text.split(before).length, 2, 'one exact literal production rule');
+      changed.set(target, text.replace(before, after));
+    }
+    const mutant = compile([...changed].map(([name, text]) => ({ name, text })));
     const result = run(mutant, scenario);
     assert.equal(result.status, 1, 'calibrated runtime assertion, not setup/timeout');
     assert.equal(result.stderr.trim(), `FAIL ${oracle}`); assert.equal(result.stdout, '');

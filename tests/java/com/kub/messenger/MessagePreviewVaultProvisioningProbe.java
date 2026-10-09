@@ -41,6 +41,8 @@ public final class MessagePreviewVaultProvisioningProbe {
     private static final CountDownLatch held=new CountDownLatch(1), release=new CountDownLatch(1);
     private static boolean armed, heldOnce, failFinish;
     private static boolean credentialVerified, actualWritePreauthentication;
+    private static volatile boolean noPhaseInitialRead, noPhaseSettled, noPhaseRetirementAdmitted;
+    private static final List<MessagePreviewMetadataEnvelope.Header> noPhaseHeads=new ArrayList<MessagePreviewMetadataEnvelope.Header>();
     private static byte[] originalG0;
     private static byte[] firstTombstone;
     private static void require(boolean value, String tag) { if (!value) throw new AssertionError(tag); }
@@ -51,6 +53,18 @@ public final class MessagePreviewVaultProvisioningProbe {
     }
     private static void event(String name) {
         trace.add(name);
+        if (scenario.startsWith("no-phase-") && installation!=null && name.equals("journal-read")) {
+            try { noPhaseHeads.add(record().header); }
+            catch(Exception error) { throw new AssertionError("NO_PHASE_AUTHENTICATED_READ_FIXTURE"); }
+            if (armed && !heldOnce) {
+                noPhaseInitialRead=inFrame("MessagePreviewVaultProvisioning","begin")
+                    && !inFrame("MessagePreviewJournalIO","write");
+            }
+        }
+        if (scenario.startsWith("no-phase-") && armed && noPhaseRetirementAdmitted && name.equals("journal-start")) {
+            require(!inFrame("MessagePreviewVaultProvisioning","begin"),"NO_CANCELLED_A_PHASE_WRITE");
+            require(noPhaseSettled,"ERASURE_AFTER_ACTUAL_ACQUISITION_SETTLEMENT");
+        }
         if (scenario.equals("held-jio-preauthentication") && heldOnce && name.equals("journal-start")
             && inFrame("MessagePreviewVaultProvisioning","begin")) aStartsAfterPreauthentication++;
         if (installation!=null && name.equals("journal-read") && firstTombstone==null) {
@@ -65,10 +79,11 @@ public final class MessagePreviewVaultProvisioningProbe {
         if (armed && scenario.equals("key-loss") && name.equals("credential-generate")) {
             keys.keySet().removeIf(k -> k.startsWith("letscube.nmpv.credential."));
         }
-        if (armed && scenario.equals("unknown-finish") && name.equals("journal-finish") && !failFinish) {
+        if (armed && (scenario.equals("unknown-finish") || scenario.equals("no-phase-unknown-finish"))
+            && name.equals("journal-finish") && !failFinish) {
             failFinish=true; throw new IllegalStateException("FICTIONAL_FINISH_FAILURE");
         }
-        if (armed && scenario.equals("fallback") && name.equals("credential-generate")) {
+        if (armed && (scenario.equals("fallback") || scenario.equals("entered-key-original-rewind")) && name.equals("credential-generate")) {
             try { Files.write(journal(),originalG0); } catch(Exception error) { throw new AssertionError("FIXTURE_WRITE"); }
         }
         if (armed && scenario.equals("phase-rollback") && name.equals("credential-generate")) {
@@ -142,7 +157,11 @@ public final class MessagePreviewVaultProvisioningProbe {
         public Key engineGetKey(String a,char[] p) { require(p==null && a.startsWith("letscube.nmpv."),"ONLY_OWN_DETAILS"); event("lookup"); return keys.get(a); }
         public Enumeration<String> engineAliases() { synchronized(keys) { return Collections.enumeration(new ArrayList<String>(keys.keySet())); } }
         public boolean engineContainsAlias(String a) { return keys.containsKey(a); }
-        public void engineDeleteEntry(String a) { require(a.startsWith("letscube.nmpv.credential.v1."),"EXACT_CREDENTIAL_DELETE"); deletes++; trace.add("delete:"+a); keys.remove(a); event("delete"); }
+        public void engineDeleteEntry(String a) {
+            require(a.startsWith("letscube.nmpv.credential.v1."),"EXACT_CREDENTIAL_DELETE");
+            deletes++; trace.add("delete:"+a); keys.remove(a); event("delete");
+            if (scenario.equals("no-phase-unknown-delete")) throw new IllegalStateException("FICTIONAL_DELETE_ACK_LOST");
+        }
         public void engineSetKeyEntry(String a,Key b,char[] c,Certificate[] d) { throw new AssertionError("NO_IMPORT"); }
         public void engineSetKeyEntry(String a,byte[] b,Certificate[] c) { throw new AssertionError("NO_IMPORT"); }
         public void engineSetCertificateEntry(String a,Certificate b) { throw new AssertionError("NO_IMPORT"); }
@@ -285,6 +304,160 @@ public final class MessagePreviewVaultProvisioningProbe {
             && h.header.baseGeneration==base && h.header.alias.isEmpty() && h.credentialBytes().length==0
             && credentialCount()==0 && keys.containsKey(metadataAlias) && keys.containsKey("unrelated.fixture"),"LITERAL_EMPTY_PRESERVED");
     }
+    private static void noPhaseCancellation() throws Exception {
+        boolean nonzero=scenario.equals("no-phase-nonzero") || scenario.equals("no-phase-old-key-absent")
+            || scenario.equals("no-phase-unknown-delete");
+        boolean expired=scenario.equals("no-phase-expired");
+        if (nonzero) {
+            MessagePreviewPristineInitializer.ProvisionResult seed=pending(D,0,0);
+            require(provision(D,seed.ticket).get().status==MessagePreviewPristineInitializer.ProvisionStatus.COMMITTED,
+                "NO_PHASE_AUTHENTICATED_COMMITTED_PREDECESSOR");
+        }
+        MessagePreviewMetadataEnvelope.Record predecessor=record();
+        long base=nonzero ? 1 : 0, revision=nonzero ? 1 : 0;
+        require(predecessor.header.generation==base && predecessor.header.kind==(nonzero
+            ? MessagePreviewMetadataEnvelope.Kind.COMMITTED : MessagePreviewMetadataEnvelope.Kind.EMPTY),"NO_PHASE_EXACT_PREDECESSOR");
+        if (scenario.equals("no-phase-old-key-absent")) require(keys.remove(predecessor.header.alias)!=null,"NO_PHASE_EXACT_OLD_KEY_ABSENCE_FIXTURE");
+        int starts=AtomicFile.starts, minted=generates, deleted=deletes, checked=verifies, inits=credentialInits;
+        byte[] predecessorBytes=Files.readAllBytes(journal());
+        byte[] marker=Files.readAllBytes(new File(app.root,"native-message-previews-v1/installation-v1.bin").toPath());
+        SecretKey originalMetadata=keys.get(metadataAlias), unrelated=keys.get("unrelated.fixture");
+        Await cancelled=new Await(); holdEvent="journal-read"; armed=true;
+        MessagePreviewVaultFence.Owner tuple=scenario.equals("no-phase-refused")
+            ? new MessagePreviewVaultFence.Owner(TUPLE.recipient,TUPLE.session,"bad",2) : TUPLE;
+        owner.beginOwned(A,revision,base,CAPTURED,tuple,r -> {
+            cancelled.result=r; noPhaseSettled=true; cancelled.done.countDown();
+        });
+        require(held.await(3,TimeUnit.SECONDS),"NO_PHASE_HELD_INITIAL_READ");
+        require(noPhaseInitialRead && AtomicFile.starts==starts && generates==minted && deletes==deleted
+            && credentialInits==inits && verifies==checked && Arrays.equals(Files.readAllBytes(journal()),predecessorBytes),
+            "NO_PHASE_NO_ATTEMPT_OR_ENTERED_KEY");
+        if (scenario.equals("no-phase-foreign-correlation")) {
+            Erase foreign=erase(B,revision+1,base,new MessagePreviewVaultFence.Correlation(E,revision));
+            require(foreign.get().status==MessagePreviewPristineInitializer.TransitionStatus.STALE_OWNER
+                && AtomicFile.starts==starts && generates==minted && deletes==deleted,"NO_PHASE_FOREIGN_NO_MUTATION");
+            release.countDown();
+            MessagePreviewPristineInitializer.ProvisionResult pending=cancelled.get();
+            require(pending.status==MessagePreviewPristineInitializer.ProvisionStatus.PENDING && pending.ticket!=null
+                && pending.generation==base+1,"NO_PHASE_FOREIGN_DID_NOT_INVALIDATE_A");
+            require(provision(A,pending.ticket).get().status==MessagePreviewPristineInitializer.ProvisionStatus.COMMITTED,
+                "NO_PHASE_FOREIGN_ORDINARY_CONTINUATION"); return;
+        }
+        Erase retired=erase(B,revision+1,base,new MessagePreviewVaultFence.Correlation(A,revision));
+        require(cancelled.done.getCount()==1 && retired.done.getCount()==1,"NO_PHASE_NO_EARLY_SETTLEMENT_ACK");
+        noPhaseRetirementAdmitted=true;
+        require(begin(C,revision+2,base+1,TUPLE).get().status==MessagePreviewPristineInitializer.ProvisionStatus.BUSY,
+            "NO_PHASE_SUCCESSOR_BUSY_UNTIL_SETTLEMENT");
+        require(erase(E,revision+2,base+2,null).get().status==MessagePreviewPristineInitializer.TransitionStatus.BUSY,
+            "NO_PHASE_ONE_OWNED_CONTINUATION");
+        require(AtomicFile.starts==starts && generates==minted && deletes==deleted && verifies==checked
+            && Arrays.equals(Files.readAllBytes(journal()),predecessorBytes),"NO_PHASE_NO_EFFECTS_WHILE_HELD");
+        if (expired) SystemClock.value=10100;
+        if (scenario.equals("no-phase-drift")) {
+            MessagePreviewMetadataEnvelope.Header h=predecessor.header;
+            Files.write(journal(),MessagePreviewMetadataEnvelope.seal(new MessagePreviewMetadataEnvelope.Header(
+                h.installation,h.generation,h.kind,h.alias,h.expiresWallMillis,h.wallHighWaterMillis+1,
+                h.operationId,h.baseGeneration,h.vaultRevision),predecessor.credentialBytes(),originalMetadata));
+        }
+        if (scenario.equals("no-phase-missing-metadata")) require(keys.remove(metadataAlias)==originalMetadata,"NO_PHASE_METADATA_LOSS_FIXTURE");
+        if (scenario.equals("no-phase-foreign-history")) {
+            java.lang.reflect.Field stateField=MessagePreviewPristineInitializer.class.getDeclaredField("initialized"); stateField.setAccessible(true);
+            Object state=stateField.get(owner);
+            java.lang.reflect.Field acquiringField=state.getClass().getDeclaredField("acquisition"); acquiringField.setAccessible(true);
+            Object acquisition=acquiringField.get(state);
+            java.lang.reflect.Field programField=acquisition.getClass().getDeclaredField("program"); programField.setAccessible(true);
+            MessagePreviewVaultProvisioning.Work actual=(MessagePreviewVaultProvisioning.Work)programField.get(acquisition);
+            MessagePreviewVaultFence foreign=new MessagePreviewVaultFence(base); require(foreign.bindContext(CAPTURED),"FOREIGN_HISTORY_FIXTURE_CONTEXT");
+            MessagePreviewVaultFence.Operation copied=foreign.begin(A,revision,base,CAPTURED,TUPLE).operation;
+            require(copied!=actual.operation && copied.generation==actual.operation.generation,"FOREIGN_HISTORY_REFERENCE_CALIBRATED");
+            MessagePreviewVaultProvisioning.Work impostor=new MessagePreviewVaultProvisioning.Work(copied,actual.identity,
+                actual.original,actual.admitted,actual.deadline,actual.candidate);
+            java.lang.reflect.Field currentField=state.getClass().getDeclaredField("current"); currentField.setAccessible(true);
+            Object current=currentField.get(state);
+            java.lang.reflect.Field priorField=current.getClass().getDeclaredField("predecessorProgram"); priorField.setAccessible(true);
+            synchronized(owner) { priorField.set(current,impostor); }
+        }
+        release.countDown();
+        MessagePreviewPristineInitializer.ProvisionResult abandoned=cancelled.get();
+        require(abandoned.status==MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE
+            && abandoned.ticket==null && noPhaseSettled,"NO_PHASE_NO_CANCELLED_ACQUISITION_ACK");
+        MessagePreviewPristineInitializer.TransitionResult result=retired.get();
+        if (scenario.equals("no-phase-foreign-history")) {
+            require(result.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && result.generation==null
+                && AtomicFile.starts==starts && generates==minted && deletes==deleted
+                && Arrays.equals(Files.readAllBytes(journal()),predecessorBytes),"NO_PHASE_FOREIGN_HISTORY_NOT_AUTHORITY"); return;
+        }
+        if (scenario.equals("no-phase-drift") || scenario.equals("no-phase-missing-metadata")) {
+            require(result.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && result.generation==null
+                && AtomicFile.starts==starts && generates==minted && deletes==deleted,"NO_PHASE_UNTRUSTED_PREDECESSOR_NO_EFFECTS");
+            if (scenario.equals("no-phase-missing-metadata")) require(!keys.containsKey(metadataAlias)
+                && Arrays.equals(Files.readAllBytes(journal()),predecessorBytes),"NO_PHASE_NO_METADATA_RECREATION");
+            else require(record().header.wallHighWaterMillis==predecessor.header.wallHighWaterMillis+1,"NO_PHASE_DRIFT_NOT_OVERWRITTEN");
+            return;
+        }
+        if (scenario.equals("no-phase-unknown-finish") || scenario.equals("no-phase-unknown-delete")) {
+            require(result.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && result.generation==null
+                && generates==minted && credentialInits==inits && verifies==checked,"NO_PHASE_UNKNOWN_ACK_NO_EMPTY");
+            if (scenario.equals("no-phase-unknown-finish")) require(failFinish && AtomicFile.starts==starts+1 && deletes==deleted
+                && Arrays.equals(Files.readAllBytes(journal()),predecessorBytes),"NO_PHASE_UNKNOWN_WRITE_RESIDUE");
+            else require(deletes==deleted+1 && AtomicFile.starts==starts+1 && credentialCount()==0
+                && record().header.kind==MessagePreviewMetadataEnvelope.Kind.RETIRING,"NO_PHASE_UNKNOWN_DELETE_RESIDUE");
+            int effects=AtomicFile.starts, deletedAfter=deletes;
+            Erase observed=new Erase(); owner.observeRetirement(B,observed);
+            require(observed.get().status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE
+                && erase(E,revision+2,base+2,null).get().status==MessagePreviewPristineInitializer.TransitionStatus.UNAVAILABLE
+                && AtomicFile.starts==effects && deletes==deletedAfter,"NO_PHASE_UNKNOWN_ACK_NO_REPLAY"); return;
+        }
+        if (expired) {
+            require(result.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && result.generation==null
+                && AtomicFile.starts==starts && generates==minted && deletes==deleted
+                && Arrays.equals(Files.readAllBytes(journal()),predecessorBytes),"NO_PHASE_ERASE_DEADLINE_NOT_RENEWED");
+            return;
+        }
+        require(result.status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+            || (result.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && result.generation==null),
+            "NO_PHASE_REAL_RUNTIME_RESULT_NOT_SETUP_REFUSAL");
+        require(result.status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED && result.generation==base+2,
+            "NO_PHASE_EXACT_EMPTY_RETIREMENT_REQUIRED");
+        MessagePreviewMetadataEnvelope.Record empty=record();
+        require(empty.header.generation==base+2 && empty.header.baseGeneration==base+1 && empty.header.vaultRevision==revision+1
+            && empty.header.operationId.equals(B) && empty.header.installation.equals(installation)
+            && empty.header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY && empty.header.alias.isEmpty()
+            && empty.header.expiresWallMillis==0 && empty.credentialBytes().length==0,"NO_PHASE_LITERAL_R_EMPTY_NOT_INVENTED_A");
+        boolean sawRetiring=false, sawEmpty=false;
+        for (MessagePreviewMetadataEnvelope.Header h:noPhaseHeads) {
+            require(!h.operationId.equals(A),"NO_PHASE_NEVER_MATERIALIZED_ABANDONED_GENERATION");
+            if (h.operationId.equals(B)) {
+                require(h.generation==base+2 && h.baseGeneration==base+1 && h.vaultRevision==revision+1
+                    && h.expiresWallMillis==0,"NO_PHASE_EXACT_R_LINEAGE");
+                if (h.kind==MessagePreviewMetadataEnvelope.Kind.RETIRING) {
+                    require(h.alias.equals(predecessor.header.alias),"NO_PHASE_EXACT_PREDECESSOR_ALIAS"); sawRetiring=true;
+                } else if (h.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY) sawEmpty=true;
+                else require(false,"NO_PHASE_RETIREMENT_ONLY_PHASES");
+            }
+        }
+        require(sawRetiring && sawEmpty && AtomicFile.starts==starts+2,"NO_PHASE_REAL_CHECKED_R_PHASES");
+        require(generates==minted && credentialInits==inits && verifies==checked && credentialCount()==0
+            && deletes==deleted+(scenario.equals("no-phase-nonzero") ? 1 : 0),"NO_PHASE_DELETE_ONLY_NO_ACQUISITION_AUTHORITY");
+        require(keys.get(metadataAlias)==originalMetadata && keys.get("unrelated.fixture")==unrelated
+            && Arrays.equals(Files.readAllBytes(new File(app.root,"native-message-previews-v1/installation-v1.bin").toPath()),marker),
+            "NO_PHASE_MARKER_METADATA_UNRELATED_PRESERVED");
+        int completedStarts=AtomicFile.starts;
+        Erase observed=new Erase(); owner.observeRetirement(B,observed);
+        require(observed.get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+            && observed.result.generation==base+2 && AtomicFile.starts==completedStarts && generates==minted
+            && verifies==checked,"NO_PHASE_COMPLETED_OBSERVATION_READ_ONLY");
+        if (scenario.equals("no-phase-zero")) {
+            armed=false;
+            MessagePreviewPristineInitializer.ProvisionResult next=pending(C,2,2);
+            require(provision(C,next.ticket).get().status==MessagePreviewPristineInitializer.ProvisionStatus.COMMITTED
+                && record().header.generation==3,"NO_PHASE_SUCCESSOR_WITHOUT_REINITIALIZATION");
+            Erase last=erase(D,3,3,null);
+            require(last.get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED
+                && last.result.generation==4 && record().header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY
+                && credentialCount()==0,"NO_PHASE_SUCCESSOR_EXACT_ERASURE");
+        }
+    }
     private static void heldCase() throws Exception {
         boolean beforeBegin=scenario.equals("unmaterialized") || scenario.equals("held-initial-read")
             || scenario.equals("held-jio-preauthentication");
@@ -310,8 +483,7 @@ public final class MessagePreviewVaultProvisioningProbe {
         MessagePreviewPristineInitializer.TransitionResult er=e.get();
         if (scenario.equals("held-jio-preauthentication"))
             require(aStartsAfterPreauthentication==0,"NO_A_START_WRITE_AFTER_JIO_PREAUTH");
-        if (scenario.equals("unmaterialized") || scenario.equals("held-initial-read")
-            || scenario.equals("held-jio-preauthentication") || scenario.equals("queue-expired")) {
+        if (scenario.equals("held-jio-preauthentication") || scenario.equals("queue-expired")) {
             require(er.status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && er.generation==null,"NO_INVENTED_EMPTY_OR_RENEWAL");
             require(deletes==0 && record().header.generation==(beforeBegin ? 0 : 1),"UNRESOLVED_RESIDUE_RETAINED");
             require(begin(C,2,2,TUPLE).get().status==MessagePreviewPristineInitializer.ProvisionStatus.UNAVAILABLE,"UNCERTAIN_REFUSES_SUCCESSOR");
@@ -322,7 +494,83 @@ public final class MessagePreviewVaultProvisioningProbe {
         } else {
             require(er.status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED && er.generation==2,"ORDERED_ERASURE_AFTER_SETTLEMENT");
             require(credentialCount()==0 && record().header.kind==MessagePreviewMetadataEnvelope.Kind.EMPTY,"NO_STALE_KEY_OR_COMMIT");
+            if (beforeBegin) require(generates==1 && verifies==0 && deletes==0,"NO_PHASE_OLD_CASE_ERASURE_ONLY");
         }
+    }
+    private static MessagePreviewMetadataEnvelope.Record fixtureRecord(long generation, long base, String id,
+            long revision, MessagePreviewMetadataEnvelope.Kind kind, String alias) throws Exception {
+        return MessagePreviewMetadataEnvelope.open(MessagePreviewMetadataEnvelope.seal(new MessagePreviewMetadataEnvelope.Header(
+            installation,generation,kind,alias,0,record().header.wallHighWaterMillis,id,base,revision),new byte[0],keys.get(metadataAlias)),
+            installation,keys.get(metadataAlias));
+    }
+    private static void requestBasis() throws Exception {
+        MessagePreviewMetadataEnvelope.Record predecessor=record();
+        MessagePreviewVaultFence fence=new MessagePreviewVaultFence(0); require(fence.bindContext(CAPTURED),"BASIS_BOUND_FICTIONAL_CONTEXT");
+        MessagePreviewVaultFence.Operation abandoned=fence.begin(A,0,0,CAPTURED,TUPLE).operation;
+        MessagePreviewVaultFence.Operation retire=fence.retire(B,1,0,new MessagePreviewVaultFence.Correlation(A,0)).operation;
+        MessagePreviewMetadataEnvelope.Record head=fixtureRecord(2,1,B,1,MessagePreviewMetadataEnvelope.Kind.RETIRING,"");
+        MessagePreviewJournalIO journal=new MessagePreviewJournalIO(new MessagePreviewAtomicBackend(app));
+        MessagePreviewCredentialKeyCustody.Request[] registered=new MessagePreviewCredentialKeyCustody.Request[1];
+        MessagePreviewCredentialKeyCustody custody=new MessagePreviewCredentialKeyCustody(app,10123,Thread.currentThread(),installation,journal,r -> {
+            if (r!=registered[0] || r.unmaterializedAllocation!=abandoned) throw new Exception("FICTIONAL_UNAVAILABLE");
+        });
+        MessagePreviewCredentialKeyCustody.Request valid=MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(
+            custody,fence,retire,predecessor,abandoned,head,100,10100);
+        require(valid.unmaterializedAllocation==abandoned && valid.retainedPredecessor==predecessor
+            && valid.expectedHead==head && valid.operation==retire && valid.admittedAtElapsedMillis==100
+            && valid.deadlineElapsedMillis==10100,"BASIS_EXACT_IMMUTABLE_REFERENCES");
+        if (scenario.equals("basis-ordinary-gap")) {
+            boolean refused=false;
+            try { new MessagePreviewCredentialKeyCustody.Request(custody,fence,retire,predecessor,head,100,10100); }
+            catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused,"ORDINARY_EXACT_BASIS_REQUIRED"); return;
+        }
+        if (scenario.equals("basis-lineage")) {
+            MessagePreviewMetadataEnvelope.Record wrong=fixtureRecord(1,0,D,0,MessagePreviewMetadataEnvelope.Kind.EMPTY,"");
+            boolean refused=false;
+            try { MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(custody,fence,retire,wrong,abandoned,head,100,10100); }
+            catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused,"ONE_UNMATERIALIZED_BASE_REQUIRED");
+            refused=false;
+            try { MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(custody,fence,retire,wrong,null,head,100,10100); }
+            catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused,"NULL_BASIS_NOT_RETIRE_AUTHORITY");
+            String other="letscube.nmpv.credential.v1."+installation+"."+E;
+            refused=false;
+            try { MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(custody,fence,retire,predecessor,abandoned,
+                fixtureRecord(2,1,B,1,MessagePreviewMetadataEnvelope.Kind.RETIRING,other),100,10100); }
+            catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused,"UNMATERIALIZED_ALIAS_MUST_EQUAL_P"); return;
+        }
+        if (scenario.equals("basis-no-create")) {
+            int reads=AtomicFile.reads, starts=AtomicFile.starts, minted=generates;
+            boolean refused=false;
+            try { custody.createPendingKey(valid); } catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused && AtomicFile.reads==reads && AtomicFile.starts==starts && generates==minted,"UNMATERIALIZED_BASIS_NEVER_CREATES");
+            refused=false;
+            try { custody.deleteRetiringKey(valid); } catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused && AtomicFile.reads==reads,"SPENT_BASIS_NOT_REPLAYED");
+            MessagePreviewVaultFence acquiring=new MessagePreviewVaultFence(0); require(acquiring.bindContext(CAPTURED),"BASIS_ACQUISITION_FIXTURE_CONTEXT");
+            MessagePreviewVaultFence.Operation prior=acquiring.begin(A,0,0,CAPTURED,TUPLE).operation;
+            MessagePreviewVaultFence.Operation next=acquiring.begin(B,1,1,CAPTURED,TUPLE).operation;
+            MessagePreviewMetadataEnvelope.Record pending=fixtureRecord(2,1,B,1,MessagePreviewMetadataEnvelope.Kind.PENDING,
+                "letscube.nmpv.credential.v1."+installation+"."+E);
+            refused=false;
+            try { MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(custody,acquiring,next,predecessor,prior,pending,100,10100); }
+            catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused && AtomicFile.reads==reads && generates==minted,"UNMATERIALIZED_FACTORY_REJECTS_ACQUISITION"); return;
+        }
+        if (scenario.equals("basis-foreign-gate")) {
+            MessagePreviewVaultFence foreign=new MessagePreviewVaultFence(0); require(foreign.bindContext(CAPTURED),"FOREIGN_FICTIONAL_CONTEXT");
+            MessagePreviewVaultFence.Operation copy=foreign.begin(A,0,0,CAPTURED,TUPLE).operation;
+            MessagePreviewCredentialKeyCustody.Request different=MessagePreviewCredentialKeyCustody.Request.retireUnmaterialized(
+                custody,fence,retire,predecessor,copy,head,100,10100);
+            registered[0]=different;
+            boolean refused=false; int reads=AtomicFile.reads;
+            try { custody.deleteRetiringKey(different); } catch(MessagePreviewCredentialKeyCustody.Unavailable expected) { refused=true; }
+            require(refused && AtomicFile.reads==reads && generates==1 && deletes==0,"FOREIGN_NUMERIC_MATCH_IS_NOT_GATE_AUTHORITY"); return;
+        }
+        throw new AssertionError("KNOWN_BASIS_SCENARIO");
     }
     private static void repeatedErasure() throws Exception {
         MessagePreviewPristineInitializer.ProvisionResult p=pending(A,0,0);
@@ -436,7 +684,21 @@ public final class MessagePreviewVaultProvisioningProbe {
             require(generates==2 && credentialCount()==1,"CLIPPED_CREATE_RETAINS_ENTERED_KEY");
             require(erase(B,1,1,null).get().status==MessagePreviewPristineInitializer.TransitionStatus.RETIRED,"ERASE_BUDGET_INDEPENDENT_OF_TICKET"); return;
         }
-        if (scenario.equals("fallback") || scenario.equals("drift")) {
+        if (scenario.equals("entered-key-original-rewind")) {
+            java.lang.reflect.Field stateField=MessagePreviewPristineInitializer.class.getDeclaredField("initialized"); stateField.setAccessible(true);
+            Object state=stateField.get(owner);
+            java.lang.reflect.Field acquiringField=state.getClass().getDeclaredField("acquisition"); acquiringField.setAccessible(true);
+            Object acquisition=acquiringField.get(state);
+            java.lang.reflect.Field programField=acquisition.getClass().getDeclaredField("program"); programField.setAccessible(true);
+            MessagePreviewVaultProvisioning.Work work=(MessagePreviewVaultProvisioning.Work)programField.get(acquisition);
+            require(work.keyRequestEntered && work.candidateEntered && work.attempts>=2 && record().header.generation==0,
+                "ENTERED_KEY_HISTORY_NOT_DERIVED_FROM_OLD_DISK");
+            int starts=AtomicFile.starts;
+            Erase e=erase(B,1,1,null);
+            require(e.get().status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE && e.result.generation==null
+                && AtomicFile.starts==starts && deletes==0 && credentialCount()==1
+                && Arrays.equals(Files.readAllBytes(journal()),originalG0),"ENTERED_KEY_OLD_P_CANNOT_SELECT_NO_PHASE");
+        } else if (scenario.equals("fallback") || scenario.equals("drift")) {
             Erase e=erase(B,1,1,null); require(e.get().status==MessagePreviewPristineInitializer.TransitionStatus.INCOMPLETE
                 && credentialCount()==1 && deletes==0,"NO_UNKNOWN_HISTORY_DELETE");
         } else if (scenario.equals("phase-rollback")) {
@@ -473,10 +735,13 @@ public final class MessagePreviewVaultProvisioningProbe {
             if (scenario.equals("healthy") || scenario.equals("replace") || scenario.equals("rising-healthy")) positive(scenario.equals("replace"));
             else if (scenario.equals("rising-expiry") || scenario.equals("rising-regression")) risingRefusal();
             else if (scenario.equals("repeat-erase")) repeatedErasure();
+            else if (scenario.startsWith("no-phase-")) noPhaseCancellation();
+            else if (scenario.startsWith("basis-")) requestBasis();
             else if (scenario.startsWith("held-") || scenario.equals("unmaterialized") || scenario.equals("queue-expired")) heldCase();
             else if (scenario.equals("live-wall")) liveWall();
             else boundaries();
-            require(keys.containsKey(metadataAlias) && keys.containsKey("unrelated.fixture"),"PRESERVED_NONCREDENTIAL_KEYS");
+            require((scenario.equals("no-phase-missing-metadata") || keys.containsKey(metadataAlias))
+                && keys.containsKey("unrelated.fixture"),"PRESERVED_NONCREDENTIAL_KEYS");
             System.out.println("PASS "+scenario);
         } catch(AssertionError error) { System.err.println("FAIL "+error.getMessage()); System.exit(1); }
         catch(Throwable failure) { System.err.println("FAIL UNEXPECTED_SOURCE_GRAPH"); System.exit(1); }
