@@ -12,6 +12,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.KeyStore;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 
@@ -42,6 +44,40 @@ final class MessagePreviewPristineInitializer {
     private SecretKey metadataKey;
     private InitializedState initialized;
     private TransitionWork pendingTransition, activeTransition;
+    private final MessagePreviewVaultProvisioning.Authority provisioningAuthority;
+    private AcquiringTask pendingAcquiring, activeAcquiring;
+    private TransitionWork queuedErasure;
+
+    enum ProvisionStatus { PENDING, COMMITTED, DORMANT, INCOMPLETE, UNAVAILABLE, INVALID_REQUEST, INVALID_OWNER, STALE_OWNER, EXHAUSTED, BUSY, UNKNOWN }
+    static final class ProvisionResult {
+        final ProvisionStatus status;
+        final Long generation;
+        final String ticket;
+        private ProvisionResult(ProvisionStatus status, Long generation, String ticket) {
+            this.status=status; this.generation=generation; this.ticket=ticket;
+        }
+    }
+    interface ProvisionCompletion { void complete(ProvisionResult result); }
+    private static final class Acquisition {
+        final MessagePreviewVaultProvisioning.Work program;
+        String ticket;
+        boolean consumed, cancelled;
+        Acquisition(MessagePreviewVaultProvisioning.Work program) { this.program=program; }
+    }
+    private static final class AcquiringTask {
+        final InitializedState state;
+        final Acquisition target;
+        final boolean begin, observe;
+        final ProvisionCompletion completion;
+        final long deadline;
+        String access;
+        AcquiringTask(InitializedState state, Acquisition target, boolean begin, boolean observe,
+                String access, ProvisionCompletion completion, long deadline) {
+            this.state=state; this.target=target; this.begin=begin; this.observe=observe;
+            this.access=access; this.completion=completion;
+            this.deadline=deadline;
+        }
+    }
 
     private static final long TRANSITION_BUDGET_MILLIS = 10_000;
     enum TransitionStatus { RETIRED, INCOMPLETE, UNAVAILABLE, UNKNOWN, STALE_OWNER, INVALID_REQUEST, EXHAUSTED, BUSY }
@@ -59,6 +95,10 @@ final class MessagePreviewPristineInitializer {
         Retirement current;
         boolean uncertain;
         long lastMillis;
+        Acquisition acquisition;
+        MessagePreviewVaultFence.Context boundContext;
+        long acceptedVaultRevision=-1;
+        final Set<String> acceptedOperations=new HashSet<>();
         private InitializedState(Prepared prepared) {
             installation=prepared.record.header.installation;
             journal=prepared.journal;
@@ -71,6 +111,7 @@ final class MessagePreviewPristineInitializer {
         final MessagePreviewMetadataEnvelope.Record predecessor;
         MessagePreviewMetadataEnvelope.Header expectedFinal;
         boolean completed;
+        MessagePreviewVaultProvisioning.Work program, predecessorProgram;
         private Retirement(MessagePreviewVaultFence.Operation operation, MessagePreviewMetadataEnvelope.Record predecessor) {
             this.operation=operation; this.predecessor=predecessor;
         }
@@ -107,6 +148,11 @@ final class MessagePreviewPristineInitializer {
 
     static MessagePreviewPristineInitializer getOrCreate(Context supplied,
             MessagePreviewInitializationGate.ForegroundAuthority issuer) throws Unavailable {
+        return getOrCreate(supplied, issuer, null);
+    }
+    static MessagePreviewPristineInitializer getOrCreate(Context supplied,
+            MessagePreviewInitializationGate.ForegroundAuthority issuer,
+            MessagePreviewVaultProvisioning.Authority provisioningAuthority) throws Unavailable {
         try {
             requireMain();
             if (supplied == null || issuer == null || supplied.isDeviceProtectedStorage()) throw new Unavailable();
@@ -117,10 +163,10 @@ final class MessagePreviewPristineInitializer {
             synchronized (MessagePreviewPristineInitializer.class) {
                 if (registered != null) {
                     if (registered.context != application || registered.uid != uid || registered.issuer != issuer
-                        || registered.closed) throw new Unavailable();
+                        || registered.closed || registered.provisioningAuthority != provisioningAuthority) throw new Unavailable();
                     return registered;
                 }
-                owner=new MessagePreviewPristineInitializer(application, uid, issuer);
+                owner=new MessagePreviewPristineInitializer(application, uid, issuer, provisioningAuthority);
                 registered=owner;
             }
             try { owner.worker.start(); }
@@ -130,8 +176,10 @@ final class MessagePreviewPristineInitializer {
     }
 
     private MessagePreviewPristineInitializer(Context context, int uid,
-            MessagePreviewInitializationGate.ForegroundAuthority issuer) throws Exception {
+            MessagePreviewInitializationGate.ForegroundAuthority issuer,
+            MessagePreviewVaultProvisioning.Authority provisioningAuthority) throws Exception {
         this.context=context; this.uid=uid; this.issuer=issuer;
+        this.provisioningAuthority=provisioningAuthority;
         worker=new Thread(new Runnable() {
             @Override public void run() { MessagePreviewPristineInitializer.this.work(); }
         }, "NmpvPristineOwner");
@@ -173,11 +221,143 @@ final class MessagePreviewPristineInitializer {
         }
         if (!admitted) deliver(completion, REFUSED);
     }
-    synchronized void invalidate() { gate.invalidate(); }
+    synchronized void invalidate() {
+        gate.invalidate();
+        if (initialized != null && initialized.boundContext != null) initialized.fence.expireContext(initialized.boundContext);
+        if (initialized != null && initialized.acquisition != null
+            && initialized.acquisition.program.operation.kind==MessagePreviewVaultFence.Kind.BEGIN) {
+            initialized.acquisition.cancelled=true; initialized.acquisition.ticket=null;
+        }
+    }
     synchronized void close() {
         closed=true; gate.close();
         if (activeTransition != null) activeTransition.cancelled=true;
+        if (initialized != null && initialized.acquisition != null) {
+            initialized.acquisition.cancelled=true; initialized.acquisition.ticket=null;
+        }
         notifyAll();
+    }
+
+    void beginOwned(String operationId, long vaultRevision, long expectedGeneration,
+            MessagePreviewVaultFence.Context captured, MessagePreviewVaultFence.Owner owner,
+            ProvisionCompletion completion) {
+        if (completion == null) return;
+        ProvisionStatus status=ProvisionStatus.UNAVAILABLE;
+        try {
+            requireMain();
+            if (provisioningAuthority == null) throw new Unavailable();
+            if (!intentShape(operationId, vaultRevision, expectedGeneration) || !contextShape(captured)) {
+                deliverProvision(completion, new ProvisionResult(ProvisionStatus.INVALID_REQUEST, null, null)); return;
+            }
+            MessagePreviewVaultProvisioning.Identity identity=new MessagePreviewVaultProvisioning.Identity(
+                operationId, vaultRevision, expectedGeneration, captured, owner);
+            provisioningAuthority.requireCurrent(identity);
+            long now=SystemClock.elapsedRealtime();
+            String suffix=MessagePreviewVaultProvisioning.opaque();
+            synchronized (this) {
+                if (closed || initialized == null) throw new Unavailable();
+                if (busy) status=ProvisionStatus.BUSY;
+                else if (initialized.uncertain || !timeShape(now, 15_000)) status=ProvisionStatus.UNAVAILABLE;
+                else if (initialized.checkedHead.header.generation != expectedGeneration) status=ProvisionStatus.STALE_OWNER;
+                else if (vaultRevision<=initialized.acceptedVaultRevision) status=ProvisionStatus.STALE_OWNER;
+                else if (initialized.acceptedOperations.contains(operationId)) status=ProvisionStatus.INVALID_REQUEST;
+                else if (expectedGeneration>=9007199254740990L || vaultRevision==9007199254740991L
+                    || initialized.acceptedOperations.size()>=255) status=ProvisionStatus.EXHAUSTED;
+                else if (initialized.boundContext != null && captured.revision <= initialized.boundContext.revision
+                    && !sameContext(initialized.boundContext, captured)) status=ProvisionStatus.STALE_OWNER;
+                else {
+                    if (initialized.boundContext == null || captured.revision > initialized.boundContext.revision) {
+                        if (!initialized.fence.bindContext(captured)) throw new Unavailable();
+                        initialized.boundContext=captured;
+                    }
+                    MessagePreviewVaultFence.Admission admission=initialized.fence.begin(operationId, vaultRevision,
+                        expectedGeneration, captured, owner);
+                    if (admission.operation != null) {
+                        rememberIntent(initialized, admission.operation);
+                        MessagePreviewVaultProvisioning.Work program=new MessagePreviewVaultProvisioning.Work(admission.operation,
+                            identity, initialized.checkedHead, now, now+(admission.operation.kind==MessagePreviewVaultFence.Kind.BEGIN ? 15_000 : 10_000),
+                            "letscube.nmpv.credential.v1."+initialized.installation+"."+suffix);
+                        if (initialized.acquisition != null) {
+                            initialized.acquisition.cancelled=true; initialized.acquisition.ticket=null;
+                        }
+                        Acquisition target=new Acquisition(program);
+                        initialized.acquisition=target; initialized.uncertain=true; initialized.lastMillis=now;
+                        queueAcquiring(new AcquiringTask(initialized, target, true, false, null, completion, program.deadline)); return;
+                    }
+                    status=ProvisionStatus.valueOf(admission.decision.name());
+                }
+            }
+        } catch (Exception refused) { /* Unbound/stale authority never reserves or touches storage. */ }
+        deliverProvision(completion, new ProvisionResult(status, null, null));
+    }
+    void provisionExact(String operationId, String ticket, String borrowedAccess, ProvisionCompletion completion) {
+        if (completion == null) return;
+        ProvisionStatus status=ProvisionStatus.UNAVAILABLE;
+        try {
+            requireMain(); long now=SystemClock.elapsedRealtime();
+            synchronized (this) {
+                if (closed || initialized == null || provisioningAuthority == null) throw new Unavailable();
+                Acquisition target=initialized.acquisition;
+                if (busy) status=ProvisionStatus.BUSY;
+                else if (target == null || !target.program.operation.operationId.equals(operationId)) status=ProvisionStatus.UNKNOWN;
+                else if (target.cancelled || target.consumed || target.ticket == null || !target.ticket.equals(ticket))
+                    status=ProvisionStatus.INVALID_REQUEST;
+                else if (borrowedAccess == null || borrowedAccess.length()<1 || borrowedAccess.length()>8192)
+                    status=ProvisionStatus.INVALID_REQUEST;
+                else {
+                    target.consumed=true; target.ticket=null;
+                    if (!timeShape(now, 0) || now>=target.program.deadline || !initialized.fence.canContinue(target.program.operation))
+                        throw new Unavailable();
+                    initialized.lastMillis=now;
+                    queueAcquiring(new AcquiringTask(initialized, target, false, false, borrowedAccess, completion, target.program.deadline)); return;
+                }
+            }
+        } catch (Exception refused) { /* An exact ticket is consumed before any credential work. */ }
+        deliverProvision(completion, new ProvisionResult(status, null, null));
+    }
+    void observeOwned(String operationId, ProvisionCompletion completion) {
+        if (completion == null) return;
+        ProvisionStatus status=ProvisionStatus.UNAVAILABLE;
+        try {
+            requireMain(); long now=SystemClock.elapsedRealtime();
+            synchronized (this) {
+                if (closed || initialized == null) throw new Unavailable();
+                if (busy) status=ProvisionStatus.BUSY;
+                else if (initialized.acquisition == null || !initialized.acquisition.program.operation.operationId.equals(operationId))
+                    status=ProvisionStatus.UNKNOWN;
+                else if (!timeShape(now, 10_000)) status=ProvisionStatus.UNAVAILABLE;
+                else {
+                    initialized.lastMillis=now;
+                    queueAcquiring(new AcquiringTask(initialized, initialized.acquisition, false, true, null, completion, now+10_000)); return;
+                }
+            }
+        } catch (Exception refused) { /* Credential-free observation issues no ticket and performs no decrypt. */ }
+        deliverProvision(completion, new ProvisionResult(status, null, null));
+    }
+    private boolean timeShape(long now, long budget) {
+        return now>=0 && now>=initialized.lastMillis && now<=Long.MAX_VALUE-budget;
+    }
+    private static boolean intentShape(String id, long revision, long generation) {
+        return id!=null && id.matches("[0-9a-f]{32}") && MessagePreviewVerificationState.safe(revision)
+            && MessagePreviewVerificationState.safe(generation);
+    }
+    private static void rememberIntent(InitializedState state, MessagePreviewVaultFence.Operation operation) {
+        state.acceptedVaultRevision=operation.vaultRevision; state.acceptedOperations.add(operation.operationId);
+    }
+    private static boolean contextShape(MessagePreviewVaultFence.Context c) {
+        return c!=null && MessagePreviewVerificationState.safe(c.revision) && MessagePreviewVerificationState.safe(c.accountEpoch)
+            && MessagePreviewVerificationState.uuid(c.epoch) && MessagePreviewVerificationState.uuid(c.recipient)
+            && MessagePreviewVerificationState.uuid(c.session);
+    }
+    private static boolean sameContext(MessagePreviewVaultFence.Context a, MessagePreviewVaultFence.Context b) {
+        return a.revision==b.revision && a.accountEpoch==b.accountEpoch && a.epoch.equals(b.epoch)
+            && a.recipient.equals(b.recipient) && a.session.equals(b.session);
+    }
+    private void queueAcquiring(AcquiringTask work) {
+        busy=true; activeAcquiring=work; pendingAcquiring=work; notifyAll();
+    }
+    private static void deliverProvision(ProvisionCompletion completion, ProvisionResult result) {
+        try { completion.complete(result); } catch (RuntimeException ignored) { /* Lost ACK cannot restore or replay a ticket. */ }
     }
 
     // Admission uses only retained checked state. UID/CE/key/record reads belong to the worker.
@@ -190,7 +370,33 @@ final class MessagePreviewPristineInitializer {
             long now=SystemClock.elapsedRealtime();
             synchronized (this) {
                 if (closed || initialized == null) throw new Unavailable();
-                if (busy) status=TransitionStatus.BUSY;
+                if (!busy && initialized.uncertain && initialized.current!=null
+                    && initialized.current.program!=null && !initialized.current.completed) status=TransitionStatus.UNAVAILABLE;
+                else if (initialized.acquisition != null && (!busy || (activeAcquiring != null && !activeAcquiring.observe))
+                    && queuedErasure == null) {
+                    if (!intentShape(operationId, vaultRevision, expectedGeneration)) status=TransitionStatus.INVALID_REQUEST;
+                    else if (!timeShape(now, TRANSITION_BUDGET_MILLIS)) status=TransitionStatus.UNAVAILABLE;
+                    else {
+                        MessagePreviewVaultFence.Admission admission=initialized.fence.retire(operationId, vaultRevision,
+                            expectedGeneration, correlation);
+                        if (admission.decision == MessagePreviewVaultFence.Decision.RESERVED) {
+                            rememberIntent(initialized, admission.operation);
+                            Acquisition prior=initialized.acquisition;
+                            prior.cancelled=true; prior.ticket=null;
+                            Retirement target=new Retirement(admission.operation, initialized.checkedHead);
+                            target.predecessorProgram=prior.program;
+                            target.program=new MessagePreviewVaultProvisioning.Work(admission.operation, null,
+                                initialized.checkedHead, now, now+TRANSITION_BUDGET_MILLIS, "");
+                            initialized.current=target; initialized.uncertain=true; initialized.lastMillis=now;
+                            TransitionWork erasure=new TransitionWork(initialized, target, false, now, completion);
+                            if (busy) queuedErasure=erasure;
+                            else queueTransition(erasure);
+                            return;
+                        }
+                        status=TransitionStatus.valueOf(admission.decision.name());
+                    }
+                }
+                else if (busy) status=TransitionStatus.BUSY;
                 else if (operationId == null || !operationId.matches("[0-9a-f]{32}")
                     || !MessagePreviewVerificationState.safe(vaultRevision)
                     || !MessagePreviewVerificationState.safe(expectedGeneration)) status=TransitionStatus.INVALID_REQUEST;
@@ -203,6 +409,7 @@ final class MessagePreviewPristineInitializer {
                 else {
                     MessagePreviewVaultFence.Admission admission=initialized.fence.retire(operationId, vaultRevision, expectedGeneration, null);
                     if (admission.decision == MessagePreviewVaultFence.Decision.RESERVED) {
+                        rememberIntent(initialized, admission.operation);
                         Retirement target=new Retirement(admission.operation, initialized.checkedHead);
                         initialized.current=target; initialized.uncertain=true; initialized.lastMillis=now;
                         queueTransition(new TransitionWork(initialized, target, false, now, completion));
@@ -258,16 +465,19 @@ final class MessagePreviewPristineInitializer {
         while (true) {
             Attempt attempt;
             TransitionWork transition;
+            AcquiringTask acquiring;
             synchronized (this) {
-                while (pending == null && pendingTransition == null && !closed) {
+                while (pending == null && pendingTransition == null && pendingAcquiring == null && !closed) {
                     try { wait(); }
                     catch (InterruptedException refused) { closed=true; gate.close(); }
                 }
-                if (pending == null && pendingTransition == null) return;
+                if (pending == null && pendingTransition == null && pendingAcquiring == null) return;
                 attempt=pending; pending=null;
                 transition=pendingTransition; pendingTransition=null;
+                acquiring=pendingAcquiring; pendingAcquiring=null;
             }
             if (transition != null) { performTransition(transition); continue; }
+            if (acquiring != null) { performAcquiring(acquiring); continue; }
             InitResult result=REFUSED;
             boolean finished=false;
             try {
@@ -363,12 +573,17 @@ final class MessagePreviewPristineInitializer {
         @Override public InputStream openRead() throws IOException { return delegate.openRead(); }
         @Override public OutputStream startWrite() throws IOException {
             TransitionWork work;
+            AcquiringTask acquiring;
             synchronized (MessagePreviewPristineInitializer.this) {
                 work=activeTransition;
-                if (initialized != null && work == null) throw new IOException("UNAVAILABLE", (Throwable) null);
+                acquiring=activeAcquiring;
+                if (initialized != null && work == null && acquiring == null) throw new IOException("UNAVAILABLE", (Throwable) null);
             }
             // Kernel prewrite authentication can block before any storage effect.
-            try { if (work != null) transitionCurrent(work); }
+            try {
+                if (work != null) transitionCurrent(work);
+                if (acquiring != null) acquiringCurrent(acquiring);
+            }
             catch (Exception refused) { throw new IOException("UNAVAILABLE", (Throwable) null); }
             return delegate.startWrite();
         }
@@ -436,6 +651,16 @@ final class MessagePreviewPristineInitializer {
         deliverTransition(work.completion, result);
     }
     private MessagePreviewMetadataEnvelope.Record writeRetirement(TransitionWork work) throws Exception {
+        if (work.target.program != null) {
+            MessagePreviewVaultProvisioning program=new MessagePreviewVaultProvisioning(context, uid, worker,
+                work.state.journal, work.state.fence, work.target.program,
+                new MessagePreviewVaultProvisioning.Current() {
+                    @Override public void requireCurrent() throws Exception { transitionCurrent(work); }
+                }, null);
+            MessagePreviewMetadataEnvelope.Record result=program.retire(work.target.predecessorProgram);
+            work.target.expectedFinal=result.header;
+            return result;
+        }
         SecretKey key=transitionKey(work);
         MessagePreviewMetadataEnvelope.Record predecessor=work.state.journal.read(work.state.installation, key);
         transitionCurrent(work);
@@ -471,5 +696,79 @@ final class MessagePreviewPristineInitializer {
         if (work.state.journal.write(bytes, work.state.installation, key) != MessagePreviewJournalIO.Result.CHECKED)
             throw new Unavailable();
         transitionCurrent(work);
+    }
+
+    private void acquiringMemory(AcquiringTask work, long now) throws Unavailable {
+        MessagePreviewVaultProvisioning.Work program=work.target.program;
+        if (Thread.currentThread()!=worker || closed || !busy || activeAcquiring!=work || initialized!=work.state
+            || work.state.acquisition!=work.target || now<work.state.lastMillis || now<0 || now>=work.deadline)
+            throw new Unavailable();
+        if (!work.observe && (work.target.cancelled || (program.operation.kind==MessagePreviewVaultFence.Kind.BEGIN
+            ? !work.state.fence.canContinue(program.operation) : !work.state.fence.canErase(program.operation))))
+            throw new Unavailable();
+        if (!work.observe && program.validatedExpiry>0 && !program.unexpiredAt(program.validatedExpiry, now)) throw new Unavailable();
+        work.state.lastMillis=now;
+    }
+    private void acquiringCurrent(AcquiringTask work) throws Exception {
+        long now=SystemClock.elapsedRealtime();
+        synchronized (this) { acquiringMemory(work, now); }
+        requireApplication(context, uid);
+        if (!work.observe && work.target.program.operation.kind==MessagePreviewVaultFence.Kind.BEGIN) {
+            if (provisioningAuthority==null) throw new Unavailable();
+            provisioningAuthority.requireCurrent(work.target.program.identity);
+        }
+        if (!work.observe && work.target.program.validatedExpiry>0) {
+            long observed=System.currentTimeMillis(); long elapsed=SystemClock.elapsedRealtime();
+            if (work.target.program.advanceWall(elapsed, observed)>=work.target.program.validatedExpiry) throw new Unavailable();
+        }
+        now=SystemClock.elapsedRealtime();
+        synchronized (this) { acquiringMemory(work, now); }
+    }
+    private void performAcquiring(AcquiringTask work) {
+        ProvisionResult result=new ProvisionResult(ProvisionStatus.INCOMPLETE, null, null);
+        boolean finished=false;
+        try {
+            MessagePreviewVaultProvisioning program=new MessagePreviewVaultProvisioning(context, uid, worker,
+                work.state.journal, work.state.fence, work.target.program,
+                new MessagePreviewVaultProvisioning.Current() {
+                    @Override public void requireCurrent() throws Exception { acquiringCurrent(work); }
+                }, provisioningAuthority);
+            MessagePreviewMetadataEnvelope.Record record=work.observe ? program.observe()
+                : work.begin ? program.begin() : program.provision(work.access);
+            acquiringCurrent(work);
+            String ticket=work.begin && work.target.program.operation.kind==MessagePreviewVaultFence.Kind.BEGIN
+                ? MessagePreviewVaultProvisioning.opaque() : null;
+            long now=SystemClock.elapsedRealtime();
+            synchronized (this) {
+                acquiringMemory(work, now);
+                if (work.observe) {
+                    result=new ProvisionResult(record.header.kind==MessagePreviewMetadataEnvelope.Kind.COMMITTED
+                        ? ProvisionStatus.DORMANT : ProvisionStatus.INCOMPLETE, record.header.generation, null);
+                } else {
+                    if (!work.begin && !work.target.program.unexpiredAt(record.header.expiresWallMillis, now)) throw new Unavailable();
+                    if (ticket==null && !work.state.fence.complete(work.target.program.operation)) throw new Unavailable();
+                    work.target.ticket=ticket;
+                    work.target.program.completed=ticket==null;
+                    work.state.checkedHead=record; work.state.uncertain=false;
+                    result=new ProvisionResult(ticket!=null ? ProvisionStatus.PENDING
+                        : work.begin ? ProvisionStatus.INVALID_OWNER : ProvisionStatus.COMMITTED, record.header.generation, ticket);
+                }
+                finished=true;
+            }
+        } catch (Exception refused) { /* Retain exact entered history/key residue, without replay or inferred ACK. */ }
+        finally {
+            work.access=null;
+            synchronized (this) {
+                if (!finished && !work.observe && initialized==work.state && work.state.acquisition==work.target)
+                    work.state.uncertain=true;
+                if (activeAcquiring==work) {
+                    activeAcquiring=null;
+                    if (queuedErasure!=null) {
+                        activeTransition=queuedErasure; pendingTransition=queuedErasure; queuedErasure=null; notifyAll();
+                    } else busy=false;
+                }
+            }
+        }
+        deliverProvision(work.completion, result);
     }
 }
