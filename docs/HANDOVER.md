@@ -30,20 +30,22 @@ controlled-snapshot integration belong to0.1.13; reuse is explicitly hash-bound
 to unchanged native source, not new tests. Natural OS timing remains NOT PROVEN.
 A063 untouched; no personal capture/login or paid rental.
 
-**Current source checkpoint,2026-10-09:** coordinator; local source candidate
-`81785582` on `codex/bot-inline-media-20261002`. Inactive D4 exact unmaterialized
-BEGIN/REFUSED retirement is independently source-accepted46FE5B01:21 distinct
-incremental affected behavior controls/10 calibrated omissions, not a fresh
-aggregate. One actual Android36 compile passed, observed12:09 Moscow:13 full
-sources/69 required fresh named major52 definitions, result84C49882, protected
-source/tools/main-localTest APK bytes unchanged. Final binding review66DEB124
-passed; intermediate source-review shorthand was reconciled before publication.
-Next: dormant genuine same-invocation verification producer, then actual Task5.
-Genuine Task5 producer/device, physical composition and consent/card gates remain
-open; nativePositive/rich/Stable false. No main deploy/SQL/rental/APK replacement.
+**Current source checkpoint,2026-10-09:** coordinator; source candidate
+`3924d35a` on `codex/bot-inline-media-20261002`. Dormant same-invocation producer
+is independently source-acceptedDAE28AA3, with separate affected15/15 and11/11
+selections, not a fresh aggregate. Original verification deadline and exact-ticket
+revocation are checked at final publication after two observed draft failures.
+Final SDK binding review7AE4BAB1 passed before one actual Android36 compile,
+observed16:51 Moscow:16 explicit sources/80 required fresh named major52
+definitions, result15A86FAD. All21 source/tool/protected-main-localTest APK pins
+and the receipt/class chain passed readback. No production caller arms it.
+Next: independently reviewed own-user0 health diagnostic, then genuine Task5
+registration/Auth/device and physical composition/consent/card acceptance.
+NativePositive/rich/Stable remain false. No main/SQL/rental/APK/device effect.
 Owner intake item93 now records search expand/collapse lag, not yet reproduced;
 it does not interrupt this stage.
-[Current source and SDK boundary](operations/2026-10-09-native-preview-unmaterialized-retirement.md).
+[Current source and SDK boundary](operations/2026-10-09-native-preview-verification-producer.md).
+[Previous D4 retirement and SDK evidence](operations/2026-10-09-native-preview-unmaterialized-retirement.md).
 [Previous D3 source/fix/SDK evidence](operations/2026-10-09-native-preview-provision-composition.md).
 
 **Latest device checkpoint,2026-10-08:** controlled offline full-initializer
