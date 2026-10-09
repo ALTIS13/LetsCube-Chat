@@ -1,5 +1,14 @@
 # LETSCUBE — handover
 
+**2026-10-09 narrow web candidate:** search opacity now follows existing motion
+tokens, including the reduced-motion1ms setting. Calibrated RED, candidate GREEN,
+page-only regression kill, both-theme fictional pixels and focused3/3 portable
+tests are recorded in
+[search motion verification](operations/2026-10-09-sidebar-search-motion.md).
+Ordinary lag remains OPEN; this main-based slice excludes pending native-preview
+commits and changes no APK, SQL or provider identity. Runtime publication must
+still be verified by image/content parity, not merely a push acknowledgement.
+
 **2026-10-07 native/DB authority update:** the owner explicitly authorizes
 readiness-gated production changes, APK/other platform signing, upgrades,
 installation and publication without another routine confirmation. Use Realme
