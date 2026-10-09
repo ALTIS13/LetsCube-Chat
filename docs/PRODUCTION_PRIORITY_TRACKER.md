@@ -128,11 +128,18 @@ arms the producer. Subsequent own-user0 healthR2 compiled/signed separately,
 APK20890B/B269518D/resultB0C45001, artifactBFDDEBC3/host5FED1938/bindingF6AF54FF
 accepted. One Realme attempt18:08 Moscow was MEASUREMENT_INCOMPLETE: initial
 diagnostic page refused before healthGET; no HTTP/DNS/TLS result. Exact own
-cleanup7EF9A0F3 and main/Test/users preservation passed, no retry. Next resolve
-page/history/callback contract and genuine separate Firebase QA configuration,
-then real Task5 registration/Auth/device/physical/consent/card. This is not a
-product-network failure or native-positive proof. No old case replay; item93
-records the new search-motion tester symptom.
+cleanup7EF9A0F3 and main/Test/users preservation passed, no retry. New deterministic
+local-page R3 context subsequently passed one Realme attempt19:05 Moscow:
+local_ready/request_started/healthGET true, HTTP401/default TLS/no credentials,
+no route/admission refusal; four cleanup flags and exact removal391E0B48 PASS.
+Own APK56905EB6/20890B, main770/Test146D/users preserved. Failed R2 callback cause
+stays UNKNOWN. Read-only Firebase Management API200 matched the owned project;
+primary client present, separate QA clients0, no provider/IAM/key mutation.
+Next: genuine distinct user0 Capacitor QA configuration/restriction checks and
+ordinary login/SDK registration/native verification/logout, then consent/card.
+This is not successful Auth/FCM/native-positive or product-network defect proof.
+No old case replay; item93 source diagnosis finds snap/fade, not reproduced lag.
+[New local-page diagnostic](operations/2026-10-09-native-preview-local-page-health.md).
 [Health diagnostic and limits](operations/2026-10-09-native-preview-user0-health.md).
 No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.

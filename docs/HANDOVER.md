@@ -50,18 +50,22 @@ it does not interrupt this stage.
 [Previous D3 source/fix/SDK evidence](operations/2026-10-09-native-preview-provision-composition.md).
 
 **Current device continuation,2026-10-09:** coordinator; isolated user0 health
-R2 build passed17:41 Moscow after preserving the failed R1/compiler diagnosis.
-Own20890B APK/B269518D/resultB0C45001, five major52 classes/14ownDEX definitions,
-independent artifactBFDDEBC3/fullhost5FED1938/bindingF6AF54FF accepted before effects.
-One Realme install/instrument/remove at18:08 was MEASUREMENT_INCOMPLETE: initial
-page refused before healthGET, local_ready/request_started false, no HTTP/DNS/TLS
-result. All four app cleanup flags and exact own-package removal passed; main770/
-UID10533, installedTest146D/UID10520 and users unchanged. No retry or job remains.
-Next: resolve diagnostic page/history/callback distinction, then one changed-input
-health measurement. Genuine separate QA Firebase configuration is also missing;
-no copied primary app identity/token/row fallback. This is not Task5/rich/Stable
-acceptance, network failure or a production-app defect. No main/SQL/rental/A063.
-[Health build, refusal and cleanup evidence](operations/2026-10-09-native-preview-user0-health.md).
+R3 fixed in-memory local page passed one Realme install/instrument/remove at
+19:05 Moscow. Own APK56905EB6/20890B; actual local readiness, one health GET and
+HTTP401 observed with default TLS/no credentials, no route/admission refusal.
+All four app cleanup flags and exact own-package removal391E0B48 passed;
+primary770/UID10533, installedTest146D/UID10520 and users unchanged. No job remains.
+This proves the new diagnostic context, not successful Auth/FCM/Task5 or the old
+R2 callback cause. Failed R1/R2 records remain immutable; rich/protocol0 unchanged.
+Read-only Firebase Management API returned200 for the project matching local
+configuration: primary client present, no separate QA client, complete list.
+No provider/IAM/key mutation. Next: genuine distinct user0 Capacitor QA client,
+provider-generated configuration/restriction checks, ordinary SDK login/registration,
+native verification and normal logout. No copied primary app-ID/token/row fallback.
+Item93 source diagnosis identifies layout snap/fade, not reproduced lag; next
+synthetic motion/anchor/performance measurement. No main/SQL/release/rental/A063.
+[New local-page physical evidence](operations/2026-10-09-native-preview-local-page-health.md).
+[Previous failed diagnostic and limits](operations/2026-10-09-native-preview-user0-health.md).
 
 **Latest device checkpoint,2026-10-08:** controlled offline full-initializer
 PREPARE/COLD/KEY_LOSS passed on Realme, separate UID10552 and PIDs7715/9383/3908:
