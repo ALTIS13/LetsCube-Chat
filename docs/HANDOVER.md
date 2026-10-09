@@ -39,14 +39,29 @@ Final SDK binding review7AE4BAB1 passed before one actual Android36 compile,
 observed16:51 Moscow:16 explicit sources/80 required fresh named major52
 definitions, result15A86FAD. All21 source/tool/protected-main-localTest APK pins
 and the receipt/class chain passed readback. No production caller arms it.
-Next: independently reviewed own-user0 health diagnostic, then genuine Task5
-registration/Auth/device and physical composition/consent/card acceptance.
-NativePositive/rich/Stable remain false. No main/SQL/rental/APK/device effect.
+Task6E itself had no main/SQL/rental/APK/device effect. Its following own-user0
+health diagnostic is recorded below; genuine Task5 registration/Auth/device and
+physical composition/consent/card acceptance remain outstanding.
+NativePositive/rich/Stable remain false.
 Owner intake item93 now records search expand/collapse lag, not yet reproduced;
 it does not interrupt this stage.
 [Current source and SDK boundary](operations/2026-10-09-native-preview-verification-producer.md).
 [Previous D4 retirement and SDK evidence](operations/2026-10-09-native-preview-unmaterialized-retirement.md).
 [Previous D3 source/fix/SDK evidence](operations/2026-10-09-native-preview-provision-composition.md).
+
+**Current device continuation,2026-10-09:** coordinator; isolated user0 health
+R2 build passed17:41 Moscow after preserving the failed R1/compiler diagnosis.
+Own20890B APK/B269518D/resultB0C45001, five major52 classes/14ownDEX definitions,
+independent artifactBFDDEBC3/fullhost5FED1938/bindingF6AF54FF accepted before effects.
+One Realme install/instrument/remove at18:08 was MEASUREMENT_INCOMPLETE: initial
+page refused before healthGET, local_ready/request_started false, no HTTP/DNS/TLS
+result. All four app cleanup flags and exact own-package removal passed; main770/
+UID10533, installedTest146D/UID10520 and users unchanged. No retry or job remains.
+Next: resolve diagnostic page/history/callback distinction, then one changed-input
+health measurement. Genuine separate QA Firebase configuration is also missing;
+no copied primary app identity/token/row fallback. This is not Task5/rich/Stable
+acceptance, network failure or a production-app defect. No main/SQL/rental/A063.
+[Health build, refusal and cleanup evidence](operations/2026-10-09-native-preview-user0-health.md).
 
 **Latest device checkpoint,2026-10-08:** controlled offline full-initializer
 PREPARE/COLD/KEY_LOSS passed on Realme, separate UID10552 and PIDs7715/9383/3908:

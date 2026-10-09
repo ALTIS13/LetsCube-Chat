@@ -124,9 +124,16 @@ unchanged. Independent binding review7AE4BAB1 preceded one actual Android36
 compile at2026-10-09,16:51 Moscow:16 explicit sources/80 required fresh named
 major52 definitions, result15A86FAD. Receipt/class chain and all21 fixed inputs
 passed readback; protected main-localTest APKs unchanged. No production caller
-arms the producer. Next own-user0 health route measurement after independent
-source review, then real Task5 registration/Auth/device/physical/consent/card.
-No old case replay. Item93 records the new search-motion tester symptom.
+arms the producer. Subsequent own-user0 healthR2 compiled/signed separately,
+APK20890B/B269518D/resultB0C45001, artifactBFDDEBC3/host5FED1938/bindingF6AF54FF
+accepted. One Realme attempt18:08 Moscow was MEASUREMENT_INCOMPLETE: initial
+diagnostic page refused before healthGET; no HTTP/DNS/TLS result. Exact own
+cleanup7EF9A0F3 and main/Test/users preservation passed, no retry. Next resolve
+page/history/callback contract and genuine separate Firebase QA configuration,
+then real Task5 registration/Auth/device/physical/consent/card. This is not a
+product-network failure or native-positive proof. No old case replay; item93
+records the new search-motion tester symptom.
+[Health diagnostic and limits](operations/2026-10-09-native-preview-user0-health.md).
 No diagnostic/device job remains.
 No Task5 native-positive/rich/Stable promotion.
 [Passive authority scope and SDK result](operations/2026-10-08-native-preview-foreground-authority.md).
