@@ -25573,6 +25573,32 @@ evidence. No claim of fixing unidentified tester86/87 or live task permission/
 physical iPhone proof. [Android release](operations/2026-10-07-android-task-detail-release.md).
 [Evidence](operations/2026-10-07-task-detail-recovery.md).
 
+## D-355 `[x]` Logged-out native push device remains active after Auth session deletion
+
+**Severity:** high account-boundary risk; actual owned-QA Realme flow,
+2026-10-10. No personal message or unintended delivery was captured or inferred.
+
+**Observed cause:** normal QA login/native binding/logout passes, but bounded
+read-only post-logout counts retain one enabled Android FCM endpoint. Live FK
+`ON DELETE SET NULL` clears SID without retirement. Legacy registration can also
+accept a deleted-SID JWT and revive an unbound endpoint. The count observer is
+account/time-scoped, not exact-SID delivery proof.
+
+**Current work:** reviewed private BEFORE DELETE hook matches exact UID+SID and
+preserves successor/unbound endpoints; registrar refuses a deleted claimed SID.
+No existing-orphan backfill or frontend pre-signout draft is deployed. SQL15/15
+incl five mutants and four rollback-drift RED/GREEN cases, fresh verified before
+backup, actual PG17 rollback-only and six ordered two-connection cases pass.
+Canonical/mirror SQL839f13fd installed once; independent OID/catalog readback
+passed without replay after the first observer pretty-printing refusal. Fresh
+ordinary Realme Auth/binding/logout passed server retirement, including the
+original owned QA orphan through normal re-registration/logout. Three QA
+packages removed; primary/test app data and users preserved. Narrow main2d97d676
+runtime accepted00:58 Moscow, exact healthy image and unchanged JS/SW hashes;
+unfinished native-preview commits excluded.
+Offline server logout, natural FCM/OS display and rich-preview acceptance remain
+outside this fix. [Evidence](operations/2026-10-10-push-session-retirement.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

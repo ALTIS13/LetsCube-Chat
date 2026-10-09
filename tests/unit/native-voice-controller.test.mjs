@@ -390,7 +390,10 @@ for (const [name, needle, replacement, verify] of [
     const text = readFileSync(url, "utf8");
     assert.equal(text.split(needle).length, 2, "mutation target is unique");
     await verify(source);
-    const js = stripTypeScriptTypes(text.replace(needle, replacement)).replace('"./nativeVoiceContract.ts"', JSON.stringify(new URL("./nativeVoiceContract.ts", url).href));
+    let js = stripTypeScriptTypes(text.replace(needle, replacement));
+    for (const dependency of ["nativeVoiceContract.ts", "nativeMessagePreviewContract.ts", "nativeMessagePreviewBinding.ts"]) {
+      js = js.replaceAll(JSON.stringify(`./${dependency}`), JSON.stringify(new URL(`./${dependency}`, url).href));
+    }
     const mutant = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
     await assert.rejects(() => verify(mutant), { code: "ERR_ASSERTION" });
   });

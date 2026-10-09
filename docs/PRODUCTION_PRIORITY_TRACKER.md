@@ -1,6 +1,16 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-09.
+Status: active production-hardening tracker, updated 2026-10-10.
+
+**Current continuation,2026-10-10:** Task5 ordinary Realme QA login/native binding/
+logout passed, but bounded post-logout counts exposed D-355 active orphan FCM.
+Server SQL15/15, fresh before-state backup, actual PG17 rollback-only and six
+ordered concurrent cases passed. Installed once; independent catalog readback
+and new ordinary Realme Auth/server retirement passed, three QA packages removed.
+Narrow main2d97d676 and exact healthy web image/public-container JS+SW equality
+accepted00:58 Moscow; application assets unchanged. No rich preview/Stable promotion;
+Android0.1.14/build15 unchanged.
+[Current evidence](operations/2026-10-10-push-session-retirement.md).
 
 **Current continuation,2026-10-08 Moscow:** coordinator, branch
 `codex/bot-inline-media-20261002`. Latest product acceptance is item92/D-354:
@@ -4453,6 +4463,28 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     against the observed cause, then verify the affected client. Do not repeat
     unrelated suites or interrupt the current native-preview stage for this
     intake. Rental checks remain targeted and minute-bounded.
+    Partial update: separately calibrated reduced-motion200ms defect fixed in
+    web/main14a2b8bf, runtime accepted21:31 Moscow after literal RED/GREEN,
+    page-only regression kill, both-theme fictional crops and portable3/3.
+    Ordinary/native lag remains NOT REPRODUCED; this item stays open.
+    [Scoped evidence](operations/2026-10-09-sidebar-search-motion.md).
+
+94. `[x]` Logout must retire session-bound native push endpoints, **D-355**.
+    Genuine Task5 Realme normal Auth/binding/logout passed, but live read-only
+    account/time counts still showed one active Android FCM endpoint. Confirmed
+    cause: FK clears SID without retiring endpoint, and legacy registrar accepts
+    deleted-SID JWT. Server-side BEFORE DELETE exact UID+SID hook and late-SID
+    refusal are reviewed; no existing-orphan backfill. SQL15/15 incl five mutants
+    and four RED/GREEN rollback drift cases, fresh verified before backup and
+    actual PG17 rollback-only and six ordered two-connection cases passed.
+    Canonical/mirror SQL839f13fd installed once; exact OID/catalog readback passed
+    after preserving the original pretty-print observer refusal. Fresh ordinary
+    Realme Auth/binding/logout passed server retirement; original QA orphan
+    retired through normal re-registration/logout. Three QA packages removed,
+    primary/test APK data and users preserved. Narrow main2d97d676 runtime
+    accepted00:58 Moscow; application JS/SW unchanged, old image retained.
+    No offline logout, natural delivery, rich preview or new release acceptance.
+    [Cause and proof boundary](operations/2026-10-10-push-session-retirement.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

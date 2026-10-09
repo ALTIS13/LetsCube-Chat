@@ -1,5 +1,63 @@
 # LETSCUBE — handover
 
+**Current continuation, 2026-10-10:** coordinator, branch
+`codex/bot-inline-media-20261002`. Genuine Task5 ordinary Realme login/native
+binding/logout now PASS on the unchanged accepted QA APK. Read-only post-logout
+account/time counts exposed one active orphan FCM endpoint (D-355), not exact-SID
+delivery proof. Frontend retirement draft withdrawn after race review; no draft
+deployed. Exact UID+SID retirement and late deleted-SID registration refusal are
+now installed once. SQL15/15 incl mutants/rollback drift, native PG17 rollback
+and six ordered concurrent cases passed after fresh verified before backup.
+Independent OID/catalog readback resolved the original regclass pretty-printing
+observer refusal without replaying SQL. New ordinary Realme Auth/binding/logout
+passed server retirement; the original QA orphan was retired through normal
+re-registration/logout. Three exact-owned QA packages removed, primary/test
+apps and users preserved. Narrow main-based commit2d97d676 published, exact
+healthy web image/public-container JS+SW equality and unchanged application
+assets accepted00:58 Moscow. Unfinished native feature commits excluded. Next:
+credential/explicit-choice/composition acceptance. No rich/native-positive/
+Stable promotion; Android0.1.14/build15 unchanged.
+[Current cause, checks and boundary](operations/2026-10-10-push-session-retirement.md).
+
+**Historical checkpoint, 2026-10-09:** coordinator, source branch
+`codex/bot-inline-media-20261002`, source HEAD972f61f5 plus preserved owned edits.
+The owner repaired Chrome and completed Google Cloud Terms. Read-only key UI
+showed application restrictions `None`,25 APIs including Installations/FCM.
+Item93's narrow reduced-motion fix is web/main14a2b8bf, runtime accepted21:31
+Moscow (healthy exact image, old/new marker and public/container hash parity,
+previous entry retained). Ordinary/native lag remains OPEN, not reproduced.
+[Scoped web evidence](operations/2026-10-09-sidebar-search-motion.md).
+Task5: genuine QA configuration is now reconciled and privately transferred
+unchanged; both fresh QA certificate fingerprints passed provider readback.
+Initial create ACK remains unknown and was never replayed. Reconciliation
+selected the exact QA client from the genuine two-client document, preserving
+the primary app and existing key. Full ordinary target APK is artifact-accepted:
+SHA256 `0441984f40b4ac6cc65ef8c6356b0e4df7a071cc70b401e2b9919ab9818ee9cf`,
+7,677,775 bytes; fresh web build `82486065013672fd`, 34 matching assets and four
+matched packaged Firebase values. Failed attempts remain: pre-build config ACL
+refusal, then successful44s Gradle followed by an obsolete verifier-resource
+path. Exact local config ACL tightened without content changes; only the
+post-build verifier path corrected, no rebuild. All859 staged source files and
+seven-project output isolation passed. Actual Realme own-user0 installation and
+PackageInfo metadata lane now PASS: separate QA target/observer UIDs10557/10558,
+exact first/last SDK milliseconds, signer and live APK hashes matched. Primary
+and pre-existing test packages/users remained unchanged. Observer R3 has no
+permissions/providers/Activities and instruments itself, never the messenger.
+Cleanup review findings fixed before installation: user0-scoped uninstall,
+other-user absence checks and fresh own-only observer epoch readback. Affected
+metadata parsers6/6 PASS. At this checkpoint both QA packages were installed,
+cleanup and ordinary Auth were pending; the2026-10-10 result above supersedes
+that state. The next action then was to generate actual-host-bound
+keyboard sources, build AndroidTest only, then ordinary rendered QA login/native
+verification/logout and exact-owned cleanup. The host writer's public-source
+filter false-positive on MessagePreviewKeystoreReader.java was reproduced RED
+and corrected; genuine signing/env paths remain refused (focused1/1 PASS).
+[Task5 actual build/device boundary](operations/2026-10-09-task5-firebase-qa.md).
+No primary-app/certificate, IAM/key, SQL or native-release changes;
+Stable0.1.14/build15 unchanged. Private provider receipts and transfer evidence
+remain under `.ops-private/native-preview-task5-provider-setup-20261009/`.
+[Preserved pause and exact previous evidence](operations/2026-10-09-owner-pause-checkpoint.md).
+
 **2026-10-07 native/DB authority update:** the owner explicitly authorizes
 readiness-gated production changes, APK/other platform signing, upgrades,
 installation and publication without another routine confirmation. Use Realme
