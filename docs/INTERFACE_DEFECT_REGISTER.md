@@ -25050,6 +25050,17 @@ or Stable acceptance.
 [Platform attempts and actual acceptance limits](operations/2026-10-08-native-preview-platform.md).
 [Composed source and next physical gate](operations/2026-10-08-native-preview-pristine-initializer.md).
 
+Latest2026-10-10 delta: genuine Task5 ordinary Realme SDK binding/logout and
+D-355 retirement are accepted. Offline conditional-authority full composition
+R2 passed on actual Realme UID10561/PID25937, all33 endpoint flags: G0/PENDING G1/
+COMMITTED G1/DORMANT/positive decrypt/wrong-owner refusal/retirement EMPTY G2,
+key absence/no recreation, actual cleanup and protected apps/users preservation.
+R1 failed QA lifecycle admission and remains failed; its calibrated callback-order
+repair and bounded cleanup have focused RED/GREEN/compiled omission controls.
+This does not prove genuine verifier+production MainActivity composition, explicit
+consent, background/FCM/card acceptance or rich delivery; D-335 remains OPEN.
+[Physical composition and exact limits](operations/2026-10-10-native-preview-physical-composition.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03

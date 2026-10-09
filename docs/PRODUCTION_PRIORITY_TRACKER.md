@@ -2,7 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-10-10.
 
-**Current continuation,2026-10-10:** Task5 ordinary Realme QA login/native binding/
+**Current continuation,2026-10-10:** offline native vault composition R2 PASS
+by02:52 Moscow, separate Realme UID10561/PID25937/all33 flags and exact cleanup;
+primary/test/users unchanged. R1 refusal is retained. Calibrated QA resume-order
+repair, bounded cleanup, source/SDK/exact112-definition artifact and independent
+review passed. No production code, SQL, release or rich/card effect. Next:
+genuine same-invocation verifier/actual foreground composition, then explicit
+choice and card/OS acceptance. Never replay accepted Task5/SQL/R2 cases.
+[Physical proof and remaining boundary](operations/2026-10-10-native-preview-physical-composition.md).
+
+**Completed server continuation,2026-10-10:** Task5 ordinary Realme QA login/native binding/
 logout passed, but bounded post-logout counts exposed D-355 active orphan FCM.
 Server SQL15/15, fresh before-state backup, actual PG17 rollback-only and six
 ordered concurrent cases passed. Installed once; independent catalog readback
@@ -32,11 +41,13 @@ empty-consent/invalid-device/anon denials passed. A post-check FK pretty-printin
 mismatch was corrected only in the observer, then verification-only passed;
 sqlDispatches remains1. Do not repeat installation or accepted suites.
 
-Actual normal owned-QA sign-in/live session passed; no Android/FCM binding exists
-under that SID. This blocks native positive acceptance, not the installed inert
-schema. D-335 stays OPEN: nativePositive=false, richPreviewEnabled=false,
-canPublishRich=false, generic v1 unchanged. Next: actual acknowledged device UUID,
-then native credential/explicit choice/card/OS proof. D-342 universal recovery,
+The initial2026-10-07 normal owned-QA sign-in had no Android/FCM binding under
+that SID. That availability gap is superseded by the2026-10-10 genuine Task5
+ordinary Realme SDK binding/logout and D-355 retirement acceptance above; do not
+repeat the old discovery. D-335 stays OPEN: nativePositive=false,
+richPreviewEnabled=false, canPublishRich=false, generic v1 unchanged. Next:
+genuine native credential/foreground composition, explicit choice/card/OS proof.
+D-342 universal recovery,
 unknown-client D-348/349 and preliminary tester86/87 remain separate.
 Chronological rehearsals, install/backup/rollback evidence and native limits:
 [Current gate](operations/2026-10-07-native-preview-pg17-rehearsal.md).

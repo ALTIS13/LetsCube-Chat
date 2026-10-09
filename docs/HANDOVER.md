@@ -1,6 +1,19 @@
 # LETSCUBE — handover
 
 **Current continuation, 2026-10-10:** coordinator, branch
+`codex/bot-inline-media-20261002`, BASE `e7d85a61`. Offline vault composition R2
+PASS by02:52 Moscow: separate UID10561/PID25937, all33 flags and exact cleanup;
+primary/test/users unchanged. R1 failed before resumed admission and remains
+immutable. Calibrated QA callback-order RED repaired; lifecycle8/8, selected
+cleanup3/3, builder9/9, namespace1/1 and independent artifact/source review;
+one new APK/112 exact definitions. Next: genuine same-invocation verifier and
+actual foreground composition in full QA, then explicit choice/card/OS proof.
+No old Auth/SQL/cold/key-loss replay; Task5/D-355 acceptance below remains valid.
+No real credential/production foreground/FCM/card acceptance from offline fiction.
+Protocol0/rich flags and Android Stable0.1.14/build15 unchanged.
+[Current composition, repair and limits](operations/2026-10-10-native-preview-physical-composition.md).
+
+**Completed server continuation, 2026-10-10:** coordinator, branch
 `codex/bot-inline-media-20261002`. Genuine Task5 ordinary Realme login/native
 binding/logout now PASS on the unchanged accepted QA APK. Read-only post-logout
 account/time counts exposed one active orphan FCM endpoint (D-355), not exact-SID
