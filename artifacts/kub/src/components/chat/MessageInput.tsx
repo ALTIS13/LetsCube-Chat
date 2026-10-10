@@ -1728,6 +1728,7 @@ export function MessageInput({
             onFocus={() => { onFocusChange?.(true); mentionPicker.observeSelection(); }}
             onBlur={() => onFocusChange?.(false)}
             placeholder="Сообщение…"
+          enterKeyHint={enterSendsHere() ? "send" : "enter"}
             rows={1}
             className={cn(
               // `kub-message-text` is the one class the bubbles read, so what

@@ -68,8 +68,8 @@ function editSessionSubscription(environment: Record<string, any>, mutation?: Mu
   return expression ? evaluate(expression.getText(tree), environment, loaded.filename)() : undefined;
 }
 
-function fieldHandler(relative: string, name: string, environment: Record<string, any>) {
-  const loaded = source(relative);
+function fieldHandler(relative: string, name: string, environment: Record<string, any>, mutation?: Mutation) {
+  const loaded = source(relative, mutation);
   const tree = ts.createSourceFile(relative, loaded.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let expression: ts.Expression | undefined;
   const visit = (node: ts.Node) => {
@@ -111,7 +111,19 @@ function inputEvent(type: string, extra: Record<string, unknown> = {}) {
   return event;
 }
 
-function pickerHarness(initial = snapshot(), mutation?: Mutation) {
+function mentionModule(mutation?: Mutation): typeof mentions {
+  if (mutation?.file !== "lib/memberMentions.ts") return mentions;
+  const loaded = source(mutation.file, mutation);
+  const compiled = ts.transpileModule(loaded.text, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const module = { exports: {} as typeof mentions };
+  runInThisContext(`(function(module,exports){${compiled}\n})`, { filename: loaded.filename })(module, module.exports);
+  return module.exports;
+}
+
+function pickerHarness(initial = snapshot(), mutation?: Mutation, enterSends = true) {
+  const mentionApi = mentionModule(mutation);
   const field = new Field();
   const ref = { current: field };
   const state: any = { currentUser: { id: OWNER }, chats: [{ id: CHAT, members: [
@@ -157,8 +169,8 @@ function pickerHarness(initial = snapshot(), mutation?: Mutation) {
   const require = (name: string) => {
     if (name === "react") return react;
     if (name === "@/store/app.store") return { useAppStore };
-    if (name === "@/lib/composerEnter") return { enterSendsHere: () => true };
-    if (name === "@/lib/memberMentions") return mentions;
+    if (name === "@/lib/composerEnter") return { enterSendsHere: () => enterSends };
+    if (name === "@/lib/memberMentions") return mentionApi;
     throw Error(`Unexpected hook dependency: ${name}`);
   };
   runInThisContext(`(function(require,module,exports,requestAnimationFrame){${compiled}\n})`, { filename: loaded.filename })(
@@ -180,16 +192,163 @@ function pickerHarness(initial = snapshot(), mutation?: Mutation) {
   return { field, state, ref, setSnapshot, render, get picker() { return picker; }, get snapshot() { return current; },
     changeTopic(value: string) { topic = value; render(); },
     runFrames() { for (const run of frames.splice(0)) run(); render(); },
-    onChange(surface: string, value: string) {
-      const rebase = () => setSnapshot(mentions.rebaseMentionText(current, value));
+    onKeyDown(surface: string, event: Event) {
+      let consumed: boolean | undefined;
+      let sends = 0;
+      const inputPicker = { ...picker, onKeyDown(input: any) { consumed = picker.onKeyDown(input); return consumed; } };
+      const send = () => { sends += 1; };
+      const environment = surface === composer
+        ? { mentionPicker: inputPicker, enterSendsHere: () => enterSends, isComposing: false,
+          isAttachmentBusy: false, hasText: true, hasAttachments: false, hasForwardDraft: false,
+          handleSend: send, onTyping: () => {} }
+        : { picker: inputPicker, enterSendsHere: () => enterSends, busy: false, onSend: send };
+      callback(surface, surface === composer ? "handleKeyDown" : "handleCaptionKeyDown", environment, mutation)(event);
+      return { consumed, sends };
+    },
+    onChange(surface: string) {
+      const rebase = (content: string) => setSnapshot(mentionApi.rebaseMentionText(current, content));
       const environment = surface === composer ? { mentionPicker: picker, setText: rebase }
         : { picker, onCaptionChange: rebase };
-      fieldHandler(surface, "onChange", environment)({ target: field, currentTarget: field });
+      fieldHandler(surface, "onChange", environment, mutation)({ target: field, currentTarget: field });
       render();
     },
     dispose() { for (const slot of slots) slot?.cleanup?.(); },
   };
 }
+
+function keyEvent(key = "Enter", native: Record<string, unknown> = {}) {
+  const event = new Event("keydown", { cancelable: true, bubbles: true });
+  Object.assign(event, { key, shiftKey: false, nativeEvent: { isComposing: false, keyCode: 13, ...native } });
+  return event;
+}
+
+function assertPhoneEnter(surface: string, mutation?: Mutation) {
+  const initial = { ...snapshot(), content: "@Ada @Ad @Bob" };
+  const h = pickerHarness(initial, mutation, false);
+  try {
+    h.field.setSelectionRange(8, 8); h.picker.observeSelection(); h.render();
+    assert.equal(h.picker.open, true);
+    assert.equal(h.picker.matches[0].label, "@Ada");
+    const event = keyEvent();
+    const result = h.onKeyDown(surface, event);
+    assert.equal(result.consumed, false, "phone Enter must bypass mention selection");
+    assert.equal(event.defaultPrevented, false, "phone Enter must leave the native newline available");
+    assert.equal(result.sends, 0);
+    assert.equal(h.snapshot, initial);
+    const before = inputEvent("beforeinput", { inputType: "insertLineBreak", data: null });
+    h.field.dispatchEvent(before);
+    assert.equal(before.defaultPrevented, false);
+    h.field.value = "@Ada @Ad\n @Bob";
+    h.field.setSelectionRange(9, 9);
+    h.field.dispatchEvent(inputEvent("input", { inputType: "insertLineBreak", data: null }));
+    h.onChange(surface);
+    h.runFrames();
+    assert.equal(h.snapshot.content, "@Ada @Ad\n @Bob");
+    assert.deepEqual(h.snapshot.mentionEntities.items, [
+      { kind: "user", user_id: OTHER, offset: 0, length: 4, label: "@Ada" },
+      { kind: "user", user_id: OWNER, offset: 10, length: 4, label: "@Bob" },
+    ]);
+    assert.notEqual(h.snapshot.mentionEntities.revision, "33333333-3333-4333-8333-000000000001");
+    assert.equal(h.field.selectionStart, 9);
+    assert.equal(h.field.focuses, 0);
+    assert.equal(h.picker.open, false);
+  } finally { h.dispose(); }
+}
+
+for (const surface of [composer, caption]) test(`${surface}: phone Enter leaves an open mention query as a newline without selecting or sending`, () => {
+  assertPhoneEnter(surface);
+});
+
+for (const surface of [composer, caption]) for (const [key, enterSends] of [["Enter", true], ["Tab", false]] as const)
+  test(`${surface}: ${enterSends ? "desktop Enter" : "phone Tab"} still selects the member without sending`, () => {
+    const h = pickerHarness(mentions.createMentionText("@Ad"), undefined, enterSends);
+    try {
+      h.field.setSelectionRange(3, 3); h.picker.observeSelection(); h.render();
+      assert.equal(h.picker.open, true);
+      const event = keyEvent(key);
+      const result = h.onKeyDown(surface, event);
+      assert.equal(result.consumed, true);
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(result.sends, 0);
+      h.render(); h.runFrames();
+      assert.equal(h.snapshot.content, "@Ada ");
+      assert.deepEqual(h.snapshot.mentionEntities.items, [
+        { kind: "user", user_id: OTHER, offset: 0, length: 4, label: "@Ada" },
+      ]);
+      assert.equal(h.field.selectionStart, 5);
+    } finally { h.dispose(); }
+  });
+
+function assertCompositionKey(gate: "state" | "native" | "229", mutation?: Mutation) {
+  const initial = mentions.createMentionText("@Ad");
+  const h = pickerHarness(initial, mutation);
+  try {
+    h.field.setSelectionRange(3, 3); h.picker.observeSelection(); h.render();
+    assert.equal(h.picker.open, true);
+    if (gate === "state") {
+      h.picker.onCompositionStart(); h.render();
+      assert.equal(h.picker.open, false, "composition state must close completion independently of native flags");
+    }
+    const event = keyEvent("Enter", gate === "native" ? { isComposing: true } : gate === "229" ? { keyCode: 229 } : {});
+    assert.equal(h.picker.onKeyDown(event), false);
+    assert.equal(event.defaultPrevented, false);
+    h.render(); h.runFrames();
+    assert.equal(h.snapshot, initial);
+    assert.equal(h.field.focuses, 0);
+    if (gate === "state") { h.picker.onCompositionEnd(); h.render(); }
+    assert.equal(h.picker.open, true);
+    const ordinary = keyEvent();
+    assert.equal(h.picker.onKeyDown(ordinary), true, "the same picker must remain capable of ordinary desktop selection");
+    assert.equal(ordinary.defaultPrevented, true);
+    h.render();
+    assert.equal(h.snapshot.content, "@Ada ");
+  } finally { h.dispose(); }
+}
+
+for (const gate of ["state", "native", "229"] as const)
+  test(`mention keydown independently respects the ${gate} composition guard`, () => assertCompositionKey(gate));
+
+const newlineEdits = [
+  { name: "before a mention", start: 0, end: 0, content: "\n@Ada and @Bob", items: [
+    { kind: "user", user_id: OTHER, offset: 1, length: 4, label: "@Ada" },
+    { kind: "user", user_id: OWNER, offset: 10, length: 4, label: "@Bob" },
+  ] },
+  { name: "after a mention", start: 4, end: 4, content: "@Ada\n and @Bob", items: [
+    { kind: "user", user_id: OTHER, offset: 0, length: 4, label: "@Ada" },
+    { kind: "user", user_id: OWNER, offset: 10, length: 4, label: "@Bob" },
+  ] },
+  { name: "inside a mention", start: 2, end: 2, content: "@A\nda and @Bob", items: [
+    { kind: "user", user_id: OWNER, offset: 10, length: 4, label: "@Bob" },
+  ] },
+  { name: "over a selected mention", start: 0, end: 4, content: "\n and @Bob", items: [
+    { kind: "user", user_id: OWNER, offset: 6, length: 4, label: "@Bob" },
+  ] },
+] satisfies { name: string; start: number; end: number; content: string; items: mentions.MentionEntity[] }[];
+
+function assertNewlineOffsets(surface: string, inputType: string, edit: typeof newlineEdits[number], mutation?: Mutation) {
+  const h = pickerHarness(snapshot(), mutation, false);
+  try {
+    h.field.setSelectionRange(edit.start, edit.end);
+    const data = inputType === "insertText" ? "\n" : null;
+    const before = inputEvent("beforeinput", { inputType, data });
+    h.field.dispatchEvent(before);
+    assert.equal(before.defaultPrevented, false);
+    h.field.value = edit.content;
+    h.field.setSelectionRange(edit.start + 1, edit.start + 1);
+    h.field.dispatchEvent(inputEvent("input", { inputType, data }));
+    h.onChange(surface);
+    assert.equal(h.snapshot.content, edit.content);
+    assert.deepEqual(h.snapshot.mentionEntities.items, edit.items);
+    assert.notEqual(h.snapshot.mentionEntities.revision, "33333333-3333-4333-8333-000000000001");
+    assert.match(h.snapshot.mentionEntities.revision!, /^[0-9a-f-]{36}$/i);
+    assert.equal(h.field.selectionStart, edit.start + 1);
+  } finally { h.dispose(); }
+}
+
+for (const surface of [composer, caption]) for (const inputType of ["insertLineBreak", "insertParagraph", "insertText"])
+  for (const edit of newlineEdits) test(`${surface}: ${inputType} newline ${edit.name} preserves text and surviving UUID offsets`, () => {
+    assertNewlineOffsets(surface, inputType, edit);
+  });
 
 function assertKeyboardReplacement(surface: string, mutation?: Mutation) {
   const h = pickerHarness(snapshot(), mutation);
@@ -199,7 +358,7 @@ function assertKeyboardReplacement(surface: string, mutation?: Mutation) {
     // The browser emits input even when its value tracker sees identical text.
     h.field.setSelectionRange(4, 4);
     h.field.dispatchEvent(inputEvent("input", { data: "@Ada" }));
-    h.onChange(surface, "@Ada and @Bob");
+    h.onChange(surface);
     assert.equal(h.snapshot.content, "@Ada and @Bob");
     assert.deepEqual(h.snapshot.mentionEntities.items, [
       { kind: "user", user_id: OWNER, offset: 9, length: 4, label: "@Bob" },
@@ -221,7 +380,7 @@ test("native replacement uses the pre-input selection and actual resulting text"
     h.field.value = "@Adada and @Bob";
     h.field.setSelectionRange(4, 4);
     h.field.dispatchEvent(inputEvent("input", { data: "Ada" }));
-    h.onChange(composer, "@Adada and @Bob");
+    h.onChange(composer);
     assert.equal(h.snapshot.content, "@Adada and @Bob");
     assert.deepEqual(h.snapshot.mentionEntities.items.map((item) => [item.label, item.offset]), [["@Bob", 11]]);
   } finally { h.dispose(); }
@@ -274,7 +433,7 @@ test("identical plain paste still retires UUID and the composer still stages fil
     h.picker.onPaste(event); h.render();
     h.field.dispatchEvent(inputEvent("beforeinput", { inputType: "insertFromPaste" }));
     h.field.dispatchEvent(inputEvent("input", { inputType: "insertFromPaste" }));
-    h.onChange(composer, "@Ada and @Bob");
+    h.onChange(composer);
     assert.equal(h.snapshot.mentionEntities.items.length, 1);
     let files: File[] = [];
     const file = new File(["synthetic"], "clipboard.png", { type: "image/png" });
@@ -532,6 +691,34 @@ test("choice RAF checks the DOM value before a new input's render", () => assert
 test("choice RAF still focuses and positions an unchanged selected snapshot", () => assertChoiceFrame("none"));
 
 const mutations: { name: string; mutation: Mutation; check: (mutation: Mutation) => unknown }[] = [
+  ...[composer, caption].map((surface) => ({ name: `${surface} phone mention Enter policy`, mutation: { file: hook,
+    from: "&& enterSendsHere()", to: "&& true" }, check: (m: Mutation) => assertPhoneEnter(surface, m) })),
+  { name: "composer phone send policy", mutation: { file: composer,
+    from: "&& enterSendsHere())", to: "&& true)" }, check: (m) => assertPhoneEnter(composer, m) },
+  { name: "caption phone send policy", mutation: { file: caption,
+    from: "|| !enterSendsHere())", to: "|| false)" }, check: (m) => assertPhoneEnter(caption, m) },
+  { name: "native composition keydown guard", mutation: { file: hook,
+    from: "|| event.nativeEvent.isComposing", to: "" }, check: (m) => assertCompositionKey("native", m) },
+  { name: "229 composition keydown guard", mutation: { file: hook,
+    from: "|| event.nativeEvent.keyCode === 229", to: "" }, check: (m) => assertCompositionKey("229", m) },
+  { name: "composition completion suppression", mutation: { file: hook,
+    from: "disabled || composing || snapshot", to: "disabled || snapshot" }, check: (m) => assertCompositionKey("state", m) },
+  { name: "composer newline value forwarding", mutation: { file: composer,
+    from: "setText(e.target.value)", to: 'setText(e.target.value.replace(/\\n/g, ""))' },
+    check: (m) => assertNewlineOffsets(composer, "insertLineBreak", newlineEdits[0], m) },
+  { name: "caption newline value forwarding", mutation: { file: caption,
+    from: "onCaptionChange(event.target.value)", to: 'onCaptionChange(event.target.value.replace(/\\n/g, ""))' },
+    check: (m) => assertNewlineOffsets(caption, "insertLineBreak", newlineEdits[0], m) },
+  { name: "newline text preservation", mutation: { file: "lib/memberMentions.ts",
+    from: " + edit.text + ", to: ' + edit.text.replace(/\\n/g, "") + ' },
+    check: (m) => assertNewlineOffsets(composer, "insertLineBreak", newlineEdits[0], m) },
+  { name: "newline offset shift", mutation: { file: "lib/memberMentions.ts",
+    from: "offset: item.offset + delta", to: "offset: item.offset" },
+    check: (m) => assertNewlineOffsets(caption, "insertLineBreak", newlineEdits[0], m) },
+  { name: "newline intersected identity retirement", mutation: { file: "lib/memberMentions.ts",
+    from: "if (edit.start >= item.offset + item.length) return [item];\n    return [];",
+    to: "if (edit.start >= item.offset + item.length) return [item];\n    return [item];" },
+    check: (m) => assertNewlineOffsets(caption, "insertLineBreak", newlineEdits[2], m) },
   { name: "choice RAF DOM guard", mutation: { file: hook,
     from: "|| element.value !== result.snapshot.content", to: "" },
     check: (m) => assertChoiceFrame("dom", m) },
@@ -589,5 +776,7 @@ const mutations: { name: string; mutation: Mutation; check: (mutation: Mutation)
 ];
 
 for (const { name, mutation, check } of mutations) test(`mutation: removing ${name} fails its runtime assertion`, async () => {
+  // A missing mutation anchor must not count as a behavioral RED.
+  source(mutation.file, mutation);
   await assert.rejects(async () => check(mutation), { code: "ERR_ASSERTION" });
 });
