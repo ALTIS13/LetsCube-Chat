@@ -49,6 +49,11 @@ final class MessagePreviewVerificationRuntime {
             String session, long accountEpoch, String device) {
         return !closed && state.producerCurrent(producer, revision, epoch, user, session, accountEpoch, device);
     }
+    synchronized boolean deadlineFuture(long deadline) {
+        if (closed || !MessagePreviewVerificationState.safe(deadline)) return false;
+        long now = state.elapsed();
+        return MessagePreviewVerificationState.safe(now) && now < deadline;
+    }
     synchronized void retireProducer(Object producer) {
         if (state.invalidateProducer(producer)) transport.cancel();
     }

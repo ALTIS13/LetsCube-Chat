@@ -76,6 +76,48 @@ test.after(() => {
 for (const scenario of ['producer-feature', 'guarded-feature']) {
   test(`compiled Task6E feature availability: ${scenario} (absence, not shipped regression)`, () => positive(out, scenario));
 }
+test('original native deadline feature: native-deadline-feature (reflection absence, not shipped regression)',
+  () => positive(out, 'native-deadline-feature'));
+for (const scenario of ['legacy-calibration', 'clamp', 'tighter-vault', 'expired-admission', 'at-admission',
+  'unsafe-negative', 'unsafe-large', 'unsafe-sentinel', 'capture-expiry', 'current-at', 'current-after',
+  'verify-expired', 'unsafe-supplied', 'held-auth', 'final-before', 'final-at']) {
+  test(`original native deadline boundary: native-deadline-${scenario}`,
+    () => positive(out, `native-deadline-${scenario}`));
+}
+const nativeDeadlineMutations = [
+  ['original D clamp', 'MessagePreviewVerificationProducer',
+    'Math.min(admitted.originalDeadline, deadlineElapsedMillis)', 'deadlineElapsedMillis',
+    'clamp', 'ORIGINAL_NATIVE_D_11000_NOT_18000'],
+  ['current original D guard', 'MessagePreviewVerificationProducer',
+    '&& (admitted.originalDeadline == Long.MAX_VALUE || runtime.deadlineFuture(admitted.originalDeadline))', '',
+    'current-at', 'NATIVE_D_CURRENT_REFUSES_current-at'],
+  ['safe original D shape', 'MessagePreviewVerificationRuntime',
+    ' || !MessagePreviewVerificationState.safe(deadline)', '',
+    'unsafe-large', 'NATIVE_D_ADMISSION_REFUSAL_unsafe-large'],
+  ['future original D guard', 'MessagePreviewVerificationRuntime',
+    ' && now < deadline', '', 'at-admission', 'NATIVE_D_ADMISSION_REFUSAL_at-admission'],
+  ['post-capture original D guard', 'MessagePreviewVerificationProducer',
+    'require(originalDeadline == Long.MAX_VALUE || runtime.deadlineFuture(originalDeadline));', '',
+    'capture-expiry', 'NATIVE_D_ADMISSION_REFUSAL_capture-expiry'],
+  ['supplied D shape before min', 'MessagePreviewVerificationProducer',
+    'require(MessagePreviewVerificationState.safe(deadlineElapsedMillis));', '',
+    'unsafe-supplied', 'NATIVE_D_UNSAFE_SUPPLIED_REFUSED'],
+  ['exact retained Admission D', 'MessagePreviewVerificationProducer',
+    'this.originalDeadline = originalDeadline;', 'this.originalDeadline = Long.MAX_VALUE;',
+    'clamp', 'ORIGINAL_NATIVE_D_11000_NOT_18000'],
+];
+for (const [name, sourceName, rule, changed, scenario, oracle] of nativeDeadlineMutations) {
+  test(`original native deadline compiled mutant: ${name}`, () => {
+    positive(out, `native-deadline-${scenario}`);
+    const source = readFileSync(path.join(base, `${sourceName}.java`), 'utf8').replace(/\r\n/g, '\n');
+    assert.equal(source.split(rule).length, 2, 'one exact changed boundary');
+    const mutant = compile({ name: sourceName, text: source.replace(rule, changed) });
+    const result = run(mutant, `native-deadline-${scenario}`);
+    assert.equal(result.status, 1, 'compiled runtime assertion, not setup or timeout');
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr.split(/\r?\n/)[0], `Exception in thread "main" java.lang.AssertionError: ${oracle}`);
+  });
+}
 for (const scenario of ['old-ticket', 'original-deadline']) {
   test(`actual old Runtime/State calibration: ${scenario}`, () => positive(out, scenario));
 }

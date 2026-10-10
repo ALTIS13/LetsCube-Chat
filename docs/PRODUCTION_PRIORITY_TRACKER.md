@@ -2,13 +2,18 @@
 
 Status: active production-hardening tracker, updated 2026-10-10.
 
-**Current continuation,2026-10-10:** offline native vault composition R2 PASS
-by02:52 Moscow, separate Realme UID10561/PID25937/all33 flags and exact cleanup;
-primary/test/users unchanged. R1 refusal is retained. Calibrated QA resume-order
-repair, bounded cleanup, source/SDK/exact112-definition artifact and independent
-review passed. No production code, SQL, release or rich/card effect. Next:
-genuine same-invocation verifier/actual foreground composition, then explicit
-choice and card/OS acceptance. Never replay accepted Task5/SQL/R2 cases.
+**Current continuation,2026-10-10:** original native invocation deadline
+prerequisite source/SDK accepted03:14 Moscow: immutable arm/clamp, deadline17/17,
+seven compiled mutants, affected legacy12/12, independent review, binding2/2 and
+one Android36 compile/readback16 sources/80 named definitions/21 pins. Ordinary
+plugin path/protocol0 unchanged, no caller added. Offline native vault R2 PASS
+remains accepted: Realme UID10561/PID25937/all33 flags/exact cleanup; primary/test/
+users unchanged, R1 refusal retained. Next: genuine same-invocation verifier/
+actual foreground QA composition, then explicit choice/card/OS acceptance.
+No new APK/device/provider/SQL/main/Stable or rich/card effect. Never replay
+accepted Task5/SQL/R2 cases.
+[Current deadline prerequisite](operations/2026-10-10-native-preview-original-deadline.md).
+[Next genuine QA composition](operations/2026-10-10-native-preview-genuine-composition-plan.md).
 [Physical proof and remaining boundary](operations/2026-10-10-native-preview-physical-composition.md).
 
 **Completed server continuation,2026-10-10:** Task5 ordinary Realme QA login/native binding/

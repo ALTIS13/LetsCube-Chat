@@ -9,10 +9,11 @@ final class MessagePreviewVerificationProducer implements MessagePreviewVaultPro
     private static final class Admission {
         final MessagePreviewVaultProvisioning.Identity submitted;
         final Object lifecycle;
+        final long originalDeadline;
         MessagePreviewVaultProvisioning.Identity invocation;
         boolean attempted, refused;
-        Admission(MessagePreviewVaultProvisioning.Identity submitted, Object lifecycle) {
-            this.submitted = submitted; this.lifecycle = lifecycle;
+        Admission(MessagePreviewVaultProvisioning.Identity submitted, Object lifecycle, long originalDeadline) {
+            this.submitted = submitted; this.lifecycle = lifecycle; this.originalDeadline = originalDeadline;
         }
     }
     private final MessagePreviewVerificationRuntime runtime;
@@ -50,17 +51,27 @@ final class MessagePreviewVerificationProducer implements MessagePreviewVaultPro
     }
     private boolean runtimeCurrent(Admission admitted, MessagePreviewVaultProvisioning.Identity identity) {
         MessagePreviewVaultFence.Context c = identity.context;
-        return runtime.producerCurrent(admitted, c.revision, c.epoch, c.recipient, c.session, c.accountEpoch, identity.owner.device);
+        return runtime.producerCurrent(admitted, c.revision, c.epoch, c.recipient, c.session, c.accountEpoch, identity.owner.device)
+            && (admitted.originalDeadline == Long.MAX_VALUE || runtime.deadlineFuture(admitted.originalDeadline));
     }
     // Credential-free admission does not begin/reset/verify Task5 or initialize a vault.
     void arm(MessagePreviewVaultProvisioning.Identity submitted) throws Unavailable {
+        // The unsafe sentinel is internal only; legacy callers add no clock/deadline guard.
+        armInternal(submitted, Long.MAX_VALUE);
+    }
+    void arm(MessagePreviewVaultProvisioning.Identity submitted, long originalDeadline) throws Unavailable {
+        require(runtime.deadlineFuture(originalDeadline));
+        armInternal(submitted, originalDeadline);
+    }
+    private void armInternal(MessagePreviewVaultProvisioning.Identity submitted, long originalDeadline) throws Unavailable {
         require(shape(submitted));
         try {
             Object lifecycle = lifecycleAuthority.capture();
             require(lifecycle != null && lifecycleAuthority.isCurrent(lifecycle));
             synchronized (this) {
+                require(originalDeadline == Long.MAX_VALUE || runtime.deadlineFuture(originalDeadline));
                 require(!closed && (current == null || !runtimeCurrent(current, current.submitted)));
-                Admission next = new Admission(submitted, lifecycle);
+                Admission next = new Admission(submitted, lifecycle, originalDeadline);
                 MessagePreviewVaultFence.Context c = submitted.context;
                 require(runtime.admitProducer(next, c.revision, c.epoch, c.recipient, c.session, c.accountEpoch, submitted.owner.device));
                 current = next;
@@ -95,9 +106,11 @@ final class MessagePreviewVerificationProducer implements MessagePreviewVaultPro
                 admitted = current;
                 admitted.attempted = true; admitted.invocation = identity;
             }
+            require(MessagePreviewVerificationState.safe(deadlineElapsedMillis));
+            long deadline = Math.min(admitted.originalDeadline, deadlineElapsedMillis);
             MessagePreviewVaultFence.Context c = identity.context;
             MessagePreviewVaultProvisioning.Verification result = runtime.verifyProducer(admitted, c.revision, c.epoch,
-                c.recipient, c.session, c.accountEpoch, identity.owner.device, borrowedAccess, publicKey, deadlineElapsedMillis,
+                c.recipient, c.session, c.accountEpoch, identity.owner.device, borrowedAccess, publicKey, deadline,
                 new MessagePreviewVerificationRuntime.Producer<MessagePreviewVaultProvisioning.Verification>() {
                     @Override public void current() throws Exception {
                         ownerCurrent.requireCurrent(); requireCurrent(identity);

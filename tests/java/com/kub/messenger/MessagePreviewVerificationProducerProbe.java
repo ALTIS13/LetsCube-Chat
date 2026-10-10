@@ -140,6 +140,131 @@ public final class MessagePreviewVerificationProducerProbe {
             throw new AssertionError("GUARDED_AUTHORITY_FEATURE_ABSENT");
         }
     }
+    private static Method originalNativeDeadlineArm() {
+        try {
+            return MessagePreviewVerificationProducer.class.getDeclaredMethod("arm",
+                MessagePreviewVaultProvisioning.Identity.class, long.class);
+        } catch (NoSuchMethodException absent) {
+            throw new AssertionError("ORIGINAL_NATIVE_DEADLINE_FEATURE_ABSENT");
+        }
+    }
+    private static void originalNativeDeadlineFeature() throws Exception {
+        Method method = originalNativeDeadlineArm();
+        check(!Modifier.isPublic(method.getModifiers()) && method.getReturnType() == void.class,
+            "ORIGINAL_NATIVE_DEADLINE_INTERNAL_ONLY");
+        java.lang.reflect.Field deadline = Class.forName("com.kub.messenger.MessagePreviewVerificationProducer$Admission")
+            .getDeclaredField("originalDeadline");
+        check(Modifier.isFinal(deadline.getModifiers()) && deadline.getType() == long.class,
+            "ORIGINAL_NATIVE_D_IMMUTABLE_ADMISSION");
+    }
+    private static void armOriginalNativeDeadline(MessagePreviewVerificationProducer producer,
+            MessagePreviewVaultProvisioning.Identity identity, long deadline) throws Exception {
+        try { originalNativeDeadlineArm().invoke(producer, identity, deadline); }
+        catch (InvocationTargetException refused) {
+            if (refused.getCause() instanceof Exception) throw (Exception) refused.getCause();
+            throw (Error) refused.getCause();
+        }
+    }
+    private static final class DeadlineInvocation implements AutoCloseable {
+        final Fixture f = new Fixture();
+        final Passive passive = new Passive();
+        final MessagePreviewVaultProvisioning.Identity identity;
+        final MessagePreviewVerificationProducer producer;
+        DeadlineInvocation() throws Exception {
+            MessagePreviewVaultFence.Context c = new MessagePreviewVaultFence.Context(1, f.begin(), USER, SESSION, 7);
+            identity = new MessagePreviewVaultProvisioning.Identity(A, 0, 0, c,
+                new MessagePreviewVaultFence.Owner(USER, SESSION, DEVICE, 7));
+            producer = new MessagePreviewVerificationProducer(f.runtime, passive, PUBLIC_KEY);
+        }
+        @Override public void close() { producer.close(); f.runtime.close(); }
+    }
+    private static MessagePreviewVerificationState.ProducerPermit resultPermit(
+            MessagePreviewVaultProvisioning.Verification result) throws Exception {
+        java.lang.reflect.Field field = MessagePreviewVaultProvisioning.Verification.class.getDeclaredField("producerPermit");
+        field.setAccessible(true);
+        return (MessagePreviewVerificationState.ProducerPermit) field.get(result);
+    }
+    private static void nativeDeadlineDirect(String kind) throws Exception {
+        try (DeadlineInvocation d = new DeadlineInvocation()) {
+            if (kind.equals("legacy-calibration")) {
+                d.producer.arm(d.identity);
+                MessagePreviewVaultProvisioning.Verification result = d.producer.verify(d.identity, ACCESS, 18_000,
+                    () -> d.producer.requireCurrent(d.identity));
+                d.f.chain(18_000);
+                check(result != null && resultPermit(result).deadline == 18_000,
+                    "LEGACY_ARM_LITERAL_18000_CONTROL"); return;
+            }
+            long original = kind.equals("expired-admission") ? 9999 : kind.equals("at-admission") ? 10_000
+                : kind.equals("unsafe-negative") ? -1 : kind.equals("unsafe-large") ? 9007199254740992L
+                : kind.equals("unsafe-sentinel") ? Long.MAX_VALUE : 11_000;
+            boolean refusal = kind.endsWith("admission") || (kind.startsWith("unsafe-") && !kind.equals("unsafe-supplied"))
+                || kind.equals("capture-expiry");
+            if (kind.equals("capture-expiry")) d.passive.afterCapture = () -> d.f.clock.advance(1000);
+            if (refusal) {
+                try {
+                    armOriginalNativeDeadline(d.producer, d.identity, original);
+                    throw new AssertionError("NATIVE_D_ADMISSION_REFUSAL_" + kind);
+                } catch (MessagePreviewVerificationProducer.Unavailable expected) {
+                    check(expected.getCause() == null, "NATIVE_D_FIXED_ADMISSION_REFUSAL");
+                }
+                check(d.f.calls.isEmpty(), "NATIVE_D_ADMISSION_NO_IO");
+                check(d.f.verify(d.identity.context.epoch), "NATIVE_D_REFUSAL_DID_NOT_CONSUME_TICKET");
+                d.f.chain(kind.equals("capture-expiry") ? 19_000 : 18_000); return;
+            }
+            armOriginalNativeDeadline(d.producer, d.identity, 11_000);
+            if (kind.equals("current-at") || kind.equals("current-after") || kind.equals("verify-expired")) {
+                d.f.clock.advance(999);
+                d.producer.requireCurrent(d.identity);
+                check(d.f.calls.isEmpty(), "NATIVE_D_BEFORE_CURRENT_NO_IO");
+                d.f.clock.advance(kind.equals("current-after") ? 2 : 1);
+                if (kind.equals("verify-expired")) {
+                    try {
+                        d.producer.verify(d.identity, ACCESS, 18_000, () -> {});
+                        throw new AssertionError("NATIVE_D_EXPIRED_VERIFY_NO_IO");
+                    } catch (MessagePreviewVerificationProducer.Unavailable expected) { }
+                } else {
+                    try {
+                        d.producer.requireCurrent(d.identity);
+                        throw new AssertionError("NATIVE_D_CURRENT_REFUSES_" + kind);
+                    } catch (MessagePreviewVerificationProducer.Unavailable expected) { }
+                }
+                check(d.f.calls.isEmpty(), "NATIVE_D_EXPIRED_NO_DISPATCH"); return;
+            }
+            if (kind.equals("unsafe-supplied")) {
+                try {
+                    d.producer.verify(d.identity, ACCESS, 9007199254740992L, () -> {});
+                    throw new AssertionError("NATIVE_D_UNSAFE_SUPPLIED_REFUSED");
+                } catch (MessagePreviewVerificationProducer.Unavailable expected) { }
+                check(d.f.calls.isEmpty(), "NATIVE_D_UNSAFE_SUPPLIED_NO_IO"); return;
+            }
+            List<Long> callbacks = new ArrayList<>();
+            MessagePreviewVaultProvisioning.Verification result = d.producer.verify(d.identity, ACCESS,
+                kind.equals("tighter-vault") ? 10_500 : 18_000, () -> {
+                    callbacks.add(d.f.clock.elapsedTime()); d.producer.requireCurrent(d.identity);
+                });
+            check(result != null, "NATIVE_D_REAL_VERIFICATION_RESULT");
+            check(d.f.calls.equals(Arrays.asList("AuthGET", "OwnSDK", "ResolverPOST", "OwnSDK")),
+                "NATIVE_D_LITERAL_CHAIN");
+            check(callbacks.size() > 1 && callbacks.stream().allMatch(value -> value == 10_000L),
+                "NATIVE_D_CALLBACKS_CURRENT_10000");
+            MessagePreviewVerificationState.ProducerPermit permit = resultPermit(result);
+            if (kind.equals("tighter-vault")) {
+                check(d.f.deadlines.equals(Arrays.asList(10_500L, 10_500L, 10_500L, 10_500L))
+                    && permit != null && permit.deadline == 10_500, "TIGHTER_VAULT_D_LITERAL_10500");
+            } else {
+                check(d.f.deadlines.equals(Arrays.asList(11_000L, 11_000L, 11_000L, 11_000L)),
+                    "ORIGINAL_NATIVE_D_11000_NOT_18000");
+                check(permit != null && permit.deadline == 11_000 && !permit.revoked,
+                    "NATIVE_D_PERMIT_LITERAL_11000");
+                d.f.clock.advance(999); d.producer.requireCurrent(d.identity);
+                check(!permit.revoked, "NATIVE_D_PERMIT_TRUE_AT_10999");
+                d.f.clock.advance(1);
+                try { d.producer.requireCurrent(d.identity); throw new AssertionError("NATIVE_D_PERMIT_FALSE_AT_11000"); }
+                catch (MessagePreviewVerificationProducer.Unavailable expected) { }
+                check(permit.revoked && permit.deadline == 11_000, "NATIVE_D_PERMIT_REVOKED_NOT_RENEWED");
+            }
+        }
+    }
     private static void oldTicket() {
         Fixture f = new Fixture(); String epoch = f.begin();
         check(f.verify(epoch), "ORDINARY_CHAIN_HEALTHY_CONTROL");
@@ -162,7 +287,8 @@ public final class MessagePreviewVerificationProducerProbe {
     private static final class Passive implements MessagePreviewInitializationGate.ForegroundAuthority {
         final Object snapshot = new Object();
         volatile boolean live = true;
-        public Object capture() { return snapshot; }
+        Runnable afterCapture = () -> {};
+        public Object capture() { afterCapture.run(); return snapshot; }
         public boolean isCurrent(Object captured) { return live && captured == snapshot; }
     }
     private static final class App extends Application {
@@ -204,12 +330,18 @@ public final class MessagePreviewVerificationProducerProbe {
         final String installation;
         Graph(Path path, boolean unbound) throws Exception { this(path, unbound, false); }
         Graph(Path path, boolean unbound, boolean conditional) throws Exception {
+            this(path, unbound, conditional, null);
+        }
+        Graph(Path path, boolean unbound, boolean conditional, Long originalNativeDeadline) throws Exception {
             Looper.getMainLooper(); MessagePreviewProducerPlatform.install(); app = new App(path);
             context = new MessagePreviewVaultFence.Context(1, f.begin(), USER, SESSION, 7);
             tuple = new MessagePreviewVaultFence.Owner(USER, SESSION, DEVICE, 7);
             submitted = new MessagePreviewVaultProvisioning.Identity(A, 0, 0, context, tuple);
             producer = new MessagePreviewVerificationProducer(f.runtime, passive, PUBLIC_KEY);
-            if (!unbound && !conditional) producer.arm(submitted);
+            if (!unbound && !conditional) {
+                if (originalNativeDeadline == null) producer.arm(submitted);
+                else armOriginalNativeDeadline(producer, submitted, originalNativeDeadline);
+            }
             MessagePreviewVaultProvisioning.Authority authority = unbound ? null : producer;
             if (conditional) authority = new MessagePreviewVaultProvisioning.Authority() {
                 @Override public void requireCurrent(MessagePreviewVaultProvisioning.Identity identity) { }
@@ -353,6 +485,27 @@ public final class MessagePreviewVerificationProducerProbe {
             } finally { release.countDown(); }
         }
     }
+    private static void nativeDeadlineHeldAuth(Path path) throws Exception {
+        SystemClock.value = 10_000;
+        try (Graph g = new Graph(path, false, false, 11_000L)) {
+            String ticket = g.pending().ticket;
+            CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+            g.f.afterAuth = () -> {
+                entered.countDown();
+                try { check(release.await(3, TimeUnit.SECONDS), "NATIVE_D_FINITE_AUTH_HOLD"); }
+                catch (InterruptedException failure) { throw new AssertionError("NATIVE_D_AUTH_HOLD_INTERRUPTED"); }
+            };
+            Await result = g.provision(ticket);
+            try {
+                check(entered.await(3, TimeUnit.SECONDS), "NATIVE_D_ACTUAL_AUTH_HELD");
+                check(g.f.deadlines.equals(Arrays.asList(11_000L)), "NATIVE_D_HELD_AUTH_LITERAL_11000");
+                SystemClock.value = 11_000; release.countDown();
+                check(result.get().status == MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE
+                    && g.f.calls.equals(Arrays.asList("AuthGET")) && MessagePreviewProducerPlatform.credentials() == 0,
+                    "NATIVE_D_AUTH_AT_11000_NO_FURTHER_IO_OR_KEY");
+            } finally { release.countDown(); }
+        }
+    }
     private static void contextSuccessor(Path path, boolean before) throws Exception {
         String nextOperation = "cccccccccccccccccccccccccccccccc";
         try (Graph g = new Graph(path, false)) {
@@ -413,7 +566,11 @@ public final class MessagePreviewVerificationProducerProbe {
         return false;
     }
     private static void finalPublication(Path path, boolean before, String retirement) throws Exception {
-        try (Graph g = new Graph(path, false)) {
+        finalPublication(path, before, retirement, false);
+    }
+    private static void finalPublication(Path path, boolean before, String retirement, boolean nativeDeadline) throws Exception {
+        if (nativeDeadline) SystemClock.value = 10_000;
+        try (Graph g = new Graph(path, false, false, nativeDeadline ? 11_000L : null)) {
             String ticket = g.pending().ticket;
             CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
             boolean[] once = {false};
@@ -430,6 +587,8 @@ public final class MessagePreviewVerificationProducerProbe {
             Await pending = g.provision(ticket);
             try {
                 check(entered.await(3, TimeUnit.SECONDS), "ACTUAL_POST_CURRENT_PREPUBLICATION_HOLD");
+                if (nativeDeadline) check(g.f.deadlines.equals(Arrays.asList(11_000L, 11_000L, 11_000L, 11_000L)),
+                    "NATIVE_D_FINAL_PERMIT_LITERAL_11000");
                 if (retirement.equals("clear")) check(g.f.runtime.clearBinding(2), "ACTUAL_FINAL_CONTEXT_CLEAR");
                 else if (retirement.equals("rotate")) check(g.f.runtime.beginBinding(2, USER,
                     "dddddddd-dddd-4ddd-8ddd-ddddddddddd1", 8) != null, "ACTUAL_FINAL_CONTEXT_REPLACEMENT");
@@ -456,14 +615,15 @@ public final class MessagePreviewVerificationProducerProbe {
                 else if (retirement.equals("stale-context")) g.f.runtime.cancelBinding(1, g.context.epoch, USER,
                     "dddddddd-dddd-4ddd-8ddd-ddddddddddd1", 7, DEVICE);
                 boolean contextLoss = !retirement.equals("none") && !retirement.startsWith("stale-");
-                SystemClock.value = retirement.equals("none") ? before ? 8099 : 8100 : 100;
+                SystemClock.value = nativeDeadline ? before ? 10_999 : 11_000
+                    : retirement.equals("none") ? before ? 8099 : 8100 : 100;
                 release.countDown();
                 MessagePreviewPristineInitializer.ProvisionResult result = pending.get();
                 if (contextLoss) check(result.status == MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE,
                     "FINAL_RETIRED_PRODUCER_CONTEXT");
                 else if (before) g.committed(result);
                 else check(result.status == MessagePreviewPristineInitializer.ProvisionStatus.INCOMPLETE,
-                    "FINAL_ORIGINAL_PRODUCER_DEADLINE");
+                    nativeDeadline ? "FINAL_ORIGINAL_NATIVE_D_11000" : "FINAL_ORIGINAL_PRODUCER_DEADLINE");
                 check(g.record().header.expiresWallMillis == ((Number) g.f.claims.get("exp")).longValue() * 1000,
                     "FINAL_DEADLINE_NOT_SHORTENED_JWT");
             } finally { release.countDown(); SystemClock.onRead = null; }
@@ -562,6 +722,10 @@ public final class MessagePreviewVerificationProducerProbe {
         switch (args[0]) {
             case "producer-feature": producerFeature(); break;
             case "guarded-feature": guardedFeature(); break;
+            case "native-deadline-feature": originalNativeDeadlineFeature(); break;
+            case "native-deadline-held-auth": nativeDeadlineHeldAuth(new File(args[1]).toPath()); break;
+            case "native-deadline-final-before": finalPublication(new File(args[1]).toPath(), true, "none", true); break;
+            case "native-deadline-final-at": finalPublication(new File(args[1]).toPath(), false, "none", true); break;
             case "old-ticket": oldTicket(); break;
             case "original-deadline": originalDeadline(); break;
             case "healthy": healthy(new File(args[1]).toPath()); break;
@@ -574,7 +738,8 @@ public final class MessagePreviewVerificationProducerProbe {
             case "context-after": contextSuccessor(new File(args[1]).toPath(), false); break;
             case "ordinary-plugin": ordinaryPlugin(); break;
             default:
-                if (args[0].startsWith("final-")) finalPublication(new File(args[1]).toPath(), true, args[0].substring(6));
+                if (args[0].startsWith("native-deadline-")) nativeDeadlineDirect(args[0].substring(16));
+                else if (args[0].startsWith("final-")) finalPublication(new File(args[1]).toPath(), true, args[0].substring(6));
                 else if (args[0].startsWith("refuse-")) refusal(new File(args[1]).toPath(), args[0].substring(7));
                 else if (args[0].startsWith("held-")) held(new File(args[1]).toPath(), args[0].substring(5));
                 else if (args[0].startsWith("admit-")) admission(args[0].substring(6));

@@ -1,17 +1,19 @@
 # LETSCUBE — handover
 
 **Current continuation, 2026-10-10:** coordinator, branch
-`codex/bot-inline-media-20261002`, BASE `e7d85a61`. Offline vault composition R2
-PASS by02:52 Moscow: separate UID10561/PID25937, all33 flags and exact cleanup;
-primary/test/users unchanged. R1 failed before resumed admission and remains
-immutable. Calibrated QA callback-order RED repaired; lifecycle8/8, selected
-cleanup3/3, builder9/9, namespace1/1 and independent artifact/source review;
-one new APK/112 exact definitions. Next: genuine same-invocation verifier and
-actual foreground composition in full QA, then explicit choice/card/OS proof.
-No old Auth/SQL/cold/key-loss replay; Task5/D-355 acceptance below remains valid.
-No real credential/production foreground/FCM/card acceptance from offline fiction.
-Protocol0/rich flags and Android Stable0.1.14/build15 unchanged.
-[Current composition, repair and limits](operations/2026-10-10-native-preview-physical-composition.md).
+`codex/bot-inline-media-20261002`, BASE `280c7b82`. Original native invocation
+deadline prerequisite is source/SDK accepted by03:14 Moscow: package-private
+immutable arm/clamp, separate deadline17/17, seven compiled mutants, affected
+legacy12/12, independent review, binding2/2 and one Android36 compile/readback
+16 sources/80 named classes/21 pins. Ordinary plugin path and protocol0 unchanged.
+Offline Realme vault R2 acceptance and exact cleanup remain valid; R1 remains
+FAILED. Next: QA-only genuine same-invocation verifier/actual MainActivity holder
+composition, then explicit choice/card/OS proof. No new APK/device/provider/SQL/
+main deployment; Stable0.1.14/build15/rich flags unchanged. Preserve sidebar/search
+dirty work; do not replay accepted Auth/SQL/R2 checks.
+[Current prerequisite and evidence](operations/2026-10-10-native-preview-original-deadline.md).
+[Next genuine QA route](operations/2026-10-10-native-preview-genuine-composition-plan.md).
+[Accepted offline composition and limits](operations/2026-10-10-native-preview-physical-composition.md).
 
 **Completed server continuation, 2026-10-10:** coordinator, branch
 `codex/bot-inline-media-20261002`. Genuine Task5 ordinary Realme login/native

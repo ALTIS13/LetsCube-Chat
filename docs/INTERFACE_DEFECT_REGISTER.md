@@ -25061,6 +25061,15 @@ This does not prove genuine verifier+production MainActivity composition, explic
 consent, background/FCM/card acceptance or rich delivery; D-335 remains OPEN.
 [Physical composition and exact limits](operations/2026-10-10-native-preview-physical-composition.md).
 
+Following2026-10-10 prerequisite: dormant producer retains the original native
+invocation deadline and clamps it with the supplied vault budget. Independent
+source review, deadline17/17, seven compiled mutants, affected legacy12/12,
+binding2/2 and one new Android36 compile/readback16 sources/80 named classes/
+21 pins passed. Ordinary plugin/protocol0 unchanged; no caller, new APK/device,
+provider/SQL/main/Stable or rich/card effect. Genuine composition remains next;
+D-335 remains OPEN, nativePositive/rich flags false.
+[Original deadline, evidence and next route](operations/2026-10-10-native-preview-original-deadline.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03
