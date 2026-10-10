@@ -3682,6 +3682,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     the line break on an iOS or Android device whose short side is under 600
     — a phone, whichever way it is held — and a tablet still sends.
 
+    **2026-10-10 follow-up, accepted:** new owner Android report exposed the
+    missing message IME hint and caption's unconditional `send` label. Source
+    `6d8f2a55` aligns both with the existing phone-newline guard. Focused111/111,
+    browser28 fictional cases and signed Firebase candidate0.1.16/build17 pass;
+    Realme upgrade/anonymous cold launch and four actual React software-IME
+    checks pass. Owned QA cleanup, exact web runtime image/content parity and
+    Stable0.1.16/build17 public redownload/Android verifier accepted19:10 Moscow.
+    Scope is fictional physical input plus canonical artifact/upgrade, not new
+    authenticated production-send, installed iOS or natural-FCM proof.
+    [Evidence and limits](operations/2026-10-10-composer-enter-parity.md).
+
 72. `[x]` A task for several locations at once — a tester, 2026-09-28: «задачам
     еще нужна возможность выбрать сразу несколько локаций». A task carries one
     `location_id`, and its route is decided per location: the location's

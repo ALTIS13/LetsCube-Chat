@@ -1,5 +1,19 @@
 # LETSCUBE — handover
 
+**Current continuation,2026-10-10 Enter priority:** coordinator; narrow main-based
+`6d8f2a55`, Android0.1.16/build17. Message/caption IME hints follow the existing
+phone-newline guard. Focused111/111, fictional browser28 cases, typecheck, signed
+Firebase APK verifier and35-asset parity pass. Realme upgrade without clear,
+anonymous cold launch and four fictional React physical software-IME checks
+pass. Both owned QA packages/profile removed; primary data preserved. Web exact
+image/public-container JS+SW parity accepted. APK Stable0.1.16/build17 accepted
+19:10 Moscow by full public redownload and actual Android verifier. Initial
+backup-confinement refusal preserved; independently reviewed V2 published with
+exact old-catalog CAS/byte-identical backup and no overwrite. Next: pending
+native-preview user-choice Task2 rendered acceptance, then Task3. Feature commits excluded from
+this release; no physical iOS/production-send/natural-FCM claim.
+[Evidence and limits](operations/2026-10-10-composer-enter-parity.md).
+
 **Current continuation,2026-10-10:** coordinator; narrow main-based publication
 of D-355. Session deletion now retires exact UID+SID push endpoints before the
 FK clears SID, and registration refuses deleted-SID JWTs. SQL15/15 incl mutants
@@ -8,8 +22,8 @@ Fresh before backup verified; production SQL installed exactly once. Independent
 OID/catalog readback resolved the original regclass pretty-printing observer
 refusal without replay. Genuine isolated Realme ordinary Auth/native binding/
 logout and server retirement passed; all three exact-owned QA packages removed,
-primary/test data and users preserved. AndroidStable0.1.14/build15 unchanged.
-Git publication pending; unfinished native-preview feature commits excluded.
+primary/test data and users preserved. Narrow main2d97d676 publication/runtime
+accepted, now included by6d8f2a55 above; unfinished native-preview commits excluded.
 Next: actual native credential/explicit-choice/composition acceptance in the
 feature worktree, not another ordinary binding/logout rerun. No natural FCM,
 OS-card, rich preview or full restore acceptance.
