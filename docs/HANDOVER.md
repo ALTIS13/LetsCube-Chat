@@ -1,5 +1,20 @@
 # LETSCUBE — handover
 
+**Current continuation, 2026-10-10 19:10 Moscow:** coordinator; urgent phone
+Enter slice is source/main `6d8f2a55`, accepted web runtime and nonmandatory
+Android Stable0.1.16/build17. Public full APK verifier/redownload and four
+fictional physical Realme software-IME checks pass; owned QA apps/profile removed,
+primary data preserved. Exact backup retained; initial publisher refusal and V2
+repair are recorded, not silently replayed. Feature branch now cherry-picks the
+same source as `de6b8c36`; only version15/16 ->16/17 metadata needed reconciliation.
+Root sidebar/search dirty paths remain untouched. Next: Task2 actual Settings
+rendered acceptance with a finite immutable fictional build and browser-route
+transport, no new listener or retry of the rejected Vite launch. Prepared fixture
+exports reuse the existing wire/Settings/backend ports without changing app code.
+Task3 still pending; protocol0/rich guards remain closed. No new authenticated
+production-send, natural-FCM or installed iOS proof.
+[Release evidence and boundaries](operations/2026-10-10-composer-enter-parity.md).
+
 **Current continuation, 2026-10-10:** coordinator, branch
 `codex/bot-inline-media-20261002`, Task1 `de2f7beb` pushed with exact readback.
 Task1 accepted evidence is reused. Task2 hook fix round1 and fixture/guard source

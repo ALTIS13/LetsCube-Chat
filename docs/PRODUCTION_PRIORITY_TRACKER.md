@@ -2,6 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-10-10.
 
+**Urgent Enter parity, accepted2026-10-10:** source/main6d8f2a55; shared web
+runtime verified and Android Stable0.1.16/build17 accepted19:10 Moscow by full
+public redownload/Android verifier. Four fictional full-React physical IME checks
+and exact QA cleanup passed on Realme; primary data preserved. Native-preview
+feature changes were excluded. Root feature now retains the same Enter source
+as de6b8c36; current Task2 rendered acceptance remains pending, using a finite
+fictional compiled bundle rather than another listener launch. No new natural
+FCM, installed iOS or authenticated production-send claim.
+[Evidence and rollback boundary](operations/2026-10-10-composer-enter-parity.md).
+
 **Active source stage,2026-10-10:** separate QA consent-only context/native intent
 Task1 SOURCE_ACCEPTED. Focused72/72 reused, review P2 independently RED then fixed,
 affected9/9/four compiled mutants, real kub typecheck and independent spec/quality
