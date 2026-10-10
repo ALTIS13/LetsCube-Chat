@@ -51,6 +51,8 @@ test("on a phone Enter starts a new line and the arrow sends; on a computer Ente
   const composer = page.getByPlaceholder("Сообщение…").first();
   const phone = (page.viewportSize()?.width ?? 0) < 768;
 
+  await expect(composer).toHaveAttribute("enterkeyhint", phone ? "enter" : "send");
+
   await composer.click();
   await page.keyboard.type("Лесная, 12");
   await page.keyboard.press("Enter");
@@ -89,6 +91,7 @@ test.describe("a phone held sideways", () => {
   test("keeps Enter as a line break", async ({ page }) => {
     const fixture = await boot(page);
     const composer = page.getByPlaceholder("Сообщение…").first();
+    await expect(composer).toHaveAttribute("enterkeyhint", "enter");
     await composer.click();
     await page.keyboard.type("Лесная, 12");
     await page.keyboard.press("Enter");

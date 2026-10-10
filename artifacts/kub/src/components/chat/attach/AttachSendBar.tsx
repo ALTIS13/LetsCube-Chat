@@ -95,7 +95,7 @@ export function AttachSendBar({ chatId = "", topicId = null, snapshot, onSnapsho
           onKeyDown={handleCaptionKeyDown}
           onPaste={picker.onPaste}
           placeholder="Добавить подпись…"
-          enterKeyHint="send"
+          enterKeyHint={enterSendsHere() ? "send" : "enter"}
           data-testid="attach-caption"
           className="relative block min-h-11 w-full min-w-0 resize-none overflow-y-auto bg-transparent py-2.5 text-base leading-6 text-[color:var(--kub-text)] outline-none placeholder:text-[color:var(--kub-muted)] sm:text-sm sm:leading-6"
         />
