@@ -2,14 +2,18 @@
 
 Status: active production-hardening tracker, updated 2026-10-10.
 
-**Current continuation,2026-10-10:** QA-only genuine foreground caller is now
-authored behind the ordinary false build guard. Actual21-source JVM boundaries
-33/33,16 compiled mutants, final affected ordinary/feature17/17 and independent
-cleanup now23/23 incl cross-call replay controls passed. Final production review
-accepted. Actual SDK R1 refused javac exit1; sanitized diagnostic R2 is next,
-not a replay of R1. Full-QA APK/combined Realme acceptance remains pending.
-Protocol0, rich flags, Stable and production unchanged. Current resume lives in
-[HANDOVER](HANDOVER.md); [source-stage evidence](operations/2026-10-10-native-preview-genuine-composition.md).
+**Current continuation,2026-10-10:** isolated genuine foreground composition is
+accepted on Realme: actual full SDK/QA APK+AndroidTest, one genuine case/zero skips,
+COMMITTED G1 -> exact logout RETIRED G2/key absence, new own-window server endpoint
+retired. Three exact-owned QA packages removed; protected apps/users unchanged.
+Source/compiled-mutant evidence and independent result/cleanup audit accepted.
+The pre-run observer baseline false-positive was reproduced RED and fixed before
+Auth; failed standalone SDK attempts remain recorded, not replayed. Programmatic
+form setup is not person-choice or card/OS proof. Protocol0, rich flags, Stable
+and production unchanged. Next: separate QA user-choice/native lifecycle with
+Settings and exact owner ACKs, not protocol1/display activation. Current resume:
+[HANDOVER](HANDOVER.md); [device evidence](operations/2026-10-10-native-preview-genuine-composition.md);
+[next source boundary](operations/2026-10-10-native-preview-user-choice-plan.md).
 
 **Completed prerequisite,2026-10-10:** original native invocation deadline
 prerequisite source/SDK accepted03:14 Moscow: immutable arm/clamp, deadline17/17,
@@ -60,7 +64,8 @@ that SID. That availability gap is superseded by the2026-10-10 genuine Task5
 ordinary Realme SDK binding/logout and D-355 retirement acceptance above; do not
 repeat the old discovery. D-335 stays OPEN: nativePositive=false,
 richPreviewEnabled=false, canPublishRich=false, generic v1 unchanged. Next:
-genuine native credential/foreground composition, explicit choice/card/OS proof.
+explicit user choice/native lifecycle, then card/OS proof. Genuine isolated
+credential/foreground composition is accepted above, not production readiness.
 D-342 universal recovery,
 unknown-client D-348/349 and preliminary tester86/87 remain separate.
 Chronological rehearsals, install/backup/rollback evidence and native limits:

@@ -1,7 +1,8 @@
 # Genuine Foreground Composition
 
 Owner: coordinator. Source branch `codex/bot-inline-media-20261002`, base
-`1194d50f`. This is an in-progress source stage, not Android/device acceptance.
+`1194d50f`, source checkpoint `43e6a42f`. Isolated genuine composition and exact
+logout retirement are now accepted on Realme; ordinary/rich release remains closed.
 The approved [implementation plan](2026-10-10-native-preview-genuine-composition-plan.md)
 remains the sequence; completed deadline/R2/Task5/D-355 evidence is reused.
 
@@ -23,7 +24,7 @@ main. Plugin destruction alone closes verification, not durable credentials.
   before closing the owner. Known PENDING uses G1; a lost PENDING callback uses
   retained BEGIN correlation. Bounded failure remains unknown, not an EMPTY claim.
 - Added isolated instrumentation using shared ordinary rendered login/logout
-  utilities. It is authored source only and has not run on a device.
+  utilities. Its later actual device result and input limits are recorded below.
 
 ## Observed Validation
 
@@ -106,16 +107,92 @@ The isolated full-QA build recipe's independent review found a stale historical
 inventory filename. The actual derived intent-read now uses the candidate file
 written by preparation. A candidate-only fictional filesystem reproduced RED;
 the corrected behavior and omission mutant passed3/3. Final independent delta
-review found no remaining issue. Candidate capture/build is still pending.
+review found no remaining issue. After source checkpoint43e6a42f, candidate
+capture and independent current-source readback passed:860 copied files,
+88 exact dependency junctions and all21 native/Gradle pins. Sidebar uses only
+the explicitly recorded committed HEAD blob. Provider config matched the
+accepted separate QA receipt. A reviewed binding was written; no build yet.
 
-## Remaining Proof
+R3 preparation checked29 genuine jars,5482 definitions and68 inheritance types
+with no missing supertypes or shadows (7 focused checks, unchanged54 reused).
+Actual javac exited3 at the pre-existing lambda in MainActivity line159,
+`compiler.err.cant.resolve.location.args`; one unsupported line was dropped
+rather than storing raw compiler output. This is not a positive SDK result or
+a demonstrated application defect. The next isolated attempt will check the
+genuine SDK `core-lambda-stubs.jar` boot input; R3 receipts remain immutable.
 
-Diagnose and complete real SDK/Capacitor/Firebase compilation; build one isolated full
-QA artifact using the already accepted separate provider/signer identity; run one
-genuine composed Realme invocation with exact erasure and owned cleanup.
+## Full-QA Device Proof
 
-The actual SDK refusal and ADB availability check are reported above; no APK
-installation/provider/SQL/main/release effect was performed. Stable
+The reviewed full-QA recipe was executed once. Actual Gradle compilation precedes
+packaging and uses the real configured dependency/SDK graph, superseding the need
+to rerun the narrower standalone subset. Target artifact acceptance passed:
+
+- APK SHA256 `60ffbebbd5d6fc3ffdf7079ed5a0e3f90f8ef75a8234c304e6d1134d6c0d10bf`,
+  7694139 bytes; separate QA package0.1.15/build16 and signer unchanged.
+- Web build `fc9ec92652e0c693`, packaged assets matched; genuine Firebase values,
+  QA manifest, logging-none and diagnostic DEX descriptors matched.
+- All seven Gradle output roots remained owned;860 selected source files and
+  QA-only true overlay matched before/after. Ordinary source guard remains false.
+- Independent real compiler readback found all90 named production definitions
+  plus BuildConfig (Java21), all90 DEX definitions and four custom plugins. The
+  actual compile/package tasks and `BUILD SUCCESSFUL in 35s` preceded artifact
+  verification. Narrow standalone R4 preparation was not executed redundantly.
+
+Fresh Realme user0 installation/metadata passed: target UID10562, observer10563;
+target first/last SDK install time1791596475659, signer/APK matched. Primary/test
+APKs and users were unchanged. This fresh incarnation, not an old install receipt,
+bound the later Auth and cleanup checks.
+
+Native-test preparation review found an unbounded closure tree root. One fictional
+external-root case reproduced named RED; root containment and row ownership now
+pass11/11 changed controls, including a compiled omission mutant. The frozen
+instrumentation sources themselves did not change. Their programmatic rendered
+form setup does not prove keyboard/input/UI or end-user preview consent.
+
+Fresh host-bound AndroidTest built once: SHA256
+`3423095438357ac811b96b677ead4cafcadf64f2be79c982231eaeecd9118c03`,
+459793 bytes. The target APK remained byte-identical. Original genuine case and
+finally bodies were preserved; only admission used the current host incarnation.
+
+Auth preparation passed11/11 controls and three compiled mutants. Independent
+review found a pre-run observer false-positive: an already revoked baseline row
+could satisfy the after-check unchanged. Actual R1 derived observer reproduced
+named RED. Separate immutable R2 now requires an empty device/session baseline;
+delta3/3 incl compiled omission and the affected observer1/1 passed. Other controls
+were reused. R2 derivation/seal/readback and independent delta review accepted.
+No Auth/device/SQL mutation occurred during that repair; no APK rebuild was needed.
+
+One coordinator-owned R2 invocation selected only
+`NativeMessagePreviewGenuineCompositionTest#normalQaSessionCommitsAndLogoutRetiresGenuineComposition`:
+
+- Actual rendered QA login, ordinary SDK registration and genuine MainActivity
+  verifier-to-vault chain reached checked INITIALIZED/PENDING/COMMITTED G1.
+- Normal rendered logout reached exact RETIRED EMPTY G2, credential-key absence
+  and cleared verification through the actual retained owner. The case's normal
+  and finally assertions passed; no fictional authority supplied this result.
+- Instrumentation exit0, one test/zero skips, stderr0, no fixed/unknown failures;
+  output was parsed in memory, hashes/counts only retained. Result SHA256
+  `62b13e8bbd1c502e9097433f76f82c44d8e08b5bbb65fd0edee56207c34fbb48`.
+- Read-only own-QA-account/fresh-attempt window went from zero device rows and
+  sessions to one newly retired endpoint, zero active endpoints/new sessions.
+  This is account/time evidence, not exact-SID binding or natural FCM delivery.
+- Exact-owned test removal and subsequent target/observer removal passed with
+  durable intents/ACKs, fresh incarnation checks and all-user absence. Primary
+  `com.kub.messenger` UID10533/APK770a29ff and pre-existing test UID10520/APK146d516d,
+  plus user set, stayed unchanged. No QA package residue remains.
+
+Independent actual result/source/artifact/cleanup audit accepted. Preparation
+cleared command/candidate credential references; no raw logs, captures or personal
+content were retained. Field setup was programmatic, not physical keyboard or a
+person's explicit preview selection. Public capabilities stayed literal protocol0
+and all rich/nativePositive flags remained false throughout.
+
+Next is the [separate user-choice/lifecycle phase](2026-10-10-native-preview-user-choice-plan.md),
+not a repeated genuine Auth/vault test or rich/card activation.
+
+Failed standalone SDK attempts and actual QA device acceptance are distinguished
+above. Normal QA Auth/registration/logout made expected own-account changes;
+no provider configuration, schema/manual SQL, main deployment or release changed. Stable
 Android0.1.14/build15 and all rich readiness flags remain
 unchanged. No end-user preview consent, refresh/background custody, card display,
 process-death recovery, natural FCM timing or multi-OEM acceptance is claimed.

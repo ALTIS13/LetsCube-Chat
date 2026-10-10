@@ -1,23 +1,24 @@
 # LETSCUBE — handover
 
 **Current continuation, 2026-10-10:** coordinator, branch
-`codex/bot-inline-media-20261002`, BASE `1194d50f`. QA-only genuine foreground
-composition source has feature-absence RED (18 actual sources), actual21-source
-boundary33/33 and16 compiled mutants; final affected ordinary/feature selection
-17/17. Cleanup now23/23, including cross-call confirmation replay controls;
-final production review found no remaining issues. Actual SDK R1 refused javac
-exit1; raw572-byte stderr was not retained. Sanitized diagnostic R2 also refused:
-one missing public AndroidX `DrawerLayout` definition. Next: exact cached API
-closure in a fresh R3; R1/R2 remain immutable. Early real MainActivity issuer,
-native-private one-use request, original deadline and exact retirement are wired
-behind a normal-build false guard. New SDK/full-QA device proof remains pending;
-the source alone is not acceptance. Next: diagnose/complete real dependency
-compile, then one isolated genuine Realme invocation and exact cleanup.
-Original-deadline source/SDK prerequisite and offline vault R2 remain accepted;
-offline R1 remains FAILED. No new APK install/provider/SQL/main deployment or Stable change.
-Android0.1.14/build15/protocol0/rich flags unchanged. Preserve sidebar/search dirty
-work; do not replay accepted Auth/SQL/R2 checks.
-[Current source stage and limits](operations/2026-10-10-native-preview-genuine-composition.md).
+`codex/bot-inline-media-20261002`, source checkpoint `43e6a42f`.
+Genuine same-invocation foreground composition and exact logout retirement are
+accepted in the isolated full QA application on Realme. Actual full Gradle SDK
+compile, target APK60ffbebbd5d6fc3f, AndroidTest3423095438357ac8 and one genuine
+case/zero skips passed. Own-account/time observation went from zero rows to one
+new retired row, with zero active endpoints/new sessions; this is not exact-SID
+delivery proof. Test, target and observer were removed with exact ownership and
+all-user absence checks; primary/test APKs+UIDs and users preserved. No residue.
+Independent source/artifact/result/cleanup review accepted. Standalone SDK
+R1/R2/R3 failures and pre-run observer R1 false-positive remain recorded; do not
+replay them or the accepted Auth/SQL/R2 suites. Programmatic rendered-form setup
+is not keyboard, person-choice or notification-card proof. Ordinary QA guard is
+false; protocol0/rich flags and AndroidStable0.1.14/build15 remain unchanged.
+No provider-configuration, schema/manual SQL, main deployment or release change.
+Preserve sidebar/search dirty work. Next: separate QA user-choice context and
+native lifecycle, reusing Settings/owner-row ACKs without claiming display readiness.
+[Current device proof and limits](operations/2026-10-10-native-preview-genuine-composition.md).
+[Next user-choice source boundary](operations/2026-10-10-native-preview-user-choice-plan.md).
 [Current prerequisite and evidence](operations/2026-10-10-native-preview-original-deadline.md).
 [Next genuine QA route](operations/2026-10-10-native-preview-genuine-composition-plan.md).
 [Accepted offline composition and limits](operations/2026-10-10-native-preview-physical-composition.md).

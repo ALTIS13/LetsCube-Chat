@@ -25070,13 +25070,18 @@ provider/SQL/main/Stable or rich/card effect. Genuine composition remains next;
 D-335 remains OPEN, nativePositive/rich flags false.
 [Original deadline, evidence and next route](operations/2026-10-10-native-preview-original-deadline.md).
 
-Following QA-only source stage: genuine foreground caller authored with ordinary
-guard false. Actual21-source JVM boundaries33/33,16 compiled mutants, final
-affected ordinary/feature17/17 and independent cleanup now23/23 incl cross-call
-confirmation replay controls passed. Production delta review accepted; SDK R1
-refused javac exit1 and remains failed. Diagnostic R2/full-QA device proof pending; source
-does not close D-335 or enable protocol1/rich/Stable. See
-[current evidence and limits](operations/2026-10-10-native-preview-genuine-composition.md).
+Following QA-only stage is now device-accepted: genuine foreground caller retains
+ordinary guard false. Actual21-source boundaries33/33/16 compiled mutants,
+affected17/17 and cleanup23/23 remain accepted. Full real Gradle SDK/QA APK and
+fresh host-bound AndroidTest passed. One genuine Realme invocation observed
+COMMITTED G1 -> normal logout RETIRED G2/key absence, empty own-account/time
+baseline -> one new retired endpoint, zero active/new sessions. Three exact-owned
+QA packages removed; protected apps/users unchanged. Pre-run observer R1
+false-positive was RED then fixed in R2; failed standalone SDK receipts remain.
+Independent result/source/cleanup review accepted. Programmatic form setup is
+not person-choice, background/card/OS proof. D-335 stays OPEN, protocol0/rich/Stable
+unchanged. See [device evidence and limits](operations/2026-10-10-native-preview-genuine-composition.md)
+and [next user-choice/native lifecycle](operations/2026-10-10-native-preview-user-choice-plan.md).
 
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
