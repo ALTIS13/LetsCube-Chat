@@ -17,6 +17,7 @@ export const compositionSourceNames = [
 export const foregroundCompositionSourceNames = [
   ...compositionSourceNames, 'MessagePreviewForegroundAuthority',
   'MessagePreviewForegroundComposition', 'MainActivity',
+  'MessagePreviewQaUserChoice',
 ];
 
 // Fictional framework queues are deliberately separate: bridge task execution
@@ -116,6 +117,7 @@ public class Activity extends android.content.Context {
   public void setUserAgentString(String value) { agent=value; }
 }`,
   'android/webkit/WebView.java': `package android.webkit; public class WebView {
+  public String getUrl() { return null; }
   public WebSettings getSettings() { return new WebSettings(); }
   public boolean postDelayed(Runnable work,long delay) { return true; }
   public void evaluateJavascript(String script,Object callback) {}
@@ -138,6 +140,8 @@ public class Bridge {
   public android.app.Activity getActivity() { return activity; }
   public android.content.Context getContext() { return activity; }
   public android.webkit.WebView getWebView() { return null; }
+  public String getServerUrl() { return null; }
+  public String getLocalUrl() { return null; }
   public void addWebViewListener(WebViewListener listener) { listeners.add(listener); }
   public void removeWebViewListener(WebViewListener listener) {
     if(iteratingListeners) throw new AssertionError("LISTENER_REMOVE_AFTER_ITERATION");
@@ -177,6 +181,7 @@ public class Bridge {
   'com/kub/messenger/BuildConfig.java': `package com.kub.messenger; public final class BuildConfig {
   // Mutable only in this child-JVM fictional build configuration.
   public static boolean LETSCUBE_QA_MESSAGE_PREVIEW_COMPOSITION=false;
+  public static boolean LETSCUBE_QA_MESSAGE_PREVIEW_USER_CHOICE=false;
 }`,
   'com/kub/messenger/VoiceCallRuntime.java': `package com.kub.messenger; final class VoiceCallRuntime {
   static VoiceCallRuntime get(Object activity) { return new VoiceCallRuntime(); }

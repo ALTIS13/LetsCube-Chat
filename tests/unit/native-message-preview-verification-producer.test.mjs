@@ -18,7 +18,7 @@ const names = ['MessagePreviewVerificationState', 'MessagePreviewVaultFence', 'M
   'MessagePreviewCredentialEnvelope', 'MessagePreviewCredentialKeyCustody', 'MessagePreviewPristineInitializer',
   'MessagePreviewVaultProvisioning', 'MessagePreviewVerificationRuntime', 'MessagePreviewResponseParser',
   'MessagePreviewHttpTransport', 'MessagePreviewsPlugin', 'MessagePreviewForegroundAuthority',
-  'MessagePreviewForegroundComposition', 'MainActivity'];
+  'MessagePreviewForegroundComposition', 'MainActivity', 'MessagePreviewQaUserChoice'];
 const producer = path.join(base, 'MessagePreviewVerificationProducer.java');
 const sources = names.map(name => path.join(base, `${name}.java`));
 if (existsSync(producer)) sources.push(producer);

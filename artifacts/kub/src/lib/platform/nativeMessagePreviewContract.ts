@@ -1,6 +1,8 @@
 export type MessagePreviewChoice = "none" | "sender" | "message";
 export type MessagePreviewSession = { recipientId: string; recipientSessionId: string; expiresAt: number };
 export type MessagePreviewBinding = { recipientId: string; recipientSessionId: string; deviceId: string };
+export type QaMessagePreviewChoiceOwner = MessagePreviewBinding & { accountEpoch: number };
+export type QaMessagePreviewChoiceContext = QaMessagePreviewChoiceOwner & { contextId: string; expiresAt: number };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CAPABILITY_KEYS = ["preview_v", "recipient_id", "session_id", "device_id", "preview_level"];
@@ -51,4 +53,21 @@ export function readMessagePreviewConsent(data: unknown, owner: string, choice: 
   const row = data[0];
   return Object.keys(row).length === 2 && row.user_id === owner && row.preview_level === choice
     && isMessagePreviewChoice(row.preview_level) ? row.preview_level : null;
+}
+
+const QA_CONTEXT_KEYS = ["qa_choice_v", "purpose", "contextId", "recipientId", "recipientSessionId", "deviceId", "accountEpoch", "expiresAt"];
+export function readQaMessagePreviewChoiceContext(value: unknown, expected: QaMessagePreviewChoiceOwner,
+  now: number): QaMessagePreviewChoiceContext | null {
+  if (!record(value) || !record(expected) || !Number.isSafeInteger(now) || now < 0
+    || Object.keys(value).length !== 8 || !QA_CONTEXT_KEYS.every(key => Object.hasOwn(value, key))
+    || value.qa_choice_v !== 1 || value.purpose !== "consent-only" || !uuid(value.contextId)
+    || !uuid(value.recipientId) || !uuid(value.recipientSessionId) || !uuid(value.deviceId)
+    || !Number.isSafeInteger(value.accountEpoch) || (value.accountEpoch as number) < 0
+    || !Number.isSafeInteger(value.expiresAt) || (value.expiresAt as number) <= now
+    || (value.expiresAt as number) - now > 120_000
+    || value.recipientId !== expected.recipientId || value.recipientSessionId !== expected.recipientSessionId
+    || value.deviceId !== expected.deviceId || value.accountEpoch !== expected.accountEpoch) return null;
+  return Object.freeze({ contextId: value.contextId, recipientId: value.recipientId,
+    recipientSessionId: value.recipientSessionId, deviceId: value.deviceId,
+    accountEpoch: value.accountEpoch as number, expiresAt: value.expiresAt as number });
 }

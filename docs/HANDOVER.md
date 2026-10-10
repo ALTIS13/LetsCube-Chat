@@ -1,6 +1,18 @@
 # LETSCUBE — handover
 
 **Current continuation, 2026-10-10:** coordinator, branch
+`codex/bot-inline-media-20261002`, Task1 source based on `c4fea60a`.
+Separate QA consent-only context/native intent and strict typed wrappers are
+SOURCE_GREEN: focused72/72,16 native/6 TS mutants and22-source readback; real kub
+typecheck passed. Test-quality P2 independently reproduced and fixed: independent
+arm-clock input, affected9/9 including four compiled mutants. Spec/quality delta
+review accepted,17 input/protected and22 Java pins matched. Next: existing Settings
+hook/save chain with full owner/context fences and honest UNKNOWN ACKs.
+No Task2/actual-choice QA, SDK/APK/device or display readiness claimed.
+Protocol0/rich/Stable remain unchanged; sidebar/search dirty work preserved.
+[Source checkpoint and limits](operations/2026-10-10-native-preview-user-choice-source.md).
+
+**Accepted genuine prerequisite, 2026-10-10:** coordinator, branch
 `codex/bot-inline-media-20261002`, source checkpoint `43e6a42f`.
 Genuine same-invocation foreground composition and exact logout retirement are
 accepted in the isolated full QA application on Realme. Actual full Gradle SDK

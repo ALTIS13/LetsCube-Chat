@@ -2,6 +2,14 @@
 
 Status: active production-hardening tracker, updated 2026-10-10.
 
+**Active source stage,2026-10-10:** separate QA consent-only context/native intent
+Task1 SOURCE_ACCEPTED. Focused72/72 reused, review P2 independently RED then fixed,
+affected9/9/four compiled mutants, real kub typecheck and independent spec/quality
+review passed. Native capabilities remain literal0; no Task2 Settings/actual-choice,
+new SDK/APK/device, rich or release proof. Next: tagged existing hook and owner-row
+save/ACK chain. Unowned sidebar/search work preserved.
+[Source evidence and limits](operations/2026-10-10-native-preview-user-choice-source.md).
+
 **Current continuation,2026-10-10:** isolated genuine foreground composition is
 accepted on Realme: actual full SDK/QA APK+AndroidTest, one genuine case/zero skips,
 COMMITTED G1 -> exact logout RETIRED G2/key absence, new own-window server endpoint

@@ -25083,6 +25083,14 @@ not person-choice, background/card/OS proof. D-335 stays OPEN, protocol0/rich/St
 unchanged. See [device evidence and limits](operations/2026-10-10-native-preview-genuine-composition.md)
 and [next user-choice/native lifecycle](operations/2026-10-10-native-preview-user-choice-plan.md).
 
+Following separate QA source stage: consent-only context/native intent and strict
+typed wrappers are reviewed SOURCE_ACCEPTED. Focused72/72 reused; test wall oracle
+P2 reproduced with a surviving +1ms mutant, fixed through independent arm input,
+affected9/9/four compiled mutants and delta review accepted. Real kub typecheck,
+17 input/protected and22 Java pins matched. This is not Settings/person-choice,
+SDK/APK/device/background/card or release proof. D-335 stays OPEN; protocol0/rich/
+Stable unchanged. [Source boundary](operations/2026-10-10-native-preview-user-choice-source.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03

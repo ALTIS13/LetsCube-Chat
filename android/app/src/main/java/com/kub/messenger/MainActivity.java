@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         MessagePreviewForegroundComposition.bootstrap(getApplication());
+        MessagePreviewQaUserChoice.bootstrap(getApplication());
         registerPlugin(VoiceCallsPlugin.class);
         registerPlugin(MediaExportPlugin.class);
         registerPlugin(ChatNotificationsPlugin.class);
