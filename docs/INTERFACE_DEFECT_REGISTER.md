@@ -25070,6 +25070,14 @@ provider/SQL/main/Stable or rich/card effect. Genuine composition remains next;
 D-335 remains OPEN, nativePositive/rich flags false.
 [Original deadline, evidence and next route](operations/2026-10-10-native-preview-original-deadline.md).
 
+Following QA-only source stage: genuine foreground caller authored with ordinary
+guard false. Actual21-source JVM boundaries33/33,16 compiled mutants, final
+affected ordinary/feature17/17 and independent cleanup now23/23 incl cross-call
+confirmation replay controls passed. Production delta review accepted; SDK R1
+refused javac exit1 and remains failed. Diagnostic R2/full-QA device proof pending; source
+does not close D-335 or enable protocol1/rich/Stable. See
+[current evidence and limits](operations/2026-10-10-native-preview-genuine-composition.md).
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03

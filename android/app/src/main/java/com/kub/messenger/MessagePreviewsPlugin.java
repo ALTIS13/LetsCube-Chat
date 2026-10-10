@@ -1,10 +1,15 @@
 package com.kub.messenger;
 
 import android.os.SystemClock;
+import android.os.Handler;
+import android.os.Looper;
+import android.webkit.WebView;
+import com.getcapacitor.Bridge;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.WebViewListener;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -22,6 +27,8 @@ public class MessagePreviewsPlugin extends Plugin {
     private MessagePreviewVerificationRuntime runtime;
     private ThreadPoolExecutor worker;
     private ScheduledThreadPoolExecutor deadlines;
+    private MessagePreviewForegroundComposition qaComposition;
+    private WebViewListener qaDocumentListener;
 
     @Override public synchronized void load() {
         handleOnDestroy();
@@ -45,24 +52,34 @@ public class MessagePreviewsPlugin extends Plugin {
     }
     @PluginMethod public void getCapabilities(PluginCall call) { call.resolve(new JSObject().put("protocol", 0)); }
     @PluginMethod public synchronized void beginBinding(PluginCall call) {
+        if (qaComposition != null && !loggingOff()) qaComposition.close();
         if (!loggingOff()) { if (runtime != null) runtime.retire(); call.resolve(new JSObject().put("epoch", JSONObject.NULL)); return; }
         Long revision = integer(call, "revision"), account = integer(call, "accountEpoch");
         String epoch = runtime == null || revision == null ? null
             : runtime.beginBinding(revision, call.getString("recipientId"), call.getString("recipientSessionId"), account == null ? -1 : account);
+        if (qaComposition != null && revision != null) qaComposition.bindingChanged(revision);
         call.resolve(new JSObject().put("epoch", epoch == null ? JSONObject.NULL : epoch));
     }
     @PluginMethod public synchronized void clearBinding(PluginCall call) {
         Long revision = integer(call, "revision");
         boolean applied = runtime != null && revision != null && runtime.clearBinding(revision);
+        if (applied && qaComposition != null) qaComposition.bindingChanged(revision);
         call.resolve(new JSObject().put("applied", applied));
     }
     @PluginMethod public synchronized void verifyBinding(PluginCall call) {
+        long started = qaComposition == null ? -1 : SystemClock.elapsedRealtime();
+        long originalDeadline = MessagePreviewVerificationState.safe(started) && started <= 9007199254732991L
+            ? started + 8_000 : -1;
         Long revision = integer(call, "revision"), account = integer(call, "accountEpoch");
         String epoch = call.getString("epoch"), user = call.getString("recipientId"), session = call.getString("recipientSessionId");
         String device = call.getString("deviceId"), access = call.getString("accessToken"), key = call.getString("publicApiKey");
         // The Capacitor call remains pending, but its retained data must not hold credentials.
         call.getData().remove("accessToken"); call.getData().remove("publicApiKey");
+        if (qaComposition != null && !loggingOff()) qaComposition.close();
         if (!loggingOff()) { if (runtime != null) runtime.retire(); verified(call, false); return; }
+        if (qaComposition != null && qaComposition.offer(getBridge(), runtime,
+            revision == null ? -1 : revision, epoch, user, session, account == null ? -1 : account,
+            device, access, key, originalDeadline, value -> verified(call, value))) return;
         if (runtime == null || worker == null || revision == null || account == null) { verified(call, false); return; }
         MessagePreviewVerificationRuntime owner = runtime;
         AtomicBoolean replied = new AtomicBoolean();
@@ -100,7 +117,36 @@ public class MessagePreviewsPlugin extends Plugin {
     synchronized boolean hasVerifiedBinding(String expectedRecipientId) {
         return loggingOff() && runtime != null && runtime.hasVerifiedBinding(expectedRecipientId);
     }
+    synchronized boolean requestQaComposition(String expectedRecipientId) {
+        if (!BuildConfig.LETSCUBE_QA_MESSAGE_PREVIEW_COMPOSITION || !loggingOff() || runtime == null || deadlines == null
+            || getActivity() == null || getActivity().getClass() != MainActivity.class) return false;
+        try {
+            if (qaComposition != null) return false;
+            android.app.Application application = getActivity().getApplication();
+            MessagePreviewForegroundAuthority issuer = MessagePreviewForegroundAuthority.getOrCreate(application);
+            qaComposition = new MessagePreviewForegroundComposition(application, getBridge(), runtime, issuer, deadlines);
+            qaDocumentListener = new WebViewListener() {
+                @Override public void onPageStarted(WebView webView) { retireQaDocument(); }
+            };
+            getBridge().addWebViewListener(qaDocumentListener);
+            return qaComposition.request(expectedRecipientId);
+        } catch (Exception refused) { if (qaComposition != null) qaComposition.close(); return false; }
+    }
+    private synchronized void retireQaDocument() {
+        if (qaComposition != null) qaComposition.close();
+        if (runtime != null) runtime.retire();
+    }
+    synchronized boolean hasQaCompositionPhase(String phase) {
+        return loggingOff() && qaComposition != null && qaComposition.phaseObserved(phase);
+    }
     @Override protected synchronized void handleOnDestroy() {
+        if (qaComposition != null) qaComposition.close();
+        if (qaDocumentListener != null) {
+            Bridge oldBridge = getBridge();
+            WebViewListener oldListener = qaDocumentListener; qaDocumentListener = null;
+            // Page callbacks iterate the listener list; remove after that iteration, on main.
+            if (oldBridge != null) new Handler(Looper.getMainLooper()).post(() -> oldBridge.removeWebViewListener(oldListener));
+        }
         if (runtime != null) runtime.close();
         if (worker != null) worker.shutdownNow();
         if (deadlines != null) deadlines.shutdownNow();

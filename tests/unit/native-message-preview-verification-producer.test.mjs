@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { producerStubs, producerPlatform } from '../android/message-preview-verification-producer.fixture.mjs';
+import { foregroundCompositionStubs as producerStubs, compositionPlatform as producerPlatform }
+  from '../android/message-preview-genuine-composition.fixture.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const base = path.join(root, 'android/app/src/main/java/com/kub/messenger');
@@ -16,7 +17,8 @@ const names = ['MessagePreviewVerificationState', 'MessagePreviewVaultFence', 'M
   'MessagePreviewOwnedKeyInventory', 'MessagePreviewKeystoreReader', 'MessagePreviewAtomicBackend',
   'MessagePreviewCredentialEnvelope', 'MessagePreviewCredentialKeyCustody', 'MessagePreviewPristineInitializer',
   'MessagePreviewVaultProvisioning', 'MessagePreviewVerificationRuntime', 'MessagePreviewResponseParser',
-  'MessagePreviewHttpTransport', 'MessagePreviewsPlugin'];
+  'MessagePreviewHttpTransport', 'MessagePreviewsPlugin', 'MessagePreviewForegroundAuthority',
+  'MessagePreviewForegroundComposition', 'MainActivity'];
 const producer = path.join(base, 'MessagePreviewVerificationProducer.java');
 const sources = names.map(name => path.join(base, `${name}.java`));
 if (existsSync(producer)) sources.push(producer);

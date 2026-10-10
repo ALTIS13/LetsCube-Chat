@@ -2,7 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-10-10.
 
-**Current continuation,2026-10-10:** original native invocation deadline
+**Current continuation,2026-10-10:** QA-only genuine foreground caller is now
+authored behind the ordinary false build guard. Actual21-source JVM boundaries
+33/33,16 compiled mutants, final affected ordinary/feature17/17 and independent
+cleanup now23/23 incl cross-call replay controls passed. Final production review
+accepted. Actual SDK R1 refused javac exit1; sanitized diagnostic R2 is next,
+not a replay of R1. Full-QA APK/combined Realme acceptance remains pending.
+Protocol0, rich flags, Stable and production unchanged. Current resume lives in
+[HANDOVER](HANDOVER.md); [source-stage evidence](operations/2026-10-10-native-preview-genuine-composition.md).
+
+**Completed prerequisite,2026-10-10:** original native invocation deadline
 prerequisite source/SDK accepted03:14 Moscow: immutable arm/clamp, deadline17/17,
 seven compiled mutants, affected legacy12/12, independent review, binding2/2 and
 one Android36 compile/readback16 sources/80 named definitions/21 pins. Ordinary

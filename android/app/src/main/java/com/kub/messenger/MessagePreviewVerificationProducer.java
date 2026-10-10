@@ -94,6 +94,20 @@ final class MessagePreviewVerificationProducer implements MessagePreviewVaultPro
             String borrowedAccess, long deadlineElapsedMillis) throws Unavailable {
         throw new Unavailable();
     }
+    // Final QA ACK rechecks the actual consumed invocation without exporting its identity.
+    void requireCurrentInvocation() throws Unavailable {
+        Admission admitted;
+        MessagePreviewVaultProvisioning.Identity invocation;
+        synchronized (this) {
+            admitted = current;
+            require(!closed && admitted != null && admitted.invocation != null);
+            invocation = admitted.invocation;
+        }
+        requireCurrent(invocation);
+        MessagePreviewVaultFence.Context c = invocation.context;
+        require(runtime.producerCurrent(admitted, c.revision, c.epoch, c.recipient, c.session, c.accountEpoch, invocation.owner.device));
+        synchronized (this) { require(!closed && current == admitted && !admitted.refused && admitted.invocation == invocation); }
+    }
     @Override public MessagePreviewVaultProvisioning.Verification verify(MessagePreviewVaultProvisioning.Identity identity,
             String borrowedAccess, long deadlineElapsedMillis, MessagePreviewVaultProvisioning.Current ownerCurrent) throws Unavailable {
         Admission admitted = null;

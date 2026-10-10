@@ -7,11 +7,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { messagePreviewStubs } from "../android/message-preview-stubs.fixture.mjs";
+import { foregroundCompositionStubs, foregroundCompositionSourceNames } from "../android/message-preview-genuine-composition.fixture.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const javaHome = process.env.MESSAGE_PREVIEW_TEST_JDK ?? "C:/Program Files/Android/Android Studio/jbr";
 const binary = name => resolve(javaHome, "bin", name + (process.platform === "win32" ? ".exe" : ""));
 const names = ["MessagePreviewVerificationState", "MessagePreviewResponseParser", "MessagePreviewVerificationRuntime", "MessagePreviewHttpTransport", "MessagePreviewsPlugin"];
+names.push(...foregroundCompositionSourceNames.filter(name => !names.includes(name)));
 const paths = names.map(name => resolve(root, `android/app/src/main/java/com/kub/messenger/${name}.java`));
 const probe = resolve(root, "tests/android/MessagePreviewVerificationProbe.java");
 const bridgeProbe = resolve(root, "tests/android/MessagePreviewBridgeProbe.java");
@@ -22,7 +24,8 @@ function clean(path) {
   rmSync(path, { recursive: true });
 }
 function compile(path, sources = paths) {
-  const stubs = Object.entries(messagePreviewStubs).map(([name, text]) => {
+  const stubs = Object.entries({ ...foregroundCompositionStubs,
+    "android/os/SystemClock.java": messagePreviewStubs["android/os/SystemClock.java"] }).map(([name, text]) => {
     const file = join(path, "stubs", name); mkdirSync(resolve(file, ".."), { recursive: true }); writeFileSync(file, text); return file;
   });
   const result = spawnSync(binary("javac"), ["-encoding", "UTF-8", "-d", path, ...sources, probe, bridgeProbe, ...stubs], { encoding: "utf8", timeout: 30_000 });

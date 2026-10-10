@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
 import androidx.test.core.app.ActivityScenario;
@@ -13,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginHandle;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,19 +27,30 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public class NativeMessagePreviewVerificationTest {
     private static final long TEST_TIMEOUT_MS = 120_000;
+    private static final long CLEANUP_TIMEOUT_MS = 20_000;
     private static final long CALLBACK_TIMEOUT_MS = 5_000;
     private static final String UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
-    private interface NativeStateProbe {
+    interface NativeStateProbe {
         boolean verifiedForRecipient(MainActivity activity, String expectedRecipient);
     }
 
-    private static NativeStateProbe requireNativeStateProbe() {
+    static final class LogoutAttempt {
+        private boolean confirmationAttempted;
+    }
+
+    static NativeStateProbe requireNativeStateProbe() {
         return (activity, expectedRecipient) -> {
-            Plugin plugin = activity.getBridge().getPlugin("MessagePreviews").getInstance();
-            return plugin instanceof MessagePreviewsPlugin
-                && ((MessagePreviewsPlugin) plugin).hasVerifiedBinding(expectedRecipient);
+            MessagePreviewsPlugin plugin = readMessagePreviewsPlugin(activity);
+            return plugin != null && plugin.hasVerifiedBinding(expectedRecipient);
         };
+    }
+
+    static MessagePreviewsPlugin readMessagePreviewsPlugin(MainActivity activity) {
+        assertTrue("NMPV_NATIVE_PROBE_MAIN_REQUIRED", Looper.myLooper() == Looper.getMainLooper());
+        PluginHandle handle = activity.getBridge().getPlugin("MessagePreviews");
+        Plugin plugin = handle.getInstance();
+        return plugin instanceof MessagePreviewsPlugin ? (MessagePreviewsPlugin) plugin : null;
     }
 
     private static final String FORM_HELPERS =
@@ -94,6 +107,11 @@ public class NativeMessagePreviewVerificationTest {
         + "const guest=location.pathname==='/'&&titles.length===1&&links.length===1;"
         + "return login||guest;})()";
 
+    private static final String LOGOUT_SURFACE_OPEN =
+        "(()=>{" + LOGOUT_HELPERS
+        + "return [...document.querySelectorAll('[role=menu][data-kub-menu=true],[role=dialog][aria-modal=true]')]"
+        + ".some(visible);})()";
+
     @Test public void normalQaSessionVerifiesOwnNativeDeviceWithoutPreviewActivation() throws Exception {
         Bundle args = InstrumentationRegistry.getArguments();
         assertTrue("NMPV_QA_USER_REFUSED",
@@ -110,77 +128,100 @@ public class NativeMessagePreviewVerificationTest {
         long deadline = SystemClock.elapsedRealtime() + TEST_TIMEOUT_MS;
 
         try (ActivityScenario<MainActivity> activity = ActivityScenario.launch(MainActivity.class)) {
-            activity.onActivity(screen -> {
-                assertNotNull("Actual bundled Capacitor bridge must mount", screen.getBridge());
-                for (String name : new String[] { "VoiceCalls", "ChatNotifications", "MediaExport", "MessagePreviews" }) {
-                    assertNotNull("Required native plugin must remain available", screen.getBridge().getPlugin(name));
+            LogoutAttempt logoutAttempt = new LogoutAttempt();
+            Throwable primaryFailure = null;
+            try {
+                activity.onActivity(screen -> {
+                    assertNotNull("Actual bundled Capacitor bridge must mount", screen.getBridge());
+                    for (String name : new String[] { "VoiceCalls", "ChatNotifications", "MediaExport", "MessagePreviews" }) {
+                        assertNotNull("Required native plugin must remain available", screen.getBridge().getPlugin(name));
+                    }
+                });
+                requireClosedCapabilities(activity, deadline);
+                loginRenderedQaSession(activity, nativeProbe, expectedRecipient, email, password, deadline);
+                email = password = null;
+                requireClosedCapabilities(activity, deadline);
+                assertTrue("Native verification must remain current for the expected QA recipient",
+                    readVerified(activity, nativeProbe, expectedRecipient));
+                logoutRenderedQaSession(activity, nativeProbe, expectedRecipient, logoutAttempt, deadline);
+            } catch (Exception | AssertionError failure) {
+                primaryFailure = failure;
+                throw failure;
+            } finally {
+                email = password = null;
+                try {
+                    cleanupRenderedQaSession(activity, nativeProbe, expectedRecipient, logoutAttempt, freshCleanupDeadline());
+                } catch (AssertionError unknown) {
+                    if (primaryFailure == null) throw unknown;
+                    primaryFailure.addSuppressed(unknown);
                 }
-            });
-            requireClosedCapabilities(activity, deadline);
-            boolean loginOpened = false;
-            boolean loginSubmitted = false;
-            boolean verified = false;
-            while (SystemClock.elapsedRealtime() < deadline) {
-                boolean mounted = evaluateBoolean(activity,
-                    "(()=>!!document.querySelector('#root')?.children.length"
-                    + "&&window.Capacitor?.getPlatform()==='android')()", deadline);
-                if (mounted && readVerified(activity, nativeProbe, expectedRecipient)) {
-                    verified = true;
-                    break;
-                }
-                if (mounted && !loginSubmitted) {
-                    assertTrue("NMPV_CAPTCHA_UNAVAILABLE", !evaluateBoolean(activity,
-                        "(()=>!!document.querySelector('[data-testid=auth-captcha],[data-sitekey],iframe[src*=captcha],"
-                        + "iframe[src*=turnstile],input[name*=captcha]'))()", deadline));
-                }
-                if (mounted && !loginSubmitted && evaluateBoolean(activity,
-                    "(()=>{" + FORM_HELPERS
-                    + "return !!form&&!!email&&!!password&&!!submit&&!captcha;})()", deadline)) {
-                    assertTrue("NMPV_LOGIN_CREDENTIALS_UNAVAILABLE",
-                        email != null && !email.isEmpty() && email.length() <= 320 && email.indexOf('\0') < 0
-                        && password != null && !password.isEmpty() && password.length() <= 4_096 && password.indexOf('\0') < 0);
-                    fillRenderedLogin(activity, email, password, deadline);
-                    boolean submitted = evaluateBoolean(activity,
-                        "(()=>{" + FORM_HELPERS
-                        + "if(!form||!email||!password||!submit||captcha||email.disabled||email.readOnly"
-                        + "||password.disabled||password.readOnly||submit.disabled||submit.getAttribute('aria-disabled')==='true'"
-                        + "||!form.checkValidity())return false;submit.click();return true;})()", deadline);
-                    assertTrue("NMPV_LOGIN_CONTROL_REFUSED", submitted);
-                    loginSubmitted = true;
-                    email = password = null;
-                } else if (mounted && !loginOpened && !loginSubmitted) {
-                    loginOpened = evaluateBoolean(activity,
-                        "(()=>{const links=[...document.querySelectorAll('a[href=\"/login\"]')]"
-                        + ".filter(e=>e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden');"
-                        + "if(links.length!==1)return false;links[0].click();return true;})()", deadline);
-                }
-                SystemClock.sleep(250);
             }
-            assertTrue("NMPV_VERIFICATION_NOT_OBSERVED", verified);
-            requireClosedCapabilities(activity, deadline);
-            assertTrue("Native verification must remain current for the expected QA recipient",
-                readVerified(activity, nativeProbe, expectedRecipient));
-            logoutRenderedQaSession(activity, nativeProbe, expectedRecipient, deadline);
         } finally {
             email = password = expectedRecipient = null;
         }
     }
 
+    static boolean loginRenderedQaSession(ActivityScenario<MainActivity> activity, NativeStateProbe nativeProbe,
+        String expectedRecipient, String email, String password, long deadline) throws Exception {
+        boolean loginOpened = false;
+        boolean loginSubmitted = false;
+        boolean verified = false;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            boolean mounted = evaluateBoolean(activity,
+                "(()=>!!document.querySelector('#root')?.children.length"
+                + "&&window.Capacitor?.getPlatform()==='android')()", deadline);
+            if (mounted && readVerified(activity, nativeProbe, expectedRecipient)) {
+                verified = true;
+                break;
+            }
+            if (mounted && !loginSubmitted) {
+                assertTrue("NMPV_CAPTCHA_UNAVAILABLE", !evaluateBoolean(activity,
+                    "(()=>!!document.querySelector('[data-testid=auth-captcha],[data-sitekey],iframe[src*=captcha],"
+                    + "iframe[src*=turnstile],input[name*=captcha]'))()", deadline));
+            }
+            if (mounted && !loginSubmitted && evaluateBoolean(activity,
+                "(()=>{" + FORM_HELPERS
+                + "return !!form&&!!email&&!!password&&!!submit&&!captcha;})()", deadline)) {
+                assertTrue("NMPV_LOGIN_CREDENTIALS_UNAVAILABLE",
+                    email != null && !email.isEmpty() && email.length() <= 320 && email.indexOf('\0') < 0
+                    && password != null && !password.isEmpty() && password.length() <= 4_096 && password.indexOf('\0') < 0);
+                fillRenderedLogin(activity, email, password, deadline);
+                boolean submitted = evaluateBoolean(activity,
+                    "(()=>{" + FORM_HELPERS
+                    + "if(!form||!email||!password||!submit||captcha||email.disabled||email.readOnly"
+                    + "||password.disabled||password.readOnly||submit.disabled||submit.getAttribute('aria-disabled')==='true'"
+                    + "||!form.checkValidity())return false;submit.click();return true;})()", deadline);
+                assertTrue("NMPV_LOGIN_CONTROL_REFUSED", submitted);
+                loginSubmitted = true;
+                email = password = null;
+            } else if (mounted && !loginOpened && !loginSubmitted) {
+                loginOpened = evaluateBoolean(activity,
+                    "(()=>{const links=[...document.querySelectorAll('a[href=\"/login\"]')]"
+                    + ".filter(e=>e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden');"
+                    + "if(links.length!==1)return false;links[0].click();return true;})()", deadline);
+            }
+            SystemClock.sleep(250);
+        }
+        assertTrue("NMPV_VERIFICATION_NOT_OBSERVED", verified);
+        return loginSubmitted;
+    }
+
     private static void requireRenderedLogoutClick(ActivityScenario<MainActivity> activity, NativeStateProbe probe,
-        String expectedRecipient, String script, String refusal, long deadline) throws Exception {
+        String expectedRecipient, LogoutAttempt attempt, String script, String refusal, long deadline) throws Exception {
         while (SystemClock.elapsedRealtime() < deadline) {
             assertTrue("NMPV_LOGOUT_OWNER_REFUSED", readVerified(activity, probe, expectedRecipient));
-            if (evaluateBoolean(activity, script, deadline)) return;
+            if (CONFIRM_SIGN_OUT.equals(script) ? confirmRenderedSignOut(activity, attempt, deadline)
+                : evaluateBoolean(activity, script, deadline)) return;
             SystemClock.sleep(250);
         }
         throw new AssertionError(refusal);
     }
 
-    private static void logoutRenderedQaSession(ActivityScenario<MainActivity> activity, NativeStateProbe probe,
-        String expectedRecipient, long deadline) throws Exception {
-        requireRenderedLogoutClick(activity, probe, expectedRecipient, OPEN_ACCOUNT_MENU, "NMPV_LOGOUT_MENU_REFUSED", deadline);
-        requireRenderedLogoutClick(activity, probe, expectedRecipient, SELECT_SIGN_OUT, "NMPV_LOGOUT_ROW_REFUSED", deadline);
-        requireRenderedLogoutClick(activity, probe, expectedRecipient, CONFIRM_SIGN_OUT, "NMPV_LOGOUT_CONFIRM_REFUSED", deadline);
+    static void logoutRenderedQaSession(ActivityScenario<MainActivity> activity, NativeStateProbe probe,
+        String expectedRecipient, LogoutAttempt attempt, long deadline) throws Exception {
+        requireRenderedLogoutClick(activity, probe, expectedRecipient, attempt, OPEN_ACCOUNT_MENU, "NMPV_LOGOUT_MENU_REFUSED", deadline);
+        requireRenderedLogoutClick(activity, probe, expectedRecipient, attempt, SELECT_SIGN_OUT, "NMPV_LOGOUT_ROW_REFUSED", deadline);
+        requireRenderedLogoutClick(activity, probe, expectedRecipient, attempt, CONFIRM_SIGN_OUT, "NMPV_LOGOUT_CONFIRM_REFUSED", deadline);
         boolean cleanupObserved = false;
         while (SystemClock.elapsedRealtime() < deadline) {
             if (evaluateBoolean(activity, SIGNED_OUT_VIEW, deadline) && !readVerified(activity, probe, expectedRecipient)) {
@@ -190,6 +231,51 @@ public class NativeMessagePreviewVerificationTest {
             SystemClock.sleep(250);
         }
         assertTrue("NMPV_LOGOUT_NOT_OBSERVED", cleanupObserved);
+    }
+
+    static long freshCleanupDeadline() {
+        return SystemClock.elapsedRealtime() + CLEANUP_TIMEOUT_MS;
+    }
+
+    static void cleanupRenderedQaSession(ActivityScenario<MainActivity> activity, NativeStateProbe probe,
+        String expectedRecipient, LogoutAttempt attempt, long deadline) {
+        try {
+            if (logoutRenderedQaSessionForCleanup(activity, attempt, deadline)) {
+                while (SystemClock.elapsedRealtime() < deadline) {
+                    if (!readVerified(activity, probe, expectedRecipient)) return;
+                    SystemClock.sleep(250);
+                }
+            }
+        } catch (Exception | AssertionError ignored) { /* Cleanup exposes only a fixed UNKNOWN label. */ }
+        throw new AssertionError("NMPV_QA_LOGOUT_CLEANUP_UNKNOWN");
+    }
+
+    private static boolean confirmRenderedSignOut(ActivityScenario<MainActivity> activity, LogoutAttempt attempt, long deadline)
+        throws Exception {
+        if (attempt.confirmationAttempted) return false;
+        // A lost/throwing callback cannot prove that the rendered confirmation was not dispatched.
+        attempt.confirmationAttempted = true;
+        boolean submitted = evaluateBoolean(activity, CONFIRM_SIGN_OUT, deadline);
+        if (!submitted) attempt.confirmationAttempted = false;
+        return submitted;
+    }
+
+    private static boolean logoutRenderedQaSessionForCleanup(ActivityScenario<MainActivity> activity, LogoutAttempt attempt, long deadline)
+        throws Exception {
+        boolean menuOpened = false, rowSelected = false;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (evaluateBoolean(activity, SIGNED_OUT_VIEW, deadline)) return true;
+            // Resume a partially completed rendered logout, but never replay a submitted confirmation.
+            if (!attempt.confirmationAttempted) {
+                boolean submitted = confirmRenderedSignOut(activity, attempt, deadline);
+                if (!submitted && !rowSelected && evaluateBoolean(activity, SELECT_SIGN_OUT, deadline)) rowSelected = true;
+                else if (!submitted && !menuOpened && !rowSelected && !evaluateBoolean(activity, LOGOUT_SURFACE_OPEN, deadline)) {
+                    menuOpened = evaluateBoolean(activity, OPEN_ACCOUNT_MENU, deadline);
+                }
+            }
+            SystemClock.sleep(250);
+        }
+        return false;
     }
 
     private static void fillRenderedLogin(ActivityScenario<MainActivity> activity, String email, String password,
@@ -206,7 +292,7 @@ public class NativeMessagePreviewVerificationTest {
         assertTrue("NMPV_LOGIN_CONTROL_REFUSED", filled);
     }
 
-    private static boolean readVerified(ActivityScenario<MainActivity> activity, NativeStateProbe probe,
+    static boolean readVerified(ActivityScenario<MainActivity> activity, NativeStateProbe probe,
         String expectedRecipient) {
         AtomicBoolean verified = new AtomicBoolean(false);
         AtomicBoolean readable = new AtomicBoolean(false);
@@ -220,7 +306,7 @@ public class NativeMessagePreviewVerificationTest {
         return verified.get();
     }
 
-    private static boolean evaluateBoolean(ActivityScenario<MainActivity> activity, String script, long deadline)
+    static boolean evaluateBoolean(ActivityScenario<MainActivity> activity, String script, long deadline)
         throws Exception {
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<String> result = new AtomicReference<>();
@@ -241,7 +327,7 @@ public class NativeMessagePreviewVerificationTest {
         return "true".equals(value);
     }
 
-    private static void requireClosedCapabilities(ActivityScenario<MainActivity> activity, long deadline)
+    static void requireClosedCapabilities(ActivityScenario<MainActivity> activity, long deadline)
         throws Exception {
         CountDownLatch done = new CountDownLatch(1);
         AtomicBoolean closed = new AtomicBoolean(false);

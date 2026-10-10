@@ -1,16 +1,23 @@
 # LETSCUBE — handover
 
 **Current continuation, 2026-10-10:** coordinator, branch
-`codex/bot-inline-media-20261002`, BASE `280c7b82`. Original native invocation
-deadline prerequisite is source/SDK accepted by03:14 Moscow: package-private
-immutable arm/clamp, separate deadline17/17, seven compiled mutants, affected
-legacy12/12, independent review, binding2/2 and one Android36 compile/readback
-16 sources/80 named classes/21 pins. Ordinary plugin path and protocol0 unchanged.
-Offline Realme vault R2 acceptance and exact cleanup remain valid; R1 remains
-FAILED. Next: QA-only genuine same-invocation verifier/actual MainActivity holder
-composition, then explicit choice/card/OS proof. No new APK/device/provider/SQL/
-main deployment; Stable0.1.14/build15/rich flags unchanged. Preserve sidebar/search
-dirty work; do not replay accepted Auth/SQL/R2 checks.
+`codex/bot-inline-media-20261002`, BASE `1194d50f`. QA-only genuine foreground
+composition source has feature-absence RED (18 actual sources), actual21-source
+boundary33/33 and16 compiled mutants; final affected ordinary/feature selection
+17/17. Cleanup now23/23, including cross-call confirmation replay controls;
+final production review found no remaining issues. Actual SDK R1 refused javac
+exit1; raw572-byte stderr was not retained. Sanitized diagnostic R2 also refused:
+one missing public AndroidX `DrawerLayout` definition. Next: exact cached API
+closure in a fresh R3; R1/R2 remain immutable. Early real MainActivity issuer,
+native-private one-use request, original deadline and exact retirement are wired
+behind a normal-build false guard. New SDK/full-QA device proof remains pending;
+the source alone is not acceptance. Next: diagnose/complete real dependency
+compile, then one isolated genuine Realme invocation and exact cleanup.
+Original-deadline source/SDK prerequisite and offline vault R2 remain accepted;
+offline R1 remains FAILED. No new APK install/provider/SQL/main deployment or Stable change.
+Android0.1.14/build15/protocol0/rich flags unchanged. Preserve sidebar/search dirty
+work; do not replay accepted Auth/SQL/R2 checks.
+[Current source stage and limits](operations/2026-10-10-native-preview-genuine-composition.md).
 [Current prerequisite and evidence](operations/2026-10-10-native-preview-original-deadline.md).
 [Next genuine QA route](operations/2026-10-10-native-preview-genuine-composition-plan.md).
 [Accepted offline composition and limits](operations/2026-10-10-native-preview-physical-composition.md).

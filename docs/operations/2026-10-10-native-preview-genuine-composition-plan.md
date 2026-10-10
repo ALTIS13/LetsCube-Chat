@@ -22,19 +22,12 @@ Supabase Auth/resolver transport and Node/JVM test harnesses; no new dependency.
 
 ## Resume Record
 
-Owner: coordinator. Repository `D:/CodexProjects/LetsCube-Chat`, branch
-`codex/bot-inline-media-20261002`; original planning BASE `e7d85a61`, physical
-composition now committed/pushed as `280c7b82`. Stage: first prerequisite completed
-for source/SDK, immutable original producer deadline; the full QA holder/plugin
-route below remains planned, not implemented. Evidence: source review accepted,
-deadline17/17, seven compiled mutants, affected legacy12/12, new binding controls2/2,
-one Android36 compile/readback16 sources/80 named definitions/21 pins; one accepted R2
-COMPOSE, all 33 flags true, exact-owned cleanup and primary/test/users preserved;
-13 production source pins unchanged. R1 remains FAILED. Blocker: no genuine
-producer caller or combined Auth/vault device acceptance yet. Next: implement
-and source-verify the single QA-only call path below, preserving the accepted
-original deadline. Coordinator rechecked repository/branch/dirty/index and preserves
-the unrelated sidebar/search work. The planner itself performed no Git effect.
+The single current resume record is in [HANDOVER](../HANDOVER.md); the
+[source-stage report](2026-10-10-native-preview-genuine-composition.md) records
+implementation, review and focused evidence. This approved plan remains the
+sequence, not a competing live status. The original planner performed no Git
+effect. Accepted original-deadline/Task5/D-355/offline R2 evidence is reused;
+R1 remains FAILED. Genuine combined Auth/vault physical acceptance is pending.
 
 R2 proves conditional offline AndroidKeyStore composition, not the actual
 MainActivity-only issuer, genuine Task5 producer, explicit preview choice,
