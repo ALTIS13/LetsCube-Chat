@@ -25091,6 +25091,16 @@ affected9/9/four compiled mutants and delta review accepted. Real kub typecheck,
 SDK/APK/device/background/card or release proof. D-335 stays OPEN; protocol0/rich/
 Stable unchanged. [Source boundary](operations/2026-10-10-native-preview-user-choice-source.md).
 
+Task2 source continuation is independently accepted: tagged existing hook/own-row
+ACK chain, fixed finite context and exact intent retirement; QA effective none.
+Initial73/73 reused with fresh affected38/38/ten mutants after three review P2s
+were named RED and corrected. New fictional guard controls24/24/four mutants,
+real kub typecheck and selected UI type delta passed. Actual Settings baseline/
+current browser runs and16 invented capture slots are pending: tool-rejected
+launch, existing old servers do not serve current hook. No Task2 rendered or
+Task3 native/person-choice acceptance, protocol1/rich or release claim. D-335
+remains OPEN; existing generic production/Stable unchanged. See source boundary.
+
 ## D-336 `[ ]` A bot file-id request can commit after authority is revoked during an existing wait
 
 **Severity:** high, message authority boundary. Tracker item 78. Found 2026-10-03

@@ -5,9 +5,14 @@ Status: active production-hardening tracker, updated 2026-10-10.
 **Active source stage,2026-10-10:** separate QA consent-only context/native intent
 Task1 SOURCE_ACCEPTED. Focused72/72 reused, review P2 independently RED then fixed,
 affected9/9/four compiled mutants, real kub typecheck and independent spec/quality
-review passed. Native capabilities remain literal0; no Task2 Settings/actual-choice,
-new SDK/APK/device, rich or release proof. Next: tagged existing hook and owner-row
-save/ACK chain. Unowned sidebar/search work preserved.
+review passed. Native capabilities remain literal0. Task2 tagged hook/owner-row
+save/ACK source is now independently reviewed: initial73/73 plus fresh
+affected38/38/ten mutants (49 unchanged checks reused), guard24/24/four mutants,
+real kub typecheck and selected UI types passed. Current Auth/inline expiry and
+negative-begin erasure fixes are accepted source only. Actual Settings RED/GREEN/
+pixels blocked by tool-rejected launch; older5391/5393 surfaces do not serve the
+current hook. Task3 remains pending; no rich/Stable/production/device change.
+Unowned sidebar/search work preserved.
 [Source evidence and limits](operations/2026-10-10-native-preview-user-choice-source.md).
 
 **Current continuation,2026-10-10:** isolated genuine foreground composition is

@@ -1,9 +1,9 @@
 # Native Preview User Choice Source
 
 Owner: coordinator. Branch `codex/bot-inline-media-20261002`, base `c4fea60a`.
-Stage: Task1 SOURCE_ACCEPTED, independent spec/quality review accepted.
-Next: Task2 existing Settings hook/save chain. [HANDOVER](../HANDOVER.md) is the
-live resume record. No SDK/device/choice acceptance is inferred.
+Stage: Task1 and Task2 source deltas independently reviewed; Task2 rendered
+acceptance remains pending. [HANDOVER](../HANDOVER.md) is the live resume record.
+No SDK/device/choice acceptance is inferred.
 
 ## Cause And Scope
 
@@ -56,7 +56,8 @@ Corrected probe/test SHA-256:
 
 ## Limits
 
-Task2 hook/actual Settings consumer and Task3 real-input QA remain unimplemented.
+Task2 hook/save chain is source-accepted below; its actual rendered Settings
+acceptance and Task3 real-input QA remain pending.
 SOURCE_GREEN is not SDK/APK/device/person-consent, server-save, background/card,
 FCM, OS privacy or release acceptance. Capabilities remain protocol0 and rich/
 nativePositive flags false. Stable0.1.14/build15 and production are unchanged.
@@ -64,3 +65,74 @@ No schema/provider/manual SQL change; no package was installed for this stage.
 
 [Approved contract and remaining sequence](2026-10-10-native-preview-user-choice-plan.md).
 [Accepted genuine prerequisite](2026-10-10-native-preview-genuine-composition.md).
+
+## Task2 Hook And Fixture Source
+
+The tagged QA branch reuses the unchanged actual Settings radios and account-owner
+write barrier. Current Auth owner/SID/accountEpoch and the native selector fence
+the strict finite context; intent revisions remain module-global across remount.
+Each selection requires checked native begin, fresh capability, exact own-row
+upsert ACK, fresh post-read, checked native confirm and final ownership/context
+recheck. QA effective choice is always literal none. Ordinary protocol0 remains
+unavailable; no protocol1 fallback or display grant is manufactured.
+
+Unknown ACKs can follow applied actions: preserve UNKNOWN, captured erasure
+target and server residue without automatic replay or rollback. A strict negative
+begin retains the prior erasure revision, not the refused request revision.
+The error now says that saving could not be confirmed, rather than asserting that
+nothing was saved. Saving retains the last confirmed radios and disables them.
+Disposal, Auth/lifecycle changes and inline expiry retire the captured intent.
+
+Initial actual-module feature-absence RED retained the ordinary protocol0
+zero-RPC/zero-upsert control. Initial source run73/73 includes14 runtime mutants.
+Independent review found three P2 issues: held load at session expiry skipped
+inline retirement; duplicate INITIAL_SESSION during refresh lost its identity;
+the negative begin fixture applied before returning false. All were named RED
+before correction. Fixing the fixture also exposed the wrong native erasure
+target, which was corrected in the hook. Fresh affected38/38 includes28 behavior
+controls and ten runtime mutants;49 unchanged prior checks are reused. This is
+not87 fresh PASS. Independent spec/quality delta review accepted; changed real
+kub typecheck and protected-input readback passed. Earlier genuine/SDK/SQL/device
+proof was not rerun or relabelled as consent.
+
+The new local fixture uses actual Settings/hook/typed adapters, with explicitly
+fictional native selector/wire and HTTP ports. Its baseline is the exact pre-Task2
+hook:9117 bytes, SHA256
+`6c3fce41a5175b7a6e63f09f13143e7204beb5b4eebc41d1c89a3c0bfd9e11e2`.
+Eleven authored browser cases and16 invented-element capture slots are unexecuted,
+not PASS results. Automatic screenshot/trace/video are off; mutations are zero.
+
+Initial fixture source compilation refused new casts/transformer typing.
+Independent review found redirect following, substring-only config selection and
+incorrect expiry retirement. Repairs bind the actual selected fixture URL/key,
+block redirects before every fetch, hide refused values, and retain one exact
+expiry-retire ACK. Selected three-root types now add zero diagnostics versus the
+independently compiled unchanged old helper's one existing diagnostic; this is
+not a claim that every historical test helper typechecks. A new actual-source
+guard suite passed24/24 including four omission mutants under fictional request/
+page ports. Independent fixture and guard-unit reviews accepted. No actual
+browser/network/native SDK result is inferred from these source controls.
+
+Current reviewed hook/unit pins:
+`ba7b8c19834efc7c00b1099d452080d55dde36572d1e0f0ee694b31308e7c150` /
+`99b27d85fcbf7791f659d4dcb4782475fa208bf25d69b17ace37fb0be18ce6c5`.
+Current fixture/guard-unit pins:
+`9c76fccadc8661f9e7158bd976af997d074946374f0a89af8897a3fd20c012c6` /
+`233a3317d9385fb9213933f9c5df010346c4b695248051bf6272ac630c529055`.
+
+## Rendered Blocker And Next Action
+
+The isolated Vite launch was rejected by the tool policy before execution.
+No retry, alternate launcher, process reconfiguration or workaround followed.
+No listener was found on5173/5185/5186/5187. Read-only inventory found older
+project Vite processes on5391/5393 with fictional configuration and a false QA
+marker. Hook requests there returned non-JavaScript200 without even the known
+hook/preference controls, including a fresh binding query. They cannot prove this
+slice's browser behavior; no spec was run against those unbound surfaces.
+
+Next is the calibrated actual Settings baseline/current run and pixels at
+1440/390, both themes, on a legitimate current-checkout fixture server. Then the
+already approved isolated owned-QA input/lifecycle stage can proceed. Do not mark
+Task2 complete, build a new actual QA artifact or promote from source checks.
+Task3 remains unimplemented; production/rich/Stable are unchanged. No provider,
+schema/manual SQL, Auth, device/rental or native-package operation ran in Task2.

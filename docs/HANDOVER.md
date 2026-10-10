@@ -1,14 +1,22 @@
 # LETSCUBE — handover
 
 **Current continuation, 2026-10-10:** coordinator, branch
-`codex/bot-inline-media-20261002`, Task1 source based on `c4fea60a`.
-Separate QA consent-only context/native intent and strict typed wrappers are
-SOURCE_GREEN: focused72/72,16 native/6 TS mutants and22-source readback; real kub
-typecheck passed. Test-quality P2 independently reproduced and fixed: independent
-arm-clock input, affected9/9 including four compiled mutants. Spec/quality delta
-review accepted,17 input/protected and22 Java pins matched. Next: existing Settings
-hook/save chain with full owner/context fences and honest UNKNOWN ACKs.
-No Task2/actual-choice QA, SDK/APK/device or display readiness claimed.
+`codex/bot-inline-media-20261002`, Task1 `de2f7beb` pushed with exact readback.
+Task1 accepted evidence is reused. Task2 hook fix round1 and fixture/guard source
+are independently spec/quality accepted: initial73/73 retained, fresh affected38/38 including ten runtime mutants;
+not87 fresh PASS. Inline expiry, retained Auth fingerprint and known-false begin
+were calibrated RED then fixed; changed real kub typecheck passed. UI source
+guard/type delta independently reviewed, selected types add zero errors against
+one unchanged old-helper diagnostic. New guard unit24/24/four mutants and frozen
+source pins match. Coordinator owns rendered checks and the feature-branch Git
+checkpoint; no main publication is part of this source stage.
+No Task2 rendered acceptance, actual-choice QA, SDK/APK/device or display readiness.
+Rendered blocker: new Vite launch was rejected by tool policy before execution;
+no retry or workaround. Read-only inventory found5391/5393 with fictional config
+but false QA marker; current-hook requests return non-JavaScript without the
+known hook/preference controls or new source markers. They cannot establish this
+slice's browser acceptance. Actual Settings RED/GREEN/pixels still require a
+legitimate current-checkout fixture server. Task3 stays pending, no device work.
 Protocol0/rich/Stable remain unchanged; sidebar/search dirty work preserved.
 [Source checkpoint and limits](operations/2026-10-10-native-preview-user-choice-source.md).
 
