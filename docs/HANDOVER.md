@@ -8,12 +8,18 @@ heading fix remains accepted; previous entry/image retained. Unowned sidebar/
 search files and Android metadata were excluded. Task3 quiet R2 source accepted,
 actual attempt refused at the screen gate before credentials/instrumentation;
 its exact test, target and observer are removed with protected state preserved.
-R11 owned QA21 installed; automatic mode refused an unrecognized AM launch ACK,
-before semantic/physical acceptance. Original false ACKs retained; read-only
-cleanup reconciliation confirms user0/users[0], fixture/profile absence and
-unchanged primary19/protected test. Stable stays 0.1.16/build17; private19 is not
-published. Next: bounded AM-response and screen-predicate diagnosis, then new
-strict native acceptance; do not replay either attempt or renew artifact age.
+R11 R3 source independently accepted: missing TotalTime is allowed only for the
+exact owned UNKNOWN(0) response. New QA22 launch ACK succeeds; the automatic
+attempt then refuses at the foreground boundary, with no semantic/physical
+result. Original failed ACKs remain intact. Read-only cleanup reconciliation at
+22:29:30 UTC confirms user0/users[0], fixture/profile absence and unchanged
+primary19/protected test. A separate screen-predicate read found the Realme
+screen off; wake was issued, not a reconstruction of Task3's old refusal.
+Stable stays 0.1.16/build17; private19 is not published and its original
+freshness deadline22:34:36 UTC has elapsed without native acceptance. Next
+product slice: delayed Realtime UPDATE undoing a confirmed notification read
+is reproduced and source-fixed, pending independent review/integration; preserve native
+diagnostics separately, do not replay either attempt or renew artifact age.
 No rich/person/display promotion or known cause for the tester's OS prompt.
 [Voice cause and actual rollout](operations/2026-10-12-voice-acquisition.md).
 [Owned Android attempts and cleanup](operations/2026-10-12-android-owned-qa.md).

@@ -1,6 +1,6 @@
 # Android Owned QA Checkpoint
 
-Owner: coordinator. Stage: two finite attempts retained, cleanup accepted;
+Owner: coordinator. Stage: three finite attempts retained, cleanup accepted;
 native acceptance and Android publication remain pending. Stable is still
 0.1.16/build17; protected private primary0.1.18/build19 remains unchanged.
 No personal UI, A063, production messages, provider or device settings changed.
@@ -50,9 +50,45 @@ current0/users[0], original users/protected apps and primary19 unchanged;
 no cleanup effect is replayed. Reconciliation receipt SHA:
 `93b6cb61c18ab6a1717ccbbd972331447dc4e7855667e1bd47cbbc40f2a27e63`.
 
-Next: a narrow actual-response parser diagnosis and a separately calibrated
-read-only screen-predicate probe. Preserve original ACKs/refusals, do not rebuild
-unchanged artifacts or repeat accepted unrelated tests. New native acceptance
-must use new exclusive custody and the unchanged strict automatic/physical
-gates. Candidate19 freshness is counted from its original16:34:36 UTC build,
-never renewed from these QA/source/web observations. Publisher remains uninvoked.
+## Follow-Up: Exact AM Shape And Current Screen
+
+Actual-source diagnosis proves the R2 parser requires TotalTime. UNKNOWN(0) was
+already an allowed state; changing only the state cannot repair the failure.
+The retained baseline has one RED and two causal controls. R3 source input
+`52c940ce`, READY `3f6cf6f7` permits omitted timing only for the exact ordered
+six-line owned UNKNOWN(0) shape. Present timing, transport, component, status,
+ASCII/footer and120s guards remain unchanged; no zero/WaitTime is invented.
+Six affected controls and two compiled mutants pass. Independent source review
+`492073cd` accepts; all other runtime modules and APK/proof are reused unchanged.
+
+Coordinator read-only check `a42a38` and source materialization `e1d416` pass.
+Only the exact new R3 directory has inheritance converted to explicit entries;
+existing administrator/system/owner rights remain. Prepare `8bab2d` and install
+`df0f92` create/hash-bind owned fictional QA22. Actual automatic `51103d` refuses
+after command29 launch is acknowledged=true/parsed=true, before semantic results.
+Command31 is the foreground activity metadata read, also clean/acknowledged;
+the actual failing predicate is not retained. No8/8 or physical4+4 is claimed.
+This new attempt does not reinterpret/replay the original R2 attempt.
+
+Cleanup `ce965f` preserves another failed removal ACK. Separate read-only
+reconciliation `8f8338`,22:29:30 UTC, confirms current0/users[0], QA22/fixture
+absence, original users and protected primary/test APK/UID/CE/DE unchanged.
+Receipt SHA: `fd89b5a3f4b0f420ce676428290219e3339bffc34f869a6adc025ca1ff0ba1fc`.
+No effect is replayed or personal application launched.
+
+Independent probe source `78153622` checks the pinned decoder with21 focused
+controls plus four affected controls; no worker SDK/device action. Coordinator
+one read-only measurement `4afcb1`,22:23:58 UTC, records three clean reads in399ms:
+screen-off/awake predicates fail, keyguard-unlocked predicates pass, decoder
+agrees. Receipt `eb2e85b0` retains only fixed booleans, timing, lengths and hashes,
+not raw dumps or personal content. This current read does not prove the reason
+for Task3's older refusal. One KEYCODE_WAKEUP command `2018b5` succeeds; no
+device setting or permission changes, and no new screen-ready claim follows it.
+
+Next: keep foreground diagnosis bounded, without guessing which erased predicate
+failed. Continue the independent notification read-state product fix. A fresh
+strict native matrix is still required before release, not another replay of
+this attempt. Candidate19 age is counted from original16:34:36 UTC build,
+deadline22:34:36 UTC; source/QA/web work cannot renew it. That deadline has now
+elapsed without native acceptance. A genuine new candidate is required rather
+than retimestamping the old record. Publisher is uninvoked.
