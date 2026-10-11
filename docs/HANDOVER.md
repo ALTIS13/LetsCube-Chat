@@ -1,5 +1,20 @@
 # LETSCUBE — handover
 
+**Current resume, 2026-10-12:** coordinator; Storage heading source `ad0be1dd`,
+narrow main/runtime `d8d116e7` accepted at 21:28:30 UTC. Exact healthy image,
+public/container JS+SW parity, old/new consumer and retained previous entry/image
+pass. The 12-case offline rendered matrix is reused; Android metadata and unowned
+sidebar/search files were excluded. Task3 fresh AndroidTest `b227d1b6` and actual
+DEX/Javac proof `dd7c0583` are independently accepted; runtime source READY
+`876ce591` awaits independent review and one finite owned-QA run/cleanup. R11
+preload-only APK `f51e2db4` is artifact-accepted; strict host review found an old
+launch-retention binding, corrected in a new source round before any device run.
+Task3 target/observer remain installed, Auth false. Stable stays 0.1.16/build17;
+private primary 0.1.18/build19 is not published. Next: Task3 runtime/cleanup,
+strict search automatic+physical matrix, then publisher acceptance. D-348 voice
+acquisition diagnosis runs independently. No rich/person/display promotion.
+[Storage cause, checks and actual rollout](operations/2026-10-11-storage-heading.md).
+
 **Current resume,2026-10-11:** coordinator; source checkpointbf2fe7bf,
 web/main323c4988 accepted; private Android0.1.18/build19 upgrade2732031c accepted.
 Realme QA20 native bounds APKcc9ee812/proof914addfb and one light touch sequence

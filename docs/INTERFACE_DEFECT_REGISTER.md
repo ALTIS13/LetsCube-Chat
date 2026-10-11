@@ -15182,6 +15182,18 @@ the muting direction and, as above, not in the other.
 
 ## D-222 `[~]` A viewport breakpoint deciding a layout that lives in a column the owner drags
 
+**2026-10-12 Storage heading follow-up closure (Codex):** The actual heading's
+anonymous text and hint were separate wrapping flex items: at the 260px Settings
+measure the hint occupied an orphan row. Byte-identical old source reproduces the
+geometric failure at 1440/390 in both themes. A title span with `min-w-0` and a
+non-wrapping outer flex row keeps complete wrapping text beside the visible hint.
+Offline actual-component matrix 12/12, three calibrated mutants in all four
+viewport/theme states, marker unit 3/3, typecheck and real integration build pass.
+Narrow main/runtime `d8d116e7` is healthy, public/container JS+SW byte-identical;
+actual old/new consumer counts change 1/0 to 0/1 and previous entry/image remain.
+This closes only the Storage orphan-hint follow-up, not every D-222 item or native
+Windows acceptance. [Evidence and limits](operations/2026-10-11-storage-heading.md).
+
 **2026-09-23 narrow device title closure (Codex):** The 260px settings
 stress case still clipped «Неизвестное устройство» because its title used
 `truncate`. The existing `session-devices.spec.ts` reproduced the clipped

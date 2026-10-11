@@ -1,6 +1,17 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-11.
+Status: active production-hardening tracker, updated 2026-10-12.
+
+**Current actual checkpoint, 2026-10-12:** D-222 Storage heading follow-up is
+source/render/runtime accepted, not closure of the whole D-222 class. Narrow main
+`d8d116e7` is healthy; actual public/container JS+SW parity and old/new heading
+consumer pass, previous entry/image retained. No Android metadata or unfinished
+native feature was promoted. Source `ad0be1dd` is on the feature remote. Task3
+fresh test-only APK `b227d1b6` and DEX/Javac proof `dd7c0583` pass independent
+artifact review; finite runtime/cleanup remains pending. R11 artifact `f51e2db4`
+is accepted, but host launch-retention binding needs a new reviewed source round.
+Stable remains 0.1.16/build17; private primary19 is not a published release.
+[Storage rollout and bounded evidence](operations/2026-10-11-storage-heading.md).
 
 **Latest actual checkpoint,2026-10-11:** private Android0.1.18/build19 upgrade
 and protected-state proof2732031c are reused. New bounds APKcc9ee812/proof914addfb

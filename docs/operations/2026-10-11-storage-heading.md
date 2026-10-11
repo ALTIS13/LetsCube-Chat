@@ -152,3 +152,37 @@ authenticated, production, deployment or general search acceptance. No Auth,
 network, device, SDK, Git, signing or publication effects occurred. No broad
 suite or unchanged historical tests were rerun. The coordinator owns integration,
 actual application-bundle marker comparison and any release actions.
+
+## Coordinator Integration And Actual Rollout
+
+Source commit `ad0be1dd35bc16d8bed6fd8a9612c5a9e662fca0` is pushed on the feature
+branch. Independent review accepted the exact source/render change. A main-based
+tree cherry-picked only these six reviewed paths as
+`d8d116e7a049f357dade0f79cb5d8364b3ca4bc2`; seven aliases resolve in its own tree.
+Unfinished native work, dirty Android version metadata and unowned sidebar/search
+files were not included. Actual component/dependency bytes match the rendered
+fixture inputs, so the accepted matrix was reused rather than replayed.
+
+Integration typecheck, marker unit 3/3 and diff check passed. The actual Vite build
+printed `sw.js build280007a5bbf61f00` and `built in 21.04s`; existing sourcemap,
+mixed-import and chunk-size warnings remain. The local configured fixture build
+is not a production hash expectation. Its actual compiled consumer is 0 old / 1
+new. Own-branch push preceded the non-forced `HEAD:main` push; main readback agrees.
+
+Read-only production proof at **2026-10-11T21:28:30.466Z**:
+
+- Sole healthy container `6a235eb990e2`, intended full-revision image `d8d116e7`.
+- Image ID `sha256:bbbae8b4e57dae0c2f139babf1971a6c9c24087497c01d70631c33ed0e9642dc`.
+- Public entry `/assets/index-DQPJ4G5x.js`, SHA-256
+  `46f60bf304ab4a272bf022b3eefbdecee7647b6602dd2fe91b08a94b8dd393a3`.
+- Service Worker SHA-256
+  `43bf07d7d004a3763e9e981edc582d9fc3c5038346135ad5c835332df9eb2e2f`.
+- Both public hashes equal the running container files; initial/end runtime
+  identity is unchanged. Associated heading consumer changes from 1 old / 0 new
+  to 0 old / 1 new. Previous `323c4988` image and entry bytes remain available.
+- Private sanitized proof SHA-256
+  `33a33a8e106dc18eb59fb0bde2ed73021a9181d0bcee437072cea62db58c1484`.
+
+No authenticated page, production screenshot, database mutation, Android release
+change or native activation was performed. The offline pixels and runtime
+consumer/byte proof are distinct; Windows WebView2 acceptance is not asserted.

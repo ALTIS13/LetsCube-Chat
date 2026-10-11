@@ -1,5 +1,18 @@
 # QA Results
 
+## 2026-10-12 - Storage Heading Narrow Rollout
+
+Source `ad0be1dd`, narrow main `d8d116e7`: actual old-component geometric RED,
+12/12 offline rendered cases at 1440/390 both themes, three calibrated source
+mutants, marker unit 3/3, typecheck and real integration build pass. A later
+assertion-order change reran only two affected cases; unchanged evidence is reused.
+The integration build printed `sw.js build280007a5bbf61f00` and `built in 21.04s`.
+Actual production at 21:28:30 UTC runs the sole healthy intended image; public and
+container JS+SW hashes agree, old/new associated heading consumer changes 1/0 to
+0/1, previous entry/image retained. No DB mutation, Android release or native
+activation. This is not Windows WebView2 or general interface acceptance.
+[Full evidence](operations/2026-10-11-storage-heading.md).
+
 ## 2026-10-03 - Exact Variant Claim Ownership
 
 D-339 queue repair runtime `8da252ad` is deployed: sole healthy web/worker/Gateway
