@@ -4569,6 +4569,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     No offline logout, natural delivery, rich preview or new release acceptance.
     [Cause and proof boundary](operations/2026-10-10-push-session-retirement.md).
 
+95. `[~]` Notification actions must retire with their session or replacement
+    action, **D-356**, reproduced2026-10-11. Held read/invite/access responses
+    and delayed message jumps could navigate, select or alert after logout,
+    account replacement, same-person new-session epoch or unmount. The read
+    hook's own protection did not cover this bell consumer. Narrow owner/epoch/
+    mount/action guards and exact selected-chat jump checks are implemented;
+    actual mounted fictional Chromium worker61/61 including18 compiled omission
+    mutants, original23 behavioral RED, coordinator kub typecheck/diffcheck pass.
+    Independent review and narrow main build/runtime checks remain pending.
+    Android candidate18 predates this fix; do not claim bundled Android parity
+    or explain D-349/natural OS delivery from these consumer tests.
+    [Cause and acceptance boundary](operations/2026-10-11-notification-click-lifetime.md).
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.

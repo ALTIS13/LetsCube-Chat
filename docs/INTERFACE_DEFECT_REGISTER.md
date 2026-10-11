@@ -25650,6 +25650,28 @@ unfinished native-preview commits excluded.
 Offline server logout, natural FCM/OS display and rich-preview acceptance remain
 outside this fix. [Evidence](operations/2026-10-10-push-session-retirement.md).
 
+## D-356 `[~]` A pending notification action can navigate after session replacement
+
+**Severity:** high account-boundary and navigation risk; shared bell consumer,
+reproduced2026-10-11 with fictional provider responses.
+
+**Surface:** `artifacts/kub/src/components/sidebar/NotificationBell.tsx`,
+notification/group clicks, invite accept/decline and the delayed message jump.
+
+**Observed cause:** read/invite/chat-access awaits and the150ms jump used a
+retired handler without checking current owner, account epoch, mounted lifetime
+or replacement action. Manual selection of another chat did not retire the jump.
+The notification hook's read guards protected its own state, not this consumer.
+
+**Current work:** narrow action-lifetime and selected-chat guards; existing
+`safeOpenChat(canCommit)` is reused. Backend RPCs already issued are not replayed
+or cancelled. Actual mounted worker61/61 including18 compiled omission mutants,
+23 behavioral RED against the original source; coordinator typecheck/diffcheck
+pass. Independent review and actual main build/runtime remain pending.
+No markup/style, schema, provider or permission changes. Android candidate18
+does not contain the fix. No natural FCM/card-click or D-349 explanation follows.
+[Evidence and boundary](operations/2026-10-11-notification-click-lifetime.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;
