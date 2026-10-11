@@ -783,6 +783,7 @@ export function MessageInput({
   const handleRecorderPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0 || isAttachmentBusy) return;
     event.preventDefault();
+    if (voiceHoldActiveRef.current) return;
     recorderPointerStartRef.current = { x: event.clientX, y: event.clientY };
     recorderPointerDownAtRef.current = Date.now();
     recorderPointerIdRef.current = event.pointerId;
