@@ -1,6 +1,16 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-10.
+Status: active production-hardening tracker, updated 2026-10-11.
+
+**Current continuation,2026-10-11:** direct owner resume. Task2 actual fictional
+Settings acceptance26/26 (nine reused +17 new),32 inspected1440/390 light/dark
+states, scoped close-control repair and observer-counter RED/GREEN8/8. Exact
+immutable bundles reused, no listener/rebuild. Original failed attempts and
+counter receipt retained; correction is explicit, not replay. Task3 actual owned
+Android QA choice/lifecycle is now source/build preparation with composition=false;
+no actual choice/person/display acceptance yet. Protocol0/effective-none/rich
+flags and production remain unchanged. EnterStable0.1.16/build17 already accepted.
+[Current evidence](operations/2026-10-10-native-preview-choice-bundle.md).
 
 **Urgent Enter parity, accepted2026-10-10:** source/main6d8f2a55; shared web
 runtime verified and Android Stable0.1.16/build17 accepted19:10 Moscow by full

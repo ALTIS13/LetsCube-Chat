@@ -40,9 +40,9 @@ function transpile(source, filename, module = ts.ModuleKind.CommonJS, transforme
 function harness(helperSource = sources.helper, flags = {}) {
   const cache = new Map();
   const dependencies = {
-    "./messageActionsFixture": "shared", "./settingsColumnFixture": "settings",
-    "./nativeMessagePreviewUserChoiceBaseline": "baseline",
-    "../../../artifacts/kub/src/lib/supabase/config": "config",
+    "./messageActionsFixture.ts": "shared", "./settingsColumnFixture.ts": "settings",
+    "./nativeMessagePreviewUserChoiceBaseline.ts": "baseline",
+    "../../../artifacts/kub/src/lib/supabase/config.ts": "config",
   };
   const env = { KUB_QA_ALLOW_MUTATIONS: "0", KUB_QA_CHOICE_HOOK: "current", ...flags };
   function load(name) {

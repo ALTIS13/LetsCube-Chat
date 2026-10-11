@@ -1,5 +1,23 @@
 # LETSCUBE — handover
 
+**Current resume, 2026-10-11:** coordinator, direct owner resume; branch
+`codex/bot-inline-media-20261002`, base `d8c6a4bf`. Task2 actual fictional Settings
+matrix accepted26/26: nine original Chromium cases reused,17 remaining Chromium/
+WebKit cases run against the same three immutable bundles, no rebuild/listener.
+All32 exact-element states inspected at1440/390, both themes. Close control is
+now uniquely scoped; RED phone cardinality2 -> GREEN. Independent review accepted
+retained-byte boundaries and found a summary-counter alias: RED26 !=9 -> fixed
+copy, original receipt preserved with explicit9+17 correction, no browser replay.
+Fresh affected observer tests8/8; previous43/43 builder/oracle checks and24/24
+fixture guards reused. Task3 Android source and fresh composition=false QA build
+preparation are in progress with disjoint workers; coordinator owns actual build/
+device/cleanup. Protocol0/effective-none/rich guards remain closed, no production
+feature promotion. Enter web/main6d8f2a55 and AndroidStable0.1.16/build17 unchanged;
+protected sidebar/search work preserved. Next: source checkpoint, real SDK artifact
+and one finite automated owned-QA Settings sequence, not person consent.
+[Current fixture evidence](operations/2026-10-10-native-preview-choice-bundle.md).
+[Historical pause](operations/2026-10-10-owner-pause-checkpoint.md).
+
 **Current continuation, 2026-10-10 19:10 Moscow:** coordinator; urgent phone
 Enter slice is source/main `6d8f2a55`, accepted web runtime and nonmandatory
 Android Stable0.1.16/build17. Public full APK verifier/redownload and four

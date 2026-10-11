@@ -141,7 +141,8 @@ test("lost confirm ACK: late applied reply cannot republish or replay", async ({
   } finally { await choiceWireControl(page, "releaseConfirm"); }
   await expect(row.getByRole("button", { name: "Повторить", exact: true })).toBeVisible();
   await expect(row.locator('input[type="radio"][value="sender"]:checked')).toHaveCount(0);
-  await page.getByTestId("settings-close").click();
+  await page.getByTestId("settings-close").or(
+    page.getByTestId("settings-actions").getByRole("button", { name: "Закрыть", exact: true })).click();
   expect(fixture.writes).toEqual(["sender"]);
   expect((await choiceWireSnapshot(page)).confirms).toBe(1);
 });
@@ -154,7 +155,8 @@ test("disposal during held confirm erases captured intent without late Settings 
   try {
     await row.getByRole("radio", { name: "Имя отправителя", exact: true }).click();
     await expect.poll(async () => (await choiceWireSnapshot(page)).confirms).toBe(1);
-    await page.getByTestId("settings-close").click();
+    await page.getByTestId("settings-close").or(
+      page.getByTestId("settings-actions").getByRole("button", { name: "Закрыть", exact: true })).click();
     await expect(row).toHaveCount(0);
     await expect.poll(async () => (await choiceWireSnapshot(page)).terminal).toBe(true);
   } finally { await choiceWireControl(page, "releaseConfirm"); }

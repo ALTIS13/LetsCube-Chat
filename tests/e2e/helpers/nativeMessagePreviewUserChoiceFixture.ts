@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import ts from "typescript";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import { FIXTURE_HOST, requireFixtureServer } from "./messageActionsFixture";
-import { ME, openSettingsScreen } from "./settingsColumnFixture";
-import { BASELINE_HOOK_BASE64, BASELINE_HOOK_BYTES, BASELINE_HOOK_SHA256 } from "./nativeMessagePreviewUserChoiceBaseline";
-import { resolveSupabaseConfig, type SupabasePublicEnv } from "../../../artifacts/kub/src/lib/supabase/config";
+import { FIXTURE_HOST, requireFixtureServer } from "./messageActionsFixture.ts";
+import { ME, openSettingsScreen } from "./settingsColumnFixture.ts";
+import { BASELINE_HOOK_BASE64, BASELINE_HOOK_BYTES, BASELINE_HOOK_SHA256 } from "./nativeMessagePreviewUserChoiceBaseline.ts";
+import { resolveSupabaseConfig, type SupabasePublicEnv } from "../../../artifacts/kub/src/lib/supabase/config.ts";
 
 // All identities and both external ports below are fictional. No native SDK is exercised.
 export const CHOICE_SESSION = "22222222-2222-4222-8222-000000000001";
@@ -260,6 +260,10 @@ async function fictionalNativePorts(page: Page, armed: boolean) {
   } else {
     if ((process.env.KUB_QA_CHOICE_HOOK ?? "current") !== "current") throw Error("FIXTURE_HOOK_MODE_REFUSED");
   }
+  await installFictionalChoiceWire(page, armed);
+}
+
+export async function installFictionalChoiceWire(page: Page, armed: boolean) {
   await page.addInitScript(({ owner, session, device, contextId, armed }) => {
     const wire = window as unknown as Record<string, unknown>;
     const methods = ["getCapabilities", "getQaUserChoiceContext", "beginQaUserChoice", "confirmQaUserChoice", "retireQaUserChoice"];
@@ -335,6 +339,10 @@ async function fictionalNativePorts(page: Page, armed: boolean) {
 
 export async function openChoiceSettings(page: Page, options: { armed?: boolean; theme?: Theme } = {}) {
   await fictionalNativePorts(page, options.armed ?? true);
+  return openChoiceSettingsWithPreparedPorts(page, options);
+}
+
+export async function openChoiceSettingsWithPreparedPorts(page: Page, options: { theme?: Theme } = {}) {
   let level: Choice = "none", refuseWrite = false, releaseWrite: (() => void) | undefined;
   let heldWrite: Promise<void> | undefined;
   const writes: Choice[] = [], rpcArgs: unknown[] = [];

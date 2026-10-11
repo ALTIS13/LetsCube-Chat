@@ -7,7 +7,7 @@ import {
   person,
   type Row,
   type RpcAnswer,
-} from "./messageActionsFixture";
+} from "./messageActionsFixture.ts";
 
 /**
  * The settings screen, seeded and reachable without signing in.
