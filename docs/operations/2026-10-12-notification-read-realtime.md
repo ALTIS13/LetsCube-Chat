@@ -1,7 +1,7 @@
 # Notification Read: Delayed Realtime UPDATE
 
-Owner: coordinator and bounded source author. Stage: SOURCE_ACCEPTED; independent
-review accepts; actual web rollout pending. This is a specific
+Owner: coordinator and bounded source author. Stage: WEB_RUNTIME_ACCEPTED;
+independent review accepts; narrow main/runtime cc0f164d verified. This is a specific
 state-consumer defect found while investigating item85/D-349, not proof of the
 tester's unidentified OS notification symptom.
 
@@ -64,5 +64,26 @@ not the production image or native bundle acceptance.
 The in-app read-state race is separate from natural push delivery, system-card
 history/removal, Android bundled parity and the reported tester client/build.
 Those outcomes remain unmeasured; do not close all of D-349 from this repair.
-Next: own-tree imports and
-healthy image/public-container markers before declaring web acceptance.
+## Actual Web Rollout
+
+Final narrow tree cc0f164dfc589870ed5c16c766d92f2bf91c3755 contains three
+reviewed commits, seven changed code/test files and24 resolved own-tree aliases;
+Android metadata remains unchanged. Actual combined typecheck passes; Vite build
+prints `sw.js build47dcfc10721892e2` and `built in12.02s`. Local compiled
+notification and send-epoch consumers are both old0/new1; fixture bundle hashes
+are not production expectations.
+
+Before22:56:38 UTC, runtime0176253a has both consumers old1/new0. After22:59:56 UTC,
+the sole healthy container7c43fa7ed429 uses exact image cc0f164d, immutable ID
+de435cc76836768a26f4afc60757ab7743bcbb7700fb2c3e4f768fa411993732.
+Public `/assets/index-BQrCIMoW.js` SHA
+b277f17748b3076cc3323564d471c72a36de27c969587a837b3c6ad381decb8f and SW SHA
+9cd2555cac567fbaf69e0cb747d34bb447e73ef9bdb683c18bd321f918acc5a9 match the
+container files. Both consumers change to old0/new1; accepted Voice/Storage
+consumers remain old0/new1. Previous017 entry bytes and image ID remain available.
+Read-only receipt `.ops-private/notification-update-rollout-20261012/publication-after.json`
+is retained privately. No DB mutation, native activation or Android publication.
+Fresh anonymous Chromium smoke051383 at23:01:31 UTC mounts home and follows its
+actual login link, using the accepted new entry, with0 page errors/0 mutation
+requests. No personal session, screenshots, traces, video or downloads. This
+does not execute authenticated notification/audio actions.

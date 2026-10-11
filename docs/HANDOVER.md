@@ -1,5 +1,23 @@
 # LETSCUBE — handover
 
+**Current resume, 2026-10-12:** coordinator; main/runtime `cc0f164d` accepted
+22:59:56 UTC. Delayed Realtime UPDATE no longer undoes a confirmed notification
+read; pending outgoing ACK sound retires with its session epoch. Real-source
+RED/GREEN5+6 checks and independent reviews accepted, combined typecheck/build
+pass,24 own-tree aliases resolve. Both compiled consumers change old1/new0 to
+old0/new1; sole healthy exact image, public/container JS+SW parity and retained
+prior entry/image pass. Voice/Storage fixes remain accepted. No SQL or native
+release change; preserve unowned sidebar/search files and Android metadata.
+Stable Android stays0.1.16/build17. Private19 freshness expired; QA22 cleanup
+is accepted, foreground diagnosis still open, no8/8/native acceptance. Next:
+bounded actual chat-load diagnosis and privacy-safe foreground predicate
+classification, then a genuinely fresh Android candidate; do not replay accepted
+Enter/FCM/voice tests or renew artifact age. Item79 has no new source cause;
+installed emoji artifact/preference evidence remains missing.
+[Notification read and web rollout](operations/2026-10-12-notification-read-realtime.md).
+[Send cue ownership](operations/2026-10-12-message-send-sound-epoch.md).
+[Owned Android evidence](operations/2026-10-12-android-owned-qa.md).
+
 **Current resume, 2026-10-12:** coordinator; narrow main/runtime `0176253a`
 accepted at 22:00:43 UTC. Voice duplicate-pending-pointer guard is deployed:
 53 affected checks, independent review, real build/typecheck, 36 own-tree aliases,

@@ -1,5 +1,27 @@
 # QA Results
 
+## 2026-10-12 - Confirmed Notification Read And Pending Send Cue
+
+Actual-source notification read race RED ->5/5 including compiled omission;
+schema-correct payload.preview correction reruns only those5, zero skips. Pending
+send cue crosses same-user epoch RED ->6/6 including omission; actual player
+executes against fictional AudioContext/state ports. Independent reviews accept
+both. Historical unrelated suites are reused, not fresh all-suite PASS.
+
+Narrow combined main cc0f164d: typecheck passes, real Vite build
+`47dcfc10721892e2`/12.02s,24 own-tree aliases resolve; protected Android metadata
+and unowned sidebar/search files excluded. Actual deployed sole healthy exact
+image22:59:56 UTC, both consumers old1/new0 ->old0/new1, public/container JS+SW
+hashes match, previous entry/image retained. Voice/Storage remain accepted.
+Fresh anonymous Chromium smoke051383 at23:01:31 UTC mounts home and reaches
+login through the real public link using the accepted new entry:0 page errors,
+0 mutation requests, no personal session/screenshots/traces/video/downloads.
+No SQL, native activation, speaker audibility or Android publication acceptance.
+AndroidStable17 unchanged; private19 expired, QA22 foreground failure retained
+and exact-owned cleanup reconciled read-only. No old Android scenario replay.
+[Notification evidence](operations/2026-10-12-notification-read-realtime.md).
+[Sound evidence](operations/2026-10-12-message-send-sound-epoch.md).
+
 ## 2026-10-12 - Voice Guard And Owned Android QA
 
 Voice pending-pointer acquisition: original source6 PASS/2 RED, final affected

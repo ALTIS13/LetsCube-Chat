@@ -25404,6 +25404,12 @@ audibility/autoplay proof and not a fix for the
 separate incoming-notification absence follow-up,item76/D-335.
 [Evidence and release gates](operations/2026-10-05-send-sound-web-rollout.md).
 
+**2026-10-12 follow-up:** pending resume could cross a same-user new session.
+Actual player RED2 oscillator starts -> epoch guard, focused6/6 incl omission,
+independent review accepted. Main/runtime cc0f164d healthy; actual old/new
+consumer and public/container JS+SW parity pass. Installed audibility remains
+separate. [Evidence](operations/2026-10-12-message-send-sound-epoch.md).
+
 ## D-344 `[~]` An older notification can overwrite a newer chat/message selection
 
 **Severity:** medium interaction/ownership defect under item76. Actual shared
@@ -25523,7 +25529,13 @@ D-335 preview context, D-344 activation, D-345 account retirement or D-347.
 **Acceptance:** reproduce the applicable read/ACK/cleanup path. It must belong to
 the current recipient/epoch and only the confirmed read horizon; neither a late
 ACK nor old-chat cleanup may remove a new owner's or unread replacement card.
-Source diagnosis is in progress; real OS/device evidence remains separate.
+**2026-10-12 source finding:** stale unread Realtime UPDATE erased a successful
+read RPC timestamp. Known-row UPDATE now reuses existing monotonic read merge;
+real-source RED ->5/5 incl omission, independent review accepted. Narrow
+main/runtime cc0f164d has both-direction compiled consumer and public/container
+JS+SW parity proof. This repairs in-app state, not the tester's unknown OS card
+history. Real OS/device evidence remains separate.
+[Repair and rollout](operations/2026-10-12-notification-read-realtime.md).
 [Intake, dedup and evidence limits](operations/2026-10-07-tester-feedback.md).
 
 ## D-350 `[x]` Retired microphone acquisition or recording completion can alter a replacement hold

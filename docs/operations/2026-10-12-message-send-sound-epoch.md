@@ -1,7 +1,8 @@
 # Message-Sent Cue: Session Epoch
 
-Owner: bounded source author and coordinator. Stage: SOURCE_ACCEPTED; independent
-review `e1b0b458` accepts with no actionable findings; web integration pending.
+Owner: bounded source author and coordinator. Stage: WEB_RUNTIME_ACCEPTED;
+independent review `e1b0b458` accepts with no actionable findings; narrow
+main/runtime cc0f164d verified22:59:56 UTC.
 Item83/D-343 remains partial for installed
 speaker audibility; this repair concerns a reproduced asynchronous ownership race.
 
@@ -27,3 +28,11 @@ Hook SHA: `fbfc4a344d728683faf54eb642c65c804702dee363be4502a97747a8f2a07b75`.
 Test SHA: `ce0a208ae9353016b1f4a2ac78682a03817b84192fc200aa10ca4a774856bd7b`.
 Player/policy remain byte-identical. Fictional scheduling does not prove real
 speaker audibility, browser autoplay, native sound or a production Auth transition.
+
+Actual combined typecheck/build pass: Vite `sw.js build47dcfc10721892e2`,12.02s.
+Private AST observer69be5f6a follows the actual messageSent cue/allowed closure,
+not a generic epoch string. Retained production017 is old1/new0; actual new
+local build and healthy deployed cc0f164d are old0/new1. Public/container
+JS+SW parity, unchanged Voice/Storage consumers and previous entry/image retention
+pass. This deploy adds no player/outbox/SQL/native change and proves no speaker
+audibility. [Combined rollout](2026-10-12-notification-read-realtime.md#actual-web-rollout).

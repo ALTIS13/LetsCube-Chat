@@ -2,6 +2,18 @@
 
 Status: active production-hardening tracker, updated 2026-10-12.
 
+**Current actual checkpoint,2026-10-12:** narrow main/runtime cc0f164d accepted
+22:59:56 UTC. Confirmed in-app read survives delayed Realtime UPDATE; pending
+outgoing sound cannot cross same-user session replacement. Actual-source5/5 and
+6/6 incl compiled omissions, independent reviews, combined typecheck/build and
+24 own-tree aliases pass. Healthy exact image, both old/new compiled consumers,
+public/container JS+SW parity and retained previous entry/image pass. Voice/
+Storage remain accepted; no DB/native release change. QA22 foreground refusal
+and read-only cleanup are retained; private19 expired, Stable stays17. Next:
+bounded chat-load and foreground diagnosis without old scenario replay.
+[Notification read](operations/2026-10-12-notification-read-realtime.md).
+[Pending sound epoch](operations/2026-10-12-message-send-sound-epoch.md).
+
 **Current actual checkpoint, 2026-10-12:** narrow main/runtime `0176253a` is
 healthy, with public/container JS+SW parity and retained prior entry/image. Voice
 duplicate-pending-pointer repair passes 53 affected checks and independent review;
@@ -4502,6 +4514,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     deduplicated under item76/D-335, not asserted repaired by outgoing sound.
     [Evidence and release gate](operations/2026-10-05-send-sound-web-rollout.md).
 
+    Follow-up2026-10-12: actual pending AudioContext resume crossed a same-user
+    new-session epoch. Captured/live epoch guard passes behavioral RED ->6/6 incl
+    omission; narrow main/runtime cc0f164d accepted, actual old/new consumer and
+    JS+SW parity verified. Real speaker/device audibility stays open.
+    [Follow-up](operations/2026-10-12-message-send-sound-epoch.md).
+
 84. `[ ]` Another voice-message recording reportedly asks for microphone access
     again. **D-348**, grounded reported_UNVERIFIED intake, 2026-10-07. Platform,
     build and system/app prompt are unknown. Inspect actual recorder/consumer and
@@ -4518,7 +4536,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     reported_UNVERIFIED intake, 2026-10-07. Identify in-app centre versus OS card
     and the confirmed read horizon. Audit current recipient/epoch and delayed ACK
     cleanup independently of D-335/344/345/347; do not remove unread replacement
-    cards. Source diagnosis is in progress, not a delivery or OS acceptance claim.
+    cards. A concrete in-app cause is repaired2026-10-12: stale unread UPDATE
+    could erase successful read RPC state. Behavioral RED ->5/5 with omission,
+    independent review and actual main/runtime cc0f164d accepted. Only known-row
+    merge changes; no OS card/removal/delivery or Android parity acceptance.
+    [Source finding and web rollout](operations/2026-10-12-notification-read-realtime.md).
     [Intake and limits](operations/2026-10-07-tester-feedback.md).
 
 86. `[ ]` Frequent reloads while working with tasks, preliminary
