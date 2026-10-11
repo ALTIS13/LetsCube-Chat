@@ -2,7 +2,7 @@
 
 Status: active production-hardening tracker, updated 2026-10-11.
 
-**Current continuation,2026-10-11:** coordinator, feature checkpointb920f0b7.
+**Current continuation,2026-10-11:** coordinator, feature checkpointdd28cea3.
 Shared search-focus and Bell consumer-lifetime fixes are live at main323c4988;
 exact healthy image, old/new markers, public/container JS+SW parity and retained
 previous assets are accepted. Unchanged source/browser proof is reused; item93
@@ -25,8 +25,28 @@ has59 source pins/17 records. One actual attempt refuses screen readiness before
 credentials/instrumentation; exact owned test/target/observer cleanup all pass.
 No Auth, Settings choice/save or historical ARM cause is claimed. Candidate19
 APK7597eb9b/AAB3cf60599 are built once from main323c4988 after preserving82 files;
-artifact inspection refuses. Restore the accepted direct-Java observer transport
-with new reviewed inputs, retaining the original unknown failure and all bytes.
+first artifact inspection refuses. Independently reviewed direct-Java transport
+and separate CLI entry now admit actual existing19 inspection: canonical signer,
+Firebase four digests,36 web files and compiled search pass at17:42 UTC. No rebuild,
+device acceptance or publication. Original refusal remains unknown; the separately
+observed Node self-import cycle is fixed, not attributed to that first failure.
+R9 source and finite SDK executor are independently accepted; actual source-only
+CLI check passes and one14-stage compile/repack passes (APK1213fcd0); independent
+artifact/host reviews pass. Fresh QA18 automatic refuses at light Back's no-focus
+assertion (visible/empty/focused, terminal3), with zero page/resource errors;
+this does not prove a product regression or the old dark-watchdog cause. QA18/
+fixture absence and primary18/test preservation are reconciled; failed remove
+ACK remains failed. Offline Chromium/WebKit18-path actuation calibration completes:
+DOM clicks do not guarantee focus transfer; display-none does not reproduce R9.
+This is not actual React/native proof. R10 stable-terminal reader is independently
+SOURCE_ACCEPTED; strict semantic gates stay unchanged, no new host/device run.
+The actual R9 APK lacks independent passive initialization; a separate one-preload
+entry offline navigation derivative is next, not an automatic8/8 waiver.
+Private19 R2 fixes the reviewed late-save deadline/final-journal boundary;
+independent source acceptance, exact DACL and source-only check pass, no install.
+Realme public dismissal/
+wake has a fresh screen-ready measurement. MobileNext remote catalogue works;
+no paid device has been allocated. Retain all prior bytes and failed receipts.
 Stable remains0.1.16/build17. Protocol0/effective-none/rich/person/display gates
 remain closed. Next: bounded device search and fresh ARM diagnosis, then a new
 Android physical acceptance including Bell parity. Do not replay accepted Enter/FCM.
@@ -7556,8 +7576,10 @@ Candidate work:
 
 ## Native And Desktop Packaging
 
-Status: `[~]` active. Android `0.1.9/10` is signed and published in Stable;
-authenticated signed-FCM, physical official-GMS and broader device/long-session
+Status: `[~]` active. Android `0.1.16/17` is signed and published in Stable
+(public catalogue HTTP200,2026-10-11 18:20 UTC,nonmandatory). Candidate19 has
+artifact acceptance only; source/device search gates above remain open.
+Authenticated signed-FCM, physical official-GMS and broader device/long-session
 gates remain open. Windows Tauri has its separate release and updater gates.
 
 - `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.

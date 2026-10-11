@@ -273,7 +273,146 @@ the first intent, bytes, source/review records and unknown result remain immutab
 No19 installation, publication or new signer/Firebase acceptance is claimed.
 Private records: `.ops-private/android-0.1.18-20261011/`.
 
+## Existing Candidate19 Inspection Accepted
+
+The first artifact refusal remains UNKNOWN. A separate actual source-check of
+the new R2 observer exits13 in Node: its top-level await imports a derived driver
+which imports the still-evaluating observer. No R2 SDK intent is created by that
+failed check. A new, independently reviewed entry first completes the observer's
+inert import and then awaits the unchanged derived driver. Real Node child
+controls expose old exit13 RED, five amended cases GREEN and an await-omission
+mutant; accepted older suites are not replayed.
+
+Coordinator invokes the new entry's actual check without the fictional preload:
+source main323c4988, metadata19, native22 and Firebase baseline pins pass, effects0.
+The separately invoked existing-artifact inspection completes in11.609s at
+17:42:00 UTC. Canonical signer, nondebuggable identity, approved permissions/
+exports, four Firebase initialization digests,36 embedded web files and compiled
+search guard all pass. APK bytes stay7597eb9b/7,631,211, SW49e176d396a0da9d; no
+rebuild or ordinary build-receipt fabrication occurs. First intent/refusal and
+all historical bytes remain unchanged. This is artifact, not device acceptance.
+
+R2 binding43094a0b and entry amendment3b2793ec are retained with their independent
+reviews. Actual records are `artifact-round2-check.json` and
+`artifact-round2-diagnostics.json` in
+`.ops-private/android-0.1.18-observer-r2-20261011/`.
+
+## R9 Diagnostic Source And Device Readiness
+
+R9 adds a whitelist-only15-integer diagnostic channel, phase/substep markers
+around unchanged awaits and a conventional MIME correction. It preserves
+eight cases/two themes/zero errors and the120-second native deadline. Neither
+the MIME mismatch nor the new source identifies the historical timeout cause.
+Independent source reviews accept R9 binding05689515 and finite executor
+binding0d0b554a. Coordinator's actual source-only CLI check passes, SDK/signing/
+device actions0. One parent-owned preload/Javac/D8/three-entry repack then passes
+all14 actual SDK stages. New QA APK2,345,428 bytes, SHA256
+1213fcd0f897659e220ee1c485e090ce326a3cbcd2eccc94c8bd52785e5516ad;
+actual proof SHA256
+000ecc75e9cafce2f4fd5f2087c149b9b7cccc529bb3321965e494563e10d953.
+Four fresh Java8 classes are recorded; exact signature/identity/no permissions/
+alignment and complete nonsignature ZIP parity pass. Only DEX and two diagnostic
+scripts change. The retained React bundle is not rebuilt and existing R4/R8
+inputs are immutable. Independent artifact/host reviews subsequently pass as
+recorded below; executable DEX semantics and physical acceptance remain unclaimed.
+Records:
+`.ops-private/search-android-diagnostic-r9-executor-20261011/build-r1/`.
+
+Ordinary wake/power attempts did not make the device ready. A later public
+`wm dismiss-keyguard` plus ordinary wake, without PIN/settings changes or
+personal capture, is followed by actual strict power/window/activity readback:
+Awake/SCREEN_STATE_ON/INTERACTIVE_STATE_AWAKE, keyguard showing/restricted/secure
+false. It does not reinterpret Task3's historical refusal or prove a QA target
+resumed. Fresh readiness and custody are still required for new device work.
+MobileNext local inventory and authenticated remote catalogue work, including
+modern Android/iPhone models; no allocation, paid minute or device acceptance
+is inferred from that catalogue.
+
+## Device Follow-Up
+
+### Fresh R9 Runtime, Refusal And Cleanup
+
+Independent actual artifact review accepts all14 ordered intent/ACK pairs, four
+actual classes and complete ZIP parity:25 other nonsignature entries unchanged,
+three exact replacements. Independent executable DEX semantics remain unclaimed;
+hash-bound Javac/D8/source proof suffices for this fictional offline measurement
+artifact, not production/runtime acceptance. Host bindingc4f59315 and actual
+source/local-artifact CLI checks pass without SDK/device effects.
+
+After a fresh public dismissal/wake and strict screen-ready readback, coordinator
+creates new ephemeral QA18 and installs APK1213fcd0 with accepted acknowledgements.
+One automatic attempt refuses; no physical mode is dispatched. Its whitelisted
+numeric record identifies phase5/substep14/theme1, terminal3, visible+empty+focused
+predicate14/known127. Two of eight cases completed, semantic error5. It is the
+caught no-focus assertion after Back, not the old dark watchdog. Boot stage8,
+served15/missing0 and zero page/resource/HTTP/console errors are measured.
+Original refusal SHA256:
+d67ae5b02529d992a42e8d58cab61a458f25ec442a590d26f6bc98760d757e51.
+
+Source diagnosis finds no new Header focus job on Back. The synthetic DOM click
+has not measured navigation focus transfer, and an older fictional Back stub
+explicitly clears activeElement. Neither establishes actual browser fixup or a
+product regression. Offline DOM/pointer/touch calibration is next; do not insert
+a fake blur, remove the assertion, normalize counters or replay this attempt.
+The host separately polls to its deadline despite stable terminal3 failure;
+a narrow stable-two-read fail-fast amendment is being prepared, with strict
+semantic acceptance unchanged.
+
+Exact fixture uninstall and switch0 are acknowledged. Remove18 fails; its
+original exit1/unknown acknowledgement is retained. Separately invoked read-only
+reconciliation proves QA18/fixture absent, current0/original users[0] and exact
+primary18/protected-test APK/UID/CE/DE preserved. It does not claim the profile
+vanished during switch or change the failed command to PASS. Reconciliation SHA:
+a94d691c3155d7f25c4b19bb21d465142a55e50f582a7f0f38f6f61f19915b87.
+Actual records: `.ops-private/search-android-diagnostic-r9-device-20261011/`.
+
+### Private19 Upgrade Source Boundary
+
+Prepared source binds actual19 artifact/R2/entry provenance, private APK only,
+36 support pins, protected18/test/users and current absence of all owned QA
+packages. Parent source-only CLI check passes; new exact directory's private
+three-principal inheritable DACL is established/read back. No install runs.
+Independent review reproduces one late source-after receipt save: actual handler
+returns PASS at120001ms. Minimal post-save deadline/completion-contract repair
+is pending in a separate derivative; frozen original source/report remain.
+This is an executor defect, not a production/app failure or reason to retry an
+installation. Existing candidate19 artifact acceptance stays valid.
+
 ## Remaining Acceptance
+
+### Focus Calibration And Source Repairs
+
+An anonymous offline Chromium/WebKit calibration completes18 paths in7.141s:
+DOM click, desktop pointer and emulated390 touch, each with display-none,
+clip-only and rendered-hidden controls. All pages/contexts/browsers close; zero
+requests, errors or captures. DOM click does not guarantee focus transfer;
+display-none return loses field focus in all six groups and does not reproduce
+actual R9. Clip-only changes geometry/timing and is not the app's navigation.
+This is neither full React nor Android proof; actual R9 root cause remains UNKNOWN.
+Records: `.ops-private/search-r9-click-focus-control-20261011/`.
+
+R10 reader binding5d6f78f2 is independently SOURCE_ACCEPTED. Two matching validated
+terminal3 packets now refuse promptly rather than polling120s. Eight affected
+controls/three compiled mutants pass; original helper goes RED. Original PASS
+prefix, strict eight-case/two-theme/zero-error rules and refusal metadata stay
+unchanged. No R10 host or device acceptance is claimed.
+
+Read-only actual R9 source/APK admission disproves an assumed passive-init port:
+fresh native start-chat invokes the automatic suite; a FAILED suite cannot
+activate the passive companion. No host/device runner is dispatched from that
+blocked source. A new purpose-only offline diagnostic is being prepared: one
+preload entry initializes the existing passive companion, with unchanged DEX,
+React, identity and permissions. All release/product/ordinary-matrix gates stay
+false; it measures one real touch query/result/Back, not a synthetic PASS bypass.
+Blocked source evidence: `.ops-private/search-android-navigation-diagnostic-20261011/`.
+
+Private19 R2 binding12963cfd is independently accepted. It checks the native
+budget after source-after completes; the final exclusive local journal has a
+separate completion contract. Parent requires returned completion plus exact
+result-file SHA, not a result JSON alone. Eight affected controls/two compiled
+mutants pass, R1/36 support pins are preserved. Exact private parent DACL and
+source-only CLI check pass. No SDK/device/install occurs in that check.
+Records: `.ops-private/android-0.1.18-device-r2-20261011/`.
 
 Use a fresh owned ephemeral Realme profile. Preserve the existing primary/test
 package UIDs, CE/DE data identities and original users. Reuse the accepted canonical

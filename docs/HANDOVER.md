@@ -1,14 +1,27 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator; feature checkpointb920f0b7,
-web/main323c4988 runtime-accepted. Android19 bytes are built from that main,
-but artifact inspection refused; no rebuild or publication. Correct the inherited
-Java observer transport with separately reviewed inputs and safe stage diagnostics.
-Search R8 boots without missing resources but fails6/8 at120s; R9 diagnosis pending.
+**Current resume,2026-10-11:** coordinator; feature checkpointdd28cea3,
+web/main323c4988 runtime-accepted. Existing Android19 artifact inspection now
+passes after the independently reviewed direct-Java and CLI-entry repair; the
+original unknown refusal and failed Node cycle are retained, no rebuild performed.
+Search R8 boots without missing resources but fails6/8 at120s; R9 diagnostic SDK
+compile/repack and independent artifact/host reviews pass. One fresh QA18 run
+refuses at light navigation: returned field visible/empty/focused, terminal3;
+zero resource/page errors. Exact QA18 absence and primary18/test preservation
+are reconciled; failed remove ACK retained. Offline Chromium/WebKit18-path
+actuation calibration is complete, but not React/native proof: display-none
+control does not reproduce R9, DOM click does not guarantee focus transfer.
 Task3's one fresh attempt refused screen readiness before credentials/instrumentation;
 owned test, target and observer cleanup all pass, primary18/test data preserved.
-Next: existing19 artifact inspection, changed-input search diagnosis and physical
-acceptance; Task3 needs a fresh screen-ready diagnostic, not replay of its attempt.
+Next: one changed-input native navigation measurement, then physical search
+acceptance. R10 stable-terminal fail-fast reader is independently SOURCE_ACCEPTED,
+not a new host/device result. Actual R9 has no independently callable passive
+initializer; a one-preload-entry offline derivative is being prepared, preserving
+DEX/React/permissions and all release gates false. Private19 R2 late-save/final
+journal source repair is independently accepted; exact private DACL and source
+check pass, no19 install/publication. Task3 needs fresh custody,
+not replay of its attempt. Public keyguard dismissal/wake measured Realme ready;
+MobileNext remote catalogue works, no rental allocation/minutes consumed here.
 Stable stays0.1.16/build17; rich/person/display gates stay closed. Reuse accepted proof.
 [Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
 [Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
