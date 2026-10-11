@@ -1,19 +1,24 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-12:** coordinator; main/runtime `cc0f164d` accepted
-22:59:56 UTC. Delayed Realtime UPDATE no longer undoes a confirmed notification
-read; pending outgoing ACK sound retires with its session epoch. Real-source
-RED/GREEN5+6 checks and independent reviews accepted, combined typecheck/build
-pass,24 own-tree aliases resolve. Both compiled consumers change old1/new0 to
-old0/new1; sole healthy exact image, public/container JS+SW parity and retained
-prior entry/image pass. Voice/Storage fixes remain accepted. No SQL or native
-release change; preserve unowned sidebar/search files and Android metadata.
-Stable Android stays0.1.16/build17. Private19 freshness expired; QA22 cleanup
-is accepted, foreground diagnosis still open, no8/8/native acceptance. Next:
-bounded actual chat-load diagnosis and privacy-safe foreground predicate
-classification, then a genuinely fresh Android candidate; do not replay accepted
-Enter/FCM/voice tests or renew artifact age. Item79 has no new source cause;
-installed emoji artifact/preference evidence remains missing.
+**Current resume, 2026-10-12:** coordinator; web main/runtime `d252b4a5` accepted
+23:34:04 UTC. Hidden-history verification now overlaps at most two100-ID reads,
+without partial admission. Actual source RED ->9/9, independent review, calibrated
+old full React RED ->4/4 patched1440/390 light/dark with inspected pixels,
+typecheck/real build and29 own-tree aliases pass. Sole healthy exact image,
+public/container JS+SW, old/new helper and retained old entry/image pass; anonymous
+home/login smoke passes. Notification read, send-epoch, Voice and Storage repairs
+remain accepted. Item87's unidentified tester delay is not proved wholly repaired.
+No SQL or native release change; preserve unowned sidebar/search files and private
+Android metadata. Stable Android stays0.1.16/build17; private19 freshness expired.
+QA22 cleanup is accepted, foreground failure remains unknown, no8/8/native
+acceptance. Privacy-safe foreground classification is independently source-ready
+(8/8 fictional checks), not a new device attempt. Next: minimal genuinely fresh
+Android0.1.19/build20 preparation with exact native22 byte provenance (aggregate
+changed from accepted19; rebind only after all changed paths are identified),
+then bounded changed-input native checks;
+do not replay accepted Enter/FCM/voice tests or renew old artifact age. Item79
+has no new source cause; installed artifact/preference evidence remains missing.
+[Hidden-history evidence](operations/2026-10-12-hidden-history-batches.md).
 [Notification read and web rollout](operations/2026-10-12-notification-read-realtime.md).
 [Send cue ownership](operations/2026-10-12-message-send-sound-epoch.md).
 [Owned Android evidence](operations/2026-10-12-android-owned-qa.md).

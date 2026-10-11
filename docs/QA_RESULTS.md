@@ -1,5 +1,26 @@
 # QA Results
 
+## 2026-10-12 - Hidden-History Waiting Boundary
+
+Actual helper/caller3 PASS/2 RED ->9/9 with four compiled omission controls.
+Amended offline full React baseline8ac2b6/25d0af calibrated RED: first held100-ID
+read blocks the second, exact two disjoint groups/200 IDs render after release.
+Earlier20f810 is a setup selector failure, not product RED. Same immutable old
+assets were reused; no rebuild. Patched496c9b/c71346 passes4/4 at1440/390 both
+themes, two in-flight groups, no partially verified bubbles, zero page errors;
+all four fictional screenshots viewed. Fallback fixture hiddenReads is not the
+total intercepted request count. No personal session/network mutation/listener.
+
+Main d252b4a5 integrates one three-path commit; source/dependencies match retained
+9/9 evidence, not rerun. Typecheck19a947/6a23ea and actual buildccb713/2c7150
+`73ad4c9a243ce1c5`/10.23s pass;29 own-tree aliases. Independent reviews accepted.
+Actual before584e67 ->aftereb8cc6 at23:34:04 UTC accepts exact healthy image,
+hidden consumer old1/new0 ->old0/new1, public/container JS+SW and retained previous
+entry/image. Notification read, send epoch, voice and Storage remain old0/new1.
+Fresh anonymous a2a0eb home/login smoke:0 errors/0 mutation requests/no captures.
+No SQL/native release; AndroidStable17 unchanged. Unknown tester87 remains open.
+[Evidence](operations/2026-10-12-hidden-history-batches.md).
+
 ## 2026-10-12 - Confirmed Notification Read And Pending Send Cue
 
 Actual-source notification read race RED ->5/5 including compiled omission;

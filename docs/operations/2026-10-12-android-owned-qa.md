@@ -85,8 +85,27 @@ not raw dumps or personal content. This current read does not prove the reason
 for Task3's older refusal. One KEYCODE_WAKEUP command `2018b5` succeeds; no
 device setting or permission changes, and no new screen-ready claim follows it.
 
-Next: keep foreground diagnosis bounded, without guessing which erased predicate
-failed. Continue the independent notification read-state product fix. A fresh
+## Privacy-Safe Foreground Classification: Source Only
+
+Exact R3 derivation `77c8118e`, tests `6d0b46ef`, RAM output `c14fe709` add one
+diagnostic edge to the initial owned setup foreground read. Original120s budget,
+read/launch ACKs, anchored row grammar, owned-user/component checks and later
+strict observations remain unchanged. No observed component/user, raw dump or
+exception text is added to persistence: only fixed phase/mask/count metadata,
+bounded ACK fields and provenance hashes. Its exclusive journal cannot authorize
+continuation or native acceptance; a late journal still refuses continuation.
+
+Actual-source missing-edge RED `501d3c` ->fictional8/8 `3e2743`, two compiled
+omissions, and independent source review pass. Earlier VM setup errors remain
+setup failures. Frozen R3 and all historical attempts are unchanged. The source
+has no CLI and has not been materialized, dispatched or bound to a new device
+attempt. Historical failure cause remains UNKNOWN; no8/8 native or physical4+4.
+Private source/review: `.ops-private/search-r11-foreground-metadata-20261012/`
+and `.ops-private/search-r11-foreground-metadata-review-20261012.md`.
+
+Next: bind the accepted exact derived output to a fresh owned destination before
+any changed-input native attempt; never bypass the frozen loader. Web notification,
+send-epoch and hidden-history fixes are accepted on main/runtime d252b4a5. A fresh
 strict native matrix is still required before release, not another replay of
 this attempt. Candidate19 age is counted from original16:34:36 UTC build,
 deadline22:34:36 UTC; source/QA/web work cannot renew it. That deadline has now

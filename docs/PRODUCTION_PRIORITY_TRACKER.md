@@ -2,15 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-12.
 
-**Current actual checkpoint,2026-10-12:** narrow main/runtime cc0f164d accepted
-22:59:56 UTC. Confirmed in-app read survives delayed Realtime UPDATE; pending
-outgoing sound cannot cross same-user session replacement. Actual-source5/5 and
-6/6 incl compiled omissions, independent reviews, combined typecheck/build and
-24 own-tree aliases pass. Healthy exact image, both old/new compiled consumers,
-public/container JS+SW parity and retained previous entry/image pass. Voice/
-Storage remain accepted; no DB/native release change. QA22 foreground refusal
-and read-only cleanup are retained; private19 expired, Stable stays17. Next:
-bounded chat-load and foreground diagnosis without old scenario replay.
+**Current actual checkpoint,2026-10-12:** web main/runtime d252b4a5 accepted
+23:34:04 UTC. Hidden-history checks overlap at most two100-ID reads, keeping full
+verification before admission: source9/9, calibrated full React RED ->4/4 patched
+1440/390 both themes with inspected pixels, independent reviews, typecheck/build
+and29 own-tree aliases pass. Healthy exact image, compiled old/new helper,
+public/container JS+SW and retained previous entry/image pass; anonymous smoke
+passes. Notification read, sound-epoch, Voice/Storage fixes remain accepted.
+No DB/native release change; item87's unidentified client/cause remains open.
+QA22 refusal/cleanup retained, private19 expired, Stable stays17. Source-only
+foreground metadata8/8 is accepted, not native acceptance. Next: fresh20 source
+and exact native22 byte provenance; existing source aggregate changed, so old
+19 pins cannot be reused blindly. No old scenario replay or freshness renewal.
+[Hidden-history rollout](operations/2026-10-12-hidden-history-batches.md).
 [Notification read](operations/2026-10-12-notification-read-realtime.md).
 [Pending sound epoch](operations/2026-10-12-message-send-sound-epoch.md).
 
@@ -4554,6 +4558,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     item 58 and D-089/D-320 are comparison context, not proved duplicates or
     regressions. No presumed cache correction is authorized by this report.
     [Intake and limits](operations/2026-10-07-tester-feedback.md).
+    Bounded separate source finding,2026-10-12: independent100-ID hidden-message
+    queries were serialized before history admission. Two-query waves retain the
+    complete hidden set and owner/error gates. Actual source9/9, baseline full
+    React RED ->patched4/4 with inspected1440/390 both themes, typecheck/build and
+    narrow main/runtime d252b4a5 rollout pass; previous entry/image retained.
+    No measured production latency or proof of this unidentified tester cause.
+    Android17 unchanged; this item remains open.
+    [Cause and deployed boundary](operations/2026-10-12-hidden-history-batches.md).
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
     Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,

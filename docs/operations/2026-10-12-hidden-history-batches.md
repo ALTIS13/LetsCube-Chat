@@ -1,7 +1,7 @@
 # Hidden-History Batch Waiting
 
-Owner: coordinator. Stage: source and baseline-render evidence; integration and
-rollout pending. This is a bounded finding adjacent to tracker item87, not proof
+Owner: coordinator. Stage: web main/runtime `d252b4a5` accepted at23:34:04 UTC.
+This is a bounded finding adjacent to tracker item87, not proof
 of the unidentified tester's delay or a complete latency repair.
 
 ## Cause And Change
@@ -41,6 +41,46 @@ Regression SHA:
 Private immutable receipts and generated fictional assets remain under
 `.ops-private/chat-hidden-render-20261012`; source review/report files are local
 only. These contain no real messages or credentials and are not committed.
-Main integration, patched rendered1440/390 light/dark checks, typecheck/build,
-compiled consumer and real deployment verification remain pending. Android
-Stable remains0.1.16/build17; no installed-device or production timing is claimed.
+
+## Integration And Actual Rollout
+
+Independent product and amended render/publication source reviews accept this
+delta. Patched full React render `496c9b` / completion `c71346` passes4/4 at1440
+and390 in both themes: two distinct requests overlap, all bubbles stay absent
+until both responses complete, exact200-ID coverage and final render pass, zero
+page errors. All four fictional screenshots were viewed. `hiddenReads` in the
+private render receipt counts only requests seen by the fallback fixture, not
+all intercepted held reads; it is not a request-count or latency measurement.
+
+Narrow main `d252b4a55d32cc063b58ee42308aa52db501471d` contains exactly three
+paths. Its actual source, test, ChatWindow and merge/actor dependencies match
+the accepted source tests byte-for-byte; those tests were reused, not replayed.
+Typecheck `19a947` / completion `6a23ea` passes. Real Vite build `ccb713` /
+completion `2c7150` exits0 with `73ad4c9a243ce1c5` and10.23s. The existing
+sourcemap/mixed-import/chunk warnings remain; they are not new repaired defects.
+Own-tree check `f118a9` resolves29 aliases across the one reviewed commit and
+preserves the private Android metadata. No unowned sidebar/search path entered it.
+
+Actual before `584e67` matches accepted runtime `cc0f164d`. After `eb8cc6` at
+23:34:04 UTC accepts the sole healthy image
+`l64kyyu1sysev2izzjjbizhe:d252b4a55d32cc063b58ee42308aa52db501471d`.
+Hidden helper old1/new0 becomes old0/new1; the notification-read, send-epoch,
+voice and Storage consumers all retain old0/new1. Public/container JS and SW
+digests agree; previous entry and image are retained. Local fixture and
+production bundle hashes are deliberately different configuration domains.
+
+```text
+entry /assets/index-BN3RAR4A.js
+JS SHA256 e25f228bf6f9b7e8edc61cad05e094a3c4f5606cb14abc280e4cdccb39fb872e
+SW SHA256 d6da6e485fed318d02b8e6c9310c7b56fbee1569e7009ab10d987b0280196894
+image sha256:ec992c3f70ef93eedae5ef48393519f14c7d583551a1616cb6e43b33334c44f5
+```
+
+Fresh anonymous smoke `a2a0eb`,23:34:05 UTC mounts home and follows the actual
+login link with the accepted entry:0 page errors/0 mutation requests, no personal
+session/capture/trace/video/download. Private immutable runtime receipts remain
+under `.ops-private/chat-hidden-rollout-20261012`.
+
+AndroidStable remains0.1.16/build17. No SQL, installed-device acceptance,
+Windows/APK parity or production loading time is claimed. Item87 stays open for
+its unidentified client/state; this fix removes one demonstrated dependency only.
