@@ -1978,17 +1978,21 @@ async function fetchHiddenMessageIdSet(
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const hidden = new Set<string>();
-  for (let offset = 0; offset < ids.length; offset += 100) {
-    const { data, error } = await supabase
+  for (let offset = 0; offset < ids.length; offset += 200) {
+    const batches = [ids.slice(offset, offset + 100), ids.slice(offset + 100, offset + 200)]
+      .filter((batch) => batch.length);
+    const results = await Promise.all(batches.map((batch) => supabase
       .from("message_hidden_for_users")
       .select("message_id")
-      .in("message_id", ids.slice(offset, offset + 100));
+      .in("message_id", batch)));
     if (!isCurrent()) return null;
-    if (error) {
-      console.error("Hidden message ids fetch error:", error);
-      return null;
+    for (const { data, error } of results) {
+      if (error) {
+        console.error("Hidden message ids fetch error:", error);
+        return null;
+      }
+      for (const row of data ?? []) hidden.add(row.message_id);
     }
-    for (const row of data ?? []) hidden.add(row.message_id);
   }
   return hidden;
 }
