@@ -1,11 +1,11 @@
 # D-348: Voice Recorder Acquisition Diagnosis
 
 Owner: coordinator; bounded diagnosis and independent source review accepted.
-Stage: SOURCE_FIXED, narrow integration/runtime verification pending.
+Stage: SHARED_WEB_ACCEPTED, narrow main/runtime `0176253a`.
 Evidence: original 6 PASS / 2 RED; final affected 53/53 PASS. Independent review
 accepts the event-boundary guard; no mounted/device permission proof is claimed.
-Next action: verify the compiled consumer, integrate only this patch into the
-main-based tree, then confirm the running image and public/container bytes.
+Next action: preserve the unspecified tester prompt as open; bundled Android
+acceptance is separate, not claimed by the shared-web rollout below.
 
 ## Scope
 
@@ -142,3 +142,56 @@ markup/styles or visual layout were added. This source repair does not close the
 unknown tester OS-permission complaint, prove physical duplicate delivery, or
 change the already-built private Android19 bundle. Native/runtime release proof
 remains a separate boundary.
+
+## Accepted Narrow Integration And Rollout
+
+Source commits `3c8f8562` and `ee74e678` contain only the one-line guard, its
+new regression file/report, and the compiled-consumer marker/test. They are on
+the feature remote. Their narrow main-based counterparts are `a3469663` and
+`0176253a`; the range was read separately before the non-force main push.
+All four changed JS/TS files parse and 36 aliases resolve against their own
+commit trees. Unowned sidebar/search files and the exact preserved Android19
+metadata were excluded. The five consumed product files and two recording
+tests are byte-identical to the accepted source run, so its 53 checks were
+reused, not replayed. Final integration typecheck: chunk `54f72e`, exit0.
+
+The actual Vite build completes `sw.js build dcb98a39696129a0`, `built in 12.19s`,
+chunk `c373a7`, exit0. Existing sourcemap/chunk warnings remain. This local
+fixture-config build is not asserted byte-identical to the production build.
+The new marker passes 6/6 with real full-source/transpiled/minified controls,
+wrong-ref/late/inverted guards and actual omission/duplicate mutations. The
+coordinator's full local Vite bundle check `fbcb0e` identifies old0/new1.
+
+Before publication, `5186db` at 21:52:16 UTC verifies the healthy d8 runtime,
+voice old1/new0, Storage old0/new1 and actual public/container JS+SW parity.
+Own branch push `51f53c` and main push `00a0e1` exit0; remote main readback
+`a431c4` matches the full reviewed revision. Rollout source is independently
+accepted, review SHA `d53df2f02c9c7a113fef206707e93a051dbda53d95d9355bdc946c84b5d0b8bb`.
+The first after-read refuses while Coolify is still deploying; no partial
+after files exist. It is not an application failure or an effect replay.
+
+Actual runtime acceptance `0fbcb4`, exit0, at **2026-10-11T22:00:43.824Z**:
+
+- Sole healthy container `b599ba6d0393`, image
+  `l64kyyu1sysev2izzjjbizhe:0176253ac1ce1eeb94eb878071f81d5bb491166b`.
+- Image ID `sha256:077e2c19a67d559aa1b7e560bba79803fa24be5271b174fb797c57b35f60422d`.
+- Public entry `/assets/index-CvsjM-tT.js`, SHA256
+  `30e43eb0e8d3189d71b24655dd5e1584f152157631de7be633053053a411cb88`.
+- Service worker SHA256
+  `a3135e2bd16d8aaadf2d014f76f0e858f6b428d8fca5fa3d94be06b54ba3263e`.
+- Voice old0/new1; unchanged Storage old0/new1; both public bytes match the
+  container. Runtime identity is stable across observation. The preceding d8
+  public entry and exact image are retained unchanged for rollback.
+- Private after receipt SHA256
+  `e973e25e0c98813a5de8df2cd011ef95b4b7069ed207e441210b131fd41fba41`.
+
+No schema/DB/native activation, signing, Android release or OS-permission claim
+is included. The tester's unidentified prompt remains open. No new layout or
+markup changed; the existing rendered recording matrix is not replayed.
+
+Fresh anonymous smoke `196048`, exit0, at22:14:36 UTC: existing headless
+Chromium1440x900, home200/mounted -> actual public login link -> login/mounted,
+0 page errors and0 mutation requests. New isolated browser context, no signed-in
+state, service workers disabled and non-read HTTP methods blocked. No captures,
+traces or video. Browser plugin/skill is not listed; existing Playwright is used.
+This only validates anonymous bootstrap/navigation, not microphone interaction.

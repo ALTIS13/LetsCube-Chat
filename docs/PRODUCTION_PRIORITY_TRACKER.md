@@ -2,16 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-12.
 
-**Current actual checkpoint, 2026-10-12:** D-222 Storage heading follow-up is
-source/render/runtime accepted, not closure of the whole D-222 class. Narrow main
-`d8d116e7` is healthy; actual public/container JS+SW parity and old/new heading
-consumer pass, previous entry/image retained. No Android metadata or unfinished
-native feature was promoted. Source `ad0be1dd` is on the feature remote. Task3
-fresh test-only APK `b227d1b6` and DEX/Javac proof `dd7c0583` pass independent
-artifact review; finite runtime/cleanup remains pending. R11 artifact `f51e2db4`
-is accepted, but host launch-retention binding needs a new reviewed source round.
-Stable remains 0.1.16/build17; private primary19 is not a published release.
-[Storage rollout and bounded evidence](operations/2026-10-11-storage-heading.md).
+**Current actual checkpoint, 2026-10-12:** narrow main/runtime `0176253a` is
+healthy, with public/container JS+SW parity and retained prior entry/image. Voice
+duplicate-pending-pointer repair passes 53 affected checks and independent review;
+compiled consumer changes old1/new0 to old0/new1. D-222 Storage heading follow-up
+remains accepted, not closure of the whole class. No Android metadata or unfinished
+native feature was promoted. Task3 quiet R2 actual run refused before credentials
+at the screen gate; exact test/target/observer cleanup passes. R11 QA21 automatic
+run refused its AM launch ACK before semantic/physical checks; false ACK retained,
+read-only reconciliation confirms exact absence and protected primary19/test.
+Next: bounded AM-parser and screen-predicate diagnosis, then new strict native
+acceptance. Stable remains 0.1.16/build17; private19 not published. Artifact age
+is not renewed from these QA receipts.
+[Voice rollout](operations/2026-10-12-voice-acquisition.md).
+[Android attempts and cleanup](operations/2026-10-12-android-owned-qa.md).
 
 **Latest actual checkpoint,2026-10-11:** private Android0.1.18/build19 upgrade
 and protected-state proof2732031c are reused. New bounds APKcc9ee812/proof914addfb
@@ -4502,7 +4506,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     again. **D-348**, grounded reported_UNVERIFIED intake, 2026-10-07. Platform,
     build and system/app prompt are unknown. Inspect actual recorder/consumer and
     reproduce redundant acquisition if present; never keep capture open merely
-    to suppress permission UI. Source diagnosis is in progress, not a device fix.
+    to suppress permission UI. Source diagnosis found duplicate pending pointer
+    acquisition: two real-source RED cases dispatch two requests. A one-line
+    event-boundary guard passes 53 affected checks and independent review;
+    narrow main/runtime `0176253a` is accepted. The unspecified tester
+    prompt remains open, not a device fix.
+    [Source finding and repair](operations/2026-10-12-voice-acquisition.md).
     [Intake and limits](operations/2026-10-07-tester-feedback.md).
 
 85. `[ ]` Notifications reportedly remain after reading. **D-349**, grounded

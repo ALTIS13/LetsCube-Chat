@@ -1,5 +1,25 @@
 # QA Results
 
+## 2026-10-12 - Voice Guard And Owned Android QA
+
+Voice pending-pointer acquisition: original source6 PASS/2 RED, final affected
+53/53, independent review; marker6/6. Main integration typecheck and actual build
+`dcb98a39696129a0`/12.19s pass;36 own-tree aliases resolve. Healthy main/runtime
+`0176253a` at22:00:43 UTC has old0/new1 consumer, public/container JS+SW parity,
+unchanged Storage fix and retained preceding entry/image. A fresh anonymous
+Chromium home -> public login link check `196048` at1440x900 mounts both screens,
+0 page errors/0 mutation requests, no personal session/captures/traces/video.
+This is smoke, not mounted microphone, OS-permission or bundled-APK acceptance.
+
+Task3 quiet source/artifact accepted; one real attempt refuses screen readiness
+before credential acquisition/instrumentation. Exact test/target/observer cleanup
+passes. R11 QA21 prepare/install pass; automatic attempt refuses its AM response
+before semantic/physical acceptance. False launch/remove ACKs remain false;
+separate read-only reconciliation confirms exact absence and protected state.
+Native search/physical/person/display and Android publication remain pending.
+[Voice evidence](operations/2026-10-12-voice-acquisition.md).
+[Android attempts and cleanup](operations/2026-10-12-android-owned-qa.md).
+
 ## 2026-10-12 - Storage Heading Narrow Rollout
 
 Source `ad0be1dd`, narrow main `d8d116e7`: actual old-component geometric RED,

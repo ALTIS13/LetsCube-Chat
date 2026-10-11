@@ -25499,7 +25499,12 @@ mount with zero page errors passes; installed Android is a separate upgrade.
 **Severity:** medium, reported_UNVERIFIED; fresh authorized tester intake,
 2026-10-07, tracker item 84. The report has a private source anchor, but client,
 build and native/system permission dialog versus application prompt are unknown.
-No redundant permission acquisition or platform cause has been reproduced yet.
+Forced duplicate pointer delivery during an unresolved acquisition reproduces
+two microphone requests in the actual source. A synchronous pointer-event guard
+passes 53 affected checks and independent review; narrow main/runtime `0176253a`
+is accepted with old/new compiled-consumer and public/container parity proof.
+Physical duplicate delivery and the tester's prompt
+cause are not established; this complaint remains open.
 Do not reopen push-permission D-309 or recorder-hint D-190 by association.
 
 **Acceptance:** distinguish a real repeated prompt from normal new capture after

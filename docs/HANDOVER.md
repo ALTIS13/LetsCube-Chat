@@ -1,19 +1,22 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-12:** coordinator; Storage heading source `ad0be1dd`,
-narrow main/runtime `d8d116e7` accepted at 21:28:30 UTC. Exact healthy image,
-public/container JS+SW parity, old/new consumer and retained previous entry/image
-pass. The 12-case offline rendered matrix is reused; Android metadata and unowned
-sidebar/search files were excluded. Task3 fresh AndroidTest `b227d1b6` and actual
-DEX/Javac proof `dd7c0583` are independently accepted; runtime source READY
-`876ce591` awaits independent review and one finite owned-QA run/cleanup. R11
-preload-only APK `f51e2db4` is artifact-accepted; strict host review found an old
-launch-retention binding, corrected in a new source round before any device run.
-Task3 target/observer remain installed, Auth false. Stable stays 0.1.16/build17;
-private primary 0.1.18/build19 is not published. Next: Task3 runtime/cleanup,
-strict search automatic+physical matrix, then publisher acceptance. D-348 voice
-acquisition diagnosis runs independently. No rich/person/display promotion.
-[Storage cause, checks and actual rollout](operations/2026-10-11-storage-heading.md).
+**Current resume, 2026-10-12:** coordinator; narrow main/runtime `0176253a`
+accepted at 22:00:43 UTC. Voice duplicate-pending-pointer guard is deployed:
+53 affected checks, independent review, real build/typecheck, 36 own-tree aliases,
+old/new consumer, healthy image and public/container JS+SW parity pass. Storage
+heading fix remains accepted; previous entry/image retained. Unowned sidebar/
+search files and Android metadata were excluded. Task3 quiet R2 source accepted,
+actual attempt refused at the screen gate before credentials/instrumentation;
+its exact test, target and observer are removed with protected state preserved.
+R11 owned QA21 installed; automatic mode refused an unrecognized AM launch ACK,
+before semantic/physical acceptance. Original false ACKs retained; read-only
+cleanup reconciliation confirms user0/users[0], fixture/profile absence and
+unchanged primary19/protected test. Stable stays 0.1.16/build17; private19 is not
+published. Next: bounded AM-response and screen-predicate diagnosis, then new
+strict native acceptance; do not replay either attempt or renew artifact age.
+No rich/person/display promotion or known cause for the tester's OS prompt.
+[Voice cause and actual rollout](operations/2026-10-12-voice-acquisition.md).
+[Owned Android attempts and cleanup](operations/2026-10-12-android-owned-qa.md).
 
 **Current resume,2026-10-11:** coordinator; source checkpointbf2fe7bf,
 web/main323c4988 accepted; private Android0.1.18/build19 upgrade2732031c accepted.
