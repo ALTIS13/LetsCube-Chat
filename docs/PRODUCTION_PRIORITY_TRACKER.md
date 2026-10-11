@@ -4287,6 +4287,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     reports86/87. Narrow initial/refresh/error/owner separation and mounted
     actual modal/checklist regression are in progress. No deploy yet.
 
+93. `[ ]` Search expand/collapse motion and input responsiveness. Owner intake,
+    2026-10-09: testers report lag when search opens and closes. OPEN / PARTIAL;
+    do not equate browser evidence with physical native performance. Preserve
+    query/results, chat position, navigation and existing motion tokens.
+    The separate reduced-motion200ms defect is already fixed in main14a2b8bf;
+    its accepted evidence is reused, not replayed.
+    Follow-up2026-10-11: actual queued-focus race reproduced in Chromium and
+    WebKit. Reviewed cancellation/committed-state/exact-handle fix passes18/18
+    unit/four mutants and8/8 actual fictional browser cases;20 exact-element
+    crops inspected at390/1440,both themes. Main-based typecheck/build pass.
+    Physical Android/Windows/installed iOS and general-lag acceptance remain
+    open. Rental checks are targeted and minute-bounded.
+    [Motion evidence](operations/2026-10-09-sidebar-search-motion.md).
+    [Focus lifecycle evidence](operations/2026-10-11-sidebar-search-focus.md).
+
 94. `[x]` Logout must retire session-bound native push endpoints, **D-355**.
     Genuine ordinary Realme Auth/binding/logout exposed an active owned orphan.
     FK SET NULL lacked retirement; legacy registration accepted deleted-SID JWT.

@@ -1,5 +1,16 @@
 # LETSCUBE — handover
 
+**Current resume,2026-10-11:** coordinator, main-based search-focus repair.
+The actual phone search race is reproduced in Chromium/WebKit; pending focus
+can reopen a closed field. Reviewed fix preserves committed visibility and exact
+callback ownership. Unit18/18/four mutants, actual fictional browser8/8,
+20 inspected crops and main-based typecheck/build pass. Item93 stays OPEN /
+PARTIAL for physical native/general-lag acceptance. Next: narrow publication
+with live image/content/byte-parity and rollback-asset readback. Do not promote
+the unfinished native-preview branch; its Realme ARM refusal remains open,
+all exact-owned QA packages removed, protocol0/rich guards unchanged.
+[Cause, retained failures and limits](operations/2026-10-11-sidebar-search-focus.md).
+
 **Current continuation,2026-10-10 Enter priority:** coordinator; narrow main-based
 `6d8f2a55`, Android0.1.16/build17. Message/caption IME hints follow the existing
 phone-newline guard. Focused111/111, fictional browser28 cases, typecheck, signed
