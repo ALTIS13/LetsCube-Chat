@@ -38,7 +38,7 @@ function actualCallbacks(text) {
 }
 function notice(id='fictional-notice',createdAt='2026-10-12T11:00:00.000Z',readAt=null) {
   return {id,user_id:'fictional-owner',kind:'message',created_at:createdAt,read_at:readAt,
-    title:'fictional old metadata',payload:{chat_id:'fictional-chat',message_id:'fictional-message'}};
+    payload:{chat_id:'fictional-chat',message_id:'fictional-message',preview:'fictional old metadata'}};
 }
 function consumer(rows=[notice()],text=source) {
   const callbacks=actualCallbacks(text),pending=[],rpcCalls=[];
@@ -58,25 +58,29 @@ async function acknowledgedThenUpdate(text=source) {
   assert.deepEqual(plain(c.rpcCalls),[{fn:'notifications_mark_read',args:{p_id:'fictional-notice'}}]);
   assert.equal(c.items[0].read_at,null,'RPC pending is not read confirmation');
   c.ack();await read;c.flush();assert.equal(c.items[0].read_at,READ_AT,'actual read ACK positive control');
-  c.update({new:{...notice(),title:'fictional changed metadata'}});c.flush();
+  const incoming=notice();incoming.payload.preview='fictional changed metadata';
+  c.update({new:incoming});c.flush();
   assert.equal(c.items[0].read_at,READ_AT,'STALE_REALTIME_MUST_NOT_REOPEN_READ');
-  assert.equal(c.items[0].title,'fictional changed metadata');
+  assert.equal(c.items[0].payload.preview,'fictional changed metadata');
   assert.equal(c.items.filter(n=>!n.read_at).length,0,'read row cannot inflate bell unread count');
 }
 test('stale realtime UPDATE after actual read ACK preserves confirmed read',()=>acknowledgedThenUpdate());
 
 test('newer known UPDATE replaces metadata and accepts a real server read timestamp',()=>{
-  const c=consumer();const newer={...notice(undefined,'2026-10-12T11:01:00.000Z',READ_AT),title:'fictional newer metadata'};
+  const c=consumer();const newer=notice(undefined,'2026-10-12T11:01:00.000Z',READ_AT);
+  newer.payload.preview='fictional newer metadata';
   c.update({new:newer});c.flush();assert.deepEqual(c.items,[newer]);
-  c.update({new:{...notice(),title:'fictional older metadata'}});c.flush();assert.deepEqual(c.items,[newer]);
+  const older=notice();older.payload.preview='fictional older metadata';
+  c.update({new:older});c.flush();assert.deepEqual(c.items,[newer]);
 });
 
 test('unknown UPDATE cannot insert overflow or reorder the existing bounded page',()=>{
   const rows=Array.from({length:30},(_,i)=>notice('fictional-'+i));const c=consumer(rows);
   c.update({new:notice('fictional-unknown')});c.flush();assert.deepEqual(c.items,rows);
-  c.update({new:{...notice('fictional-15','2026-10-12T13:00:00.000Z'),title:'fictional replacement'}});c.flush();
+  const replacement=notice('fictional-15','2026-10-12T13:00:00.000Z');replacement.payload.preview='fictional replacement';
+  c.update({new:replacement});c.flush();
   assert.equal(c.items.length,30);assert.deepEqual(c.items.map(n=>n.id),rows.map(n=>n.id));
-  assert.equal(c.items[15].title,'fictional replacement');
+  assert.equal(c.items[15].payload.preview,'fictional replacement');
 });
 
 test('retired UPDATE and queued state updater both remain inert',()=>{
