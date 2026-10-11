@@ -32,6 +32,7 @@ import type { Notification } from "@/types/database";
 import { parseMessageNotificationProjection } from "@/lib/messageNotificationProjection";
 import { sanctionNoticeTarget } from "@/lib/sanctions";
 import { reminderNotificationBody } from "@/lib/taskReminders";
+import { useAppStore } from "@/store/app.store";
 
 type NotificationTarget =
   | { kind: "chat"; chatId: string }
@@ -81,8 +82,19 @@ const NOTIFICATION_TABS: Array<{ id: NotificationCategory; label: string }> = [
 
 type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "height" | "maxHeight">;
 
+function scheduleNotificationMessageJump(chatId: string, messageId: string, canCommit: () => boolean) {
+  if (!canCommit() || useAppStore.getState().selectedChatId !== chatId) return;
+  window.setTimeout(() => {
+    if (canCommit() && useAppStore.getState().selectedChatId === chatId) {
+      requestChatMessageJump(chatId, messageId);
+    }
+  }, 150);
+}
+
 export function NotificationBell() {
   const [, setLocation] = useLocation();
+  const userId = useAppStore((state) => state.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((state) => state.accountEpoch);
   const { items, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh } = useNotifications();
   const supportAccess = usePermissionAccess(["support.view"]);
   const canViewSupport = supportAccess.hasPermission("support.view");
@@ -95,6 +107,34 @@ export function NotificationBell() {
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(false);
+  const actionRevisionRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      actionRevisionRef.current++;
+    };
+  }, []);
+
+  useEffect(() => {
+    setBusyInviteId(null);
+    setInviteStatuses({});
+  }, [userId, accountEpoch]);
+
+  // A replacement action retires only UI continuation, never an issued RPC.
+  const beginNotificationAction = (notificationOwner = userId) => {
+    const isOwner = () => {
+      const state = useAppStore.getState();
+      return mountedRef.current && Boolean(userId) && notificationOwner === userId
+        && state.currentUser?.id === userId && state.accountEpoch === accountEpoch;
+    };
+    if (!isOwner()) return () => false;
+    const revision = ++actionRevisionRef.current;
+    setBusyInviteId(null);
+    return () => isOwner() && actionRevisionRef.current === revision;
+  };
 
   const updatePanelPosition = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -214,14 +254,18 @@ export function NotificationBell() {
   }, [activeTab, canViewSupport]);
 
   const handleNotificationClick = async (item: Notification) => {
+    const canCommit = beginNotificationAction(item.user_id);
+    if (!canCommit()) return;
     if (!item.read_at) await markRead(item.id);
+    if (!canCommit()) return;
     const target = navigateTarget(item, inviteStatuses, canViewSupport);
 
     if (target?.kind === "chat" || target?.kind === "message") {
       setOpen(false);
-      const opened = await safeOpenChat(target.chatId);
+      const opened = await safeOpenChat(target.chatId, { canCommit });
+      if (!canCommit()) return;
       if (opened && target.kind === "message") {
-        window.setTimeout(() => requestChatMessageJump(target.chatId, target.messageId), 150);
+        scheduleNotificationMessageJump(target.chatId, target.messageId, canCommit);
       }
       // The conversation's own address, never «/» (D-293): `useChatAddress`
       // has already addressed the selected chat, and «/» afterwards reads as a
@@ -247,7 +291,8 @@ export function NotificationBell() {
       if (target.status === "accepted" && target.chatId) {
         setOpen(false);
         const chatId = target.chatId;
-        const opened = await safeOpenChat(chatId);
+        const opened = await safeOpenChat(chatId, { canCommit });
+        if (!canCommit()) return;
         if (opened) setLocation(chatAddressPath(chatId));
         return;
       }
@@ -256,16 +301,22 @@ export function NotificationBell() {
   };
 
   const handleMessageGroupClick = async (entry: Extract<NotificationEntry, { kind: "message_group" }>) => {
+    const canCommit = beginNotificationAction(entry.latest.user_id);
+    if (!canCommit()) return;
     await markMessageNotificationsForChatRead(entry.chatId);
+    if (!canCommit()) return;
     setOpen(false);
-    const opened = await safeOpenChat(entry.chatId);
+    const opened = await safeOpenChat(entry.chatId, { canCommit });
+    if (!canCommit()) return;
     if (opened && entry.latestMessageId) {
-      window.setTimeout(() => requestChatMessageJump(entry.chatId, entry.latestMessageId!), 150);
+      scheduleNotificationMessageJump(entry.chatId, entry.latestMessageId, canCommit);
     }
     if (opened) setLocation(chatAddressPath(entry.chatId, entry.latestMessageId ?? null));
   };
 
   const handleMarkVisibleRead = async () => {
+    const canCommit = beginNotificationAction();
+    if (!canCommit()) return;
     if (activeTab === "all") {
       await markAllRead();
       return;
@@ -274,6 +325,8 @@ export function NotificationBell() {
   };
 
   const handleAcceptInvite = async (item: Notification) => {
+    const canCommit = beginNotificationAction(item.user_id);
+    if (!canCommit()) return;
     const payload = parseGroupInvitePayload(item.payload);
     if (!payload.invite_id) {
       showAppAlert("Приглашение недоступно.", "Приглашение");
@@ -281,6 +334,7 @@ export function NotificationBell() {
     }
     setBusyInviteId(payload.invite_id);
     const result = await acceptGroupInvite(supabase, payload.invite_id);
+    if (!canCommit()) return;
     setBusyInviteId(null);
 
     if (!result.ok) {
@@ -290,9 +344,12 @@ export function NotificationBell() {
 
     setInviteStatuses((current) => ({ ...current, [payload.invite_id!]: "accepted" }));
     await markRead(item.id);
+    if (!canCommit()) return;
     dispatchChatsRefresh({ reason: "chat-notification", chatId: result.data });
     await refresh();
-    const opened = await safeOpenChat(result.data);
+    if (!canCommit()) return;
+    const opened = await safeOpenChat(result.data, { canCommit });
+    if (!canCommit()) return;
     if (opened) {
       setOpen(false);
       setLocation(chatAddressPath(result.data));
@@ -302,6 +359,8 @@ export function NotificationBell() {
   };
 
   const handleDeclineInvite = async (item: Notification) => {
+    const canCommit = beginNotificationAction(item.user_id);
+    if (!canCommit()) return;
     const payload = parseGroupInvitePayload(item.payload);
     if (!payload.invite_id) {
       showAppAlert("Приглашение недоступно.", "Приглашение");
@@ -309,6 +368,7 @@ export function NotificationBell() {
     }
     setBusyInviteId(payload.invite_id);
     const result = await declineGroupInvite(supabase, payload.invite_id);
+    if (!canCommit()) return;
     setBusyInviteId(null);
 
     if (!result.ok) {
@@ -318,6 +378,7 @@ export function NotificationBell() {
 
     setInviteStatuses((current) => ({ ...current, [payload.invite_id!]: "declined" }));
     await markRead(item.id);
+    if (!canCommit()) return;
     await refresh();
   };
 
