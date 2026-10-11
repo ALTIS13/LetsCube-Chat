@@ -1,28 +1,21 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator; feature checkpointdd28cea3,
-web/main323c4988 runtime-accepted. Existing Android19 artifact inspection now
-passes after the independently reviewed direct-Java and CLI-entry repair; the
-original unknown refusal and failed Node cycle are retained, no rebuild performed.
-Search R8 boots without missing resources but fails6/8 at120s; R9 diagnostic SDK
-compile/repack and independent artifact/host reviews pass. One fresh QA18 run
-refuses at light navigation: returned field visible/empty/focused, terminal3;
-zero resource/page errors. Exact QA18 absence and primary18/test preservation
-are reconciled; failed remove ACK retained. Offline Chromium/WebKit18-path
-actuation calibration is complete, but not React/native proof: display-none
-control does not reproduce R9, DOM click does not guarantee focus transfer.
-Task3's one fresh attempt refused screen readiness before credentials/instrumentation;
-owned test, target and observer cleanup all pass, primary18/test data preserved.
-Next: one changed-input native navigation measurement, then physical search
-acceptance. R10 stable-terminal fail-fast reader is independently SOURCE_ACCEPTED,
-not a new host/device result. Actual R9 has no independently callable passive
-initializer; a one-preload-entry offline derivative is being prepared, preserving
-DEX/React/permissions and all release gates false. Private19 R2 late-save/final
-journal source repair is independently accepted; exact private DACL and source
-check pass, no19 install/publication. Task3 needs fresh custody,
-not replay of its attempt. Public keyguard dismissal/wake measured Realme ready;
-MobileNext remote catalogue works, no rental allocation/minutes consumed here.
-Stable stays0.1.16/build17; rich/person/display gates stay closed. Reuse accepted proof.
+**Current resume,2026-10-11:** coordinator; Git checkpoint54ea87b5,
+web/main323c4988 runtime-accepted. Android0.1.18/build19 artifact7597eb9b passes;
+one private Realme upgrade now passes with returned final-journal completion and
+exact result2732031c. Primary UID/CE/DE, protected test and original users survive;
+no app launch/Auth/UI acceptance. Stable stays0.1.16/build17.
+The independently reviewed one-entry passive search APK45cda5ca builds without
+changing DEX/React/permissions. Its single QA19 attempt reaches LIST, then UIA
+exits137 before any touch; no focus outcome exists. Exact QA19/fixture absence,
+current0 and protected primary18/test state are reconciled before the upgrade;
+failed remove ACK retained. Next: measured geometry without UIA, fresh primary19
+search custody, then strict semantic/physical acceptance and checked publication.
+R10 fail-fast remains source-only. Task3 next needs fresh primary19 host custody
+and host-specific AndroidTest, not a target/web rebuild or replay. Publisher19
+source is reviewed; actual native receipt graph is pending. All original refusals
+and accepted browser/source evidence stay retained. MobileNext catalogue works;
+no rented minutes used here. Rich/person/display gates stay closed.
 [Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
 [Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
 [Task3 artifact, refusal and cleanup](operations/2026-10-11-native-preview-user-choice-device.md).

@@ -426,3 +426,52 @@ Publish only after those gates, with the existing Stable 17 catalog compare-and-
 verified backup, confined owner staging and public full APK redownload/verifier.
 No publication has occurred at this checkpoint. No new authenticated send,
 natural-FCM delivery, installed iPhone or broad animation/FPS acceptance is claimed.
+
+## Passive Native Measurement And Private19 Upgrade
+
+The frozen purpose-only source binding5f4d5d8c passes independent source review
+and actual source/local-artifact CLI checks. One ten-stage SDK repack passes:
+APK2345428 bytes/45cda5ca, proof92f3c1cd, 3586ms proof wall time. Actual full ZIP
+review confirms one changed preload entry and27 unchanged payload entries,
+including DEX, React, manifest and resources. No INTERNET permission or Java/web
+rebuild. All semantic/product/release acceptance flags remain false.
+
+An initial materialization CLI typo splits the proof digest into two arguments;
+the invocation guard refuses before any runtime directory or device effect.
+Verified directory absence precedes the corrected source-only materialization.
+This is not a replay of a native intent or an unknown acknowledgement.
+
+Fresh public screen readiness is measured without raw logs/capture. New ephemeral
+QA19 prepare/install succeed. The one navigation attempt reaches stable numeric
+LIST admission, then its first and only LIST-only UIA geometry command exits137
+after1454ms, with zero stdout/stderr; native elapsed9811ms. No input/swipe/query/
+result/Back command is dispatched, and no focus outcome or cause is established.
+Original attempt/ACK remain under
+`.ops-private/search-android-navigation-passive-20261011/runtime/`.
+Exact uninstall and switch0 are acknowledged; remove19 refuses. Separately invoked
+read-only reconciliation confirms fixture/profile absent, original users[0],
+current0 and exact primary18/protected-test APK/UID/CE/DE preserved. Removal is not
+relabelled successful; UIA exit137 is not attributed to an unmeasured cause.
+
+After this reconciled cleanup, coordinator advances the independent private19
+upgrade instead of waiting on geometry. The single install-r-user0 passes; actual
+primary APK7597eb9b/version0.1.18/build19 retains UID10533/CE30938/DE31717.
+Protected test APK146d516d/UID10520/CE28210/DE28213 and users/current0 survive.
+Native operation through completed source-after takes12428ms. Returned final
+journal COMPLETE_EXCLUSIVE_LOCAL_RECEIPT matches the actual2072-byte result SHA
+2732031ce03cb4e48ed0b039c471bb13a191cb8cf4048d07e146856014586584;
+independent parent readback matches. CLI exit0/returned completion are retained
+separately in `coordinator-return.json`, not inferred from the result's own bytes.
+No launch/Auth/data-content/UI/search/FCM acceptance or publication follows.
+
+New geometry/search hosts must use this actual primary19 baseline. R9 synthetic
+Back remains unproven: source inspection confirms a hidden DOM predicate but not
+a hidden painted frame. Do not insert blur or claim a frame cause without changed
+native measurement. The original failed packets and all accepted controls stay
+immutable. Publisher19 binding6b89e83b is independently SOURCE_ACCEPTED, with
+actual native search/cleanup inputs still pending. Stable remains0.1.16/build17.
+
+Task3 dependency audit permits reuse of its unchanged target/web/diagnostic Java,
+but not previous host custody, UID/epochs or host-specific AndroidTest. Generate
+fresh custody from primary19 before compiling only the new AndroidTest host
+evidence; no full target/web rebuild or historical Auth replay is justified.

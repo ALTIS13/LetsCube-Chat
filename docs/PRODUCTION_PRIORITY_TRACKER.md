@@ -2,6 +2,18 @@
 
 Status: active production-hardening tracker, updated 2026-10-11.
 
+**Latest actual checkpoint,2026-10-11:** Android0.1.18/build19 private Realme
+upgrade passes (result2732031c and independently read-back returned journal).
+UID/CE/DE, protected test/current0/users[0] retained; no UI/Auth/FCM proof inferred.
+Stable remains0.1.16/build17. Purpose-only passive APK45cda5ca/proof92f3c1cd has
+source and actual artifact review; DEX/React unchanged. One fresh QA19 attempt
+refuses on UIA exit137 before touch, so no returned-focus result. Exact owned
+absence/protection is reconciled before the upgrade, failed removal retained.
+Next: non-UIA measured geometry and fresh primary19 search custody, native gates,
+then publisher19 (source accepted, actual inputs pending). Task3 fresh19 host/
+AndroidTest preparation proceeds separately; target/web rebuild is unnecessary.
+The earlier primary18 records below are historical, not current-device claims.
+
 **Current continuation,2026-10-11:** coordinator, feature checkpointdd28cea3.
 Shared search-focus and Bell consumer-lifetime fixes are live at main323c4988;
 exact healthy image, old/new markers, public/container JS+SW parity and retained
