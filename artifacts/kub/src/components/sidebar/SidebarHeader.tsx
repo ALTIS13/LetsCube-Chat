@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { useSignOut } from "@/hooks/useUser";
@@ -65,6 +65,8 @@ export function SidebarHeader({
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchFocusFrameRef = useRef<number | null>(null);
+  const revealedSearchRef = useRef(false);
   // Never while a person is searching: the field may not go out from under
   // the cursor, and a query has to keep the box it was typed into.
   const tuck = Boolean(searchTucked) && !searchQuery && !isSearchFocused;
@@ -86,6 +88,18 @@ export function SidebarHeader({
   // `MainLayout` asks for `isMobileChatOpen`, asked here from the same facts.
   const selectedChatId = useAppStore((s) => s.selectedChatId);
   const listOnScreen = !selectedChatId && shellSection(location) === null;
+  useLayoutEffect(() => {
+    revealedSearchRef.current = !tuck && (!isPhone || listOnScreen);
+    if (!revealedSearchRef.current && searchFocusFrameRef.current !== null) {
+      window.cancelAnimationFrame(searchFocusFrameRef.current);
+      searchFocusFrameRef.current = null;
+    }
+  }, [tuck, isPhone, listOnScreen]);
+  useLayoutEffect(() => () => {
+    revealedSearchRef.current = false;
+    if (searchFocusFrameRef.current !== null) window.cancelAnimationFrame(searchFocusFrameRef.current);
+    searchFocusFrameRef.current = null;
+  }, []);
   const adminHint = useHint("admin-entry", { enabled: isStaff && isPhone && listOnScreen });
   const iconButtonClass =
     "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
@@ -409,7 +423,17 @@ export function SidebarHeader({
             type="button"
             onClick={() => {
               onUntuckSearch?.();
-              window.requestAnimationFrame(() => searchInputRef.current?.focus());
+              if (searchFocusFrameRef.current !== null) window.cancelAnimationFrame(searchFocusFrameRef.current);
+              const frame = window.requestAnimationFrame(() => {
+                if (searchFocusFrameRef.current !== frame) return;
+                searchFocusFrameRef.current = null;
+                const input = searchInputRef.current;
+                // A later close/navigation must not be undone by this opening frame.
+                if (revealedSearchRef.current && input?.isConnected && input.offsetParent !== null) {
+                  input.focus({ preventScroll: true });
+                }
+              });
+              searchFocusFrameRef.current = frame;
             }}
             className={cn(iconButtonClass, "md:hidden text-[color:var(--kub-muted)]")}
             aria-label="Поиск"

@@ -2,15 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-11.
 
-**Current continuation,2026-10-11:** direct owner resume. Task2 actual fictional
-Settings acceptance26/26 (nine reused +17 new),32 inspected1440/390 light/dark
-states, scoped close-control repair and observer-counter RED/GREEN8/8. Exact
-immutable bundles reused, no listener/rebuild. Original failed attempts and
-counter receipt retained; correction is explicit, not replay. Task3 actual owned
-Android QA choice/lifecycle is now source/build preparation with composition=false;
-no actual choice/person/display acceptance yet. Protocol0/effective-none/rich
-flags and production remain unchanged. EnterStable0.1.16/build17 already accepted.
-[Current evidence](operations/2026-10-10-native-preview-choice-bundle.md).
+**Current continuation,2026-10-11:** coordinator; shared search-focus race repaired
+and main2ad69fc2 accepted live14:31 Moscow: exact healthy image, old/new markers,
+public/container JS+SW parity and previous assets retained. Unit18/18/four mutants,
+browser8/8 and20 inspected crops accepted; item93 stays OPEN / PARTIAL for native
+general lag. Task2 fictional Settings26/26 retained. Task3 R2 failed before login
+at ARM; exact-owned QA cleanup passed and protected apps/users unchanged. New
+AndroidTest-only diagnostics pass17/17 plus real SDK compile and actual DEX:
+466,941 bytes, target/cache unchanged, no new install/Auth/save. No actual choice,
+person/display proof. Protocol0/effective-none/rich flags and Stable remain closed.
+Next: separate Android0.1.17/build18 search release build/physical QA; concrete ARM
+diagnosis stays queued independently. Do not replay accepted Enter/FCM checks.
+[Search evidence](operations/2026-10-11-sidebar-search-focus.md).
+[Current device evidence](operations/2026-10-11-native-preview-user-choice-device.md).
 
 **Urgent Enter parity, accepted2026-10-10:** source/main6d8f2a55; shared web
 runtime verified and Android Stable0.1.16/build17 accepted19:10 Moscow by full
@@ -4531,6 +4535,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     page-only regression kill, both-theme fictional crops and portable3/3.
     Ordinary/native lag remains NOT REPRODUCED; this item stays open.
     [Scoped evidence](operations/2026-10-09-sidebar-search-motion.md).
+    Follow-up2026-10-11: actual queued-focus race reproduced in Chromium and
+    WebKit. Reviewed cancellation/committed-state/exact-handle fix passes18/18
+    unit/four mutants and8/8 actual fictional browser cases;20 exact-element
+    crops inspected at390/1440,both themes. Main-based typecheck/build pass;
+    narrow main2ad69fc2 accepted live14:31 Moscow: exact healthy image, old/new
+    markers, public/container JS+SW parity and previous assets pass. Physical
+    native/general-lag acceptance remains open.
+    [Focus lifecycle evidence](operations/2026-10-11-sidebar-search-focus.md).
 
 94. `[x]` Logout must retire session-bound native push endpoints, **D-355**.
     Genuine Task5 Realme normal Auth/binding/logout passed, but live read-only

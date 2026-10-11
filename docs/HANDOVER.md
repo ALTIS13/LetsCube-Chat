@@ -1,6 +1,22 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-11:** coordinator, direct owner resume; branch
+**Current resume,2026-10-11:** coordinator, feature base `fa63e966`; independent
+main-based search repair `2ad69fc2` accepted live14:31 Moscow: exact healthy image,
+old/new content markers, public/container JS+SW parity and previous assets pass.
+Actual browser8/8, portable unit18/18/four mutants,20 inspected crops,
+typecheck and production build accepted. Item93 remains OPEN / PARTIAL for native
+general-lag proof. Task3 Realme R2 refused at ARM before login/Settings; exact
+owned test/target/V3 observer cleanup passed, protected apps/users unchanged.
+Reviewed AndroidTest-only diagnostics pass17/17 source/JVM checks and actual
+fresh SDK compile:466,941-byte test APK, exact signer/target and new DEX accepted;
+retained native tasks skipped, target/cache unchanged. No new install/Auth/save.
+Protocol0/rich/Stable unchanged, no person/display acceptance. Next: independently
+build/verify Android0.1.17/build18 from main-based2ad69fc2 with the accepted search
+repair; diagnose the still-unresolved ARM boundary in its separate QA lane.
+[Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
+[Task3 artifact, refusal and cleanup](operations/2026-10-11-native-preview-user-choice-device.md).
+
+**Earlier checkpoint, 2026-10-11:** coordinator, direct owner resume; branch
 `codex/bot-inline-media-20261002`, base `d8c6a4bf`. Task2 actual fictional Settings
 matrix accepted26/26: nine original Chromium cases reused,17 remaining Chromium/
 WebKit cases run against the same three immutable bundles, no rebuild/listener.
