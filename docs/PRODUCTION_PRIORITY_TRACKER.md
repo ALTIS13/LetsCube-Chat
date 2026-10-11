@@ -2,17 +2,22 @@
 
 Status: active production-hardening tracker, updated 2026-10-11.
 
-**Latest actual checkpoint,2026-10-11:** Android0.1.18/build19 private Realme
-upgrade passes (result2732031c and independently read-back returned journal).
-UID/CE/DE, protected test/current0/users[0] retained; no UI/Auth/FCM proof inferred.
-Stable remains0.1.16/build17. Purpose-only passive APK45cda5ca/proof92f3c1cd has
-source and actual artifact review; DEX/React unchanged. One fresh QA19 attempt
-refuses on UIA exit137 before touch, so no returned-focus result. Exact owned
-absence/protection is reconciled before the upgrade, failed removal retained.
-Next: non-UIA measured geometry and fresh primary19 search custody, native gates,
-then publisher19 (source accepted, actual inputs pending). Task3 fresh19 host/
-AndroidTest preparation proceeds separately; target/web rebuild is unnecessary.
-The earlier primary18 records below are historical, not current-device claims.
+**Latest actual checkpoint,2026-10-11:** private Android0.1.18/build19 upgrade
+and protected-state proof2732031c are reused. New bounds APKcc9ee812/proof914addfb
+passes actual SDK/artifact review; only DEX changes, no network permission. One
+owned QA20 light swipe/search/query/result/Back sequence observes visible, empty,
+unfocused input. Result18874682 and independent review are purpose-only, not
+semantic8/physical-matrix/release acceptance. Remove ACK fails and is retained;
+separate read-only reconciliation4a74268f proves exact absence/current0/users[0]/
+primary19/test preservation. Task3 R2 binding1c57f912 and fresh10583/10584 custody
+pass; those own apps remain installed, cleanup2180c4e4/evidence791cab62 exist,
+Auth false. Test-plan factoryf7700ef0 refuses before writing: missing VM sha;
+new R2 repair is pending. Next: R11 strict hidden-frame/R10 checks and separate
+Task3 test-only generation/runtime/cleanup, then publisher19 actual receipt graph.
+Stable remains0.1.16/build17; no rich/person/display promotion. PowerShell ports
+stall; fixed CMD calls work without global changes. Reuse accepted evidence.
+Earlier primary18/QA19 and factory R1 records are historical, never replayed.
+[Actual measurement and remaining gates](operations/2026-10-11-android-native-back-measurement.md).
 
 **Current continuation,2026-10-11:** coordinator, feature checkpointdd28cea3.
 Shared search-focus and Bell consumer-lifetime fixes are live at main323c4988;

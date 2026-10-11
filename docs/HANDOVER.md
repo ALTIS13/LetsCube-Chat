@@ -1,21 +1,23 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator; Git checkpoint54ea87b5,
-web/main323c4988 runtime-accepted. Android0.1.18/build19 artifact7597eb9b passes;
-one private Realme upgrade now passes with returned final-journal completion and
-exact result2732031c. Primary UID/CE/DE, protected test and original users survive;
-no app launch/Auth/UI acceptance. Stable stays0.1.16/build17.
-The independently reviewed one-entry passive search APK45cda5ca builds without
-changing DEX/React/permissions. Its single QA19 attempt reaches LIST, then UIA
-exits137 before any touch; no focus outcome exists. Exact QA19/fixture absence,
-current0 and protected primary18/test state are reconciled before the upgrade;
-failed remove ACK retained. Next: measured geometry without UIA, fresh primary19
-search custody, then strict semantic/physical acceptance and checked publication.
-R10 fail-fast remains source-only. Task3 next needs fresh primary19 host custody
-and host-specific AndroidTest, not a target/web rebuild or replay. Publisher19
-source is reviewed; actual native receipt graph is pending. All original refusals
-and accepted browser/source evidence stay retained. MobileNext catalogue works;
-no rented minutes used here. Rich/person/display gates stay closed.
+**Current resume,2026-10-11:** coordinator; source checkpointbf2fe7bf,
+web/main323c4988 accepted; private Android0.1.18/build19 upgrade2732031c accepted.
+Realme QA20 native bounds APKcc9ee812/proof914addfb and one light touch sequence
+now pass purpose-only measurement: after Back, visible/empty/unfocused. Actual
+result18874682 and independent review preserve all release/8-of-8 gates false.
+Failed remove ACK stays failed; read-only reconciliation4a74268f confirms QA20/
+fixture absence, current0/users[0], primary19/test unchanged. Stable stays17.
+Task3 R2 source binding1c57f912 and fresh target10583/observer10584 metadata pass;
+cleanup binding2180c4e4 and evidence plan791cab62 exist. These two owned QA apps
+remain installed, Auth false; exact cleanup must finish before another QA profile.
+Factoryf7700ef0 actual prewrite refuses: missing sha in the VM context. R1 is
+retained; a new R2 repair and actual-record regression are in progress. Next:
+R11 hidden-painted-frame/R10 strict search checks, fresh Task3 test-only generation,
+native acceptance, then checked publisher19. No target/web rebuild or old replay.
+PowerShell launch ports currently stall; fixed-purpose CMD/Node-file calls work.
+No OS/JDK/PATH changes or timeout-as-PASS. MobileNext catalogue works, no rented
+minutes used. Rich/person/display gates remain closed.
+[Actual measurement and fresh Task3 checkpoint](operations/2026-10-11-android-native-back-measurement.md).
 [Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
 [Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
 [Task3 artifact, refusal and cleanup](operations/2026-10-11-native-preview-user-choice-device.md).
