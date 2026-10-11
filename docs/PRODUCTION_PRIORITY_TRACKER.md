@@ -4582,7 +4582,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     pass with synchronous layout retirement. Affected GREEN6/6 includes the
     cleanup-timing mutant and live control; historical61 are not replayed.
     Independent delta review accepts with no P1/P2; coordinator post-review
-    typecheck passes. Narrow main build/runtime checks remain pending.
+    typecheck passes. Narrow main323c4988 actual build and healthy runtime are
+    accepted: public/container JS+SW equality, new structural jump markers,
+    retained old entry/image. Only two reviewed fix commits reached main.
     Android candidate18 predates this fix; do not claim bundled Android parity
     or explain D-349/natural OS delivery from these consumer tests.
     [Cause and acceptance boundary](operations/2026-10-11-notification-click-lifetime.md).

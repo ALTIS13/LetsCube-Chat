@@ -115,7 +115,8 @@ timeout overrode its screen setting. Own-profile wake/dismiss removed that
 override without changing user0 settings or supplying credentials. Read-only
 metadata showed eight semantic cases, but strict boot admission refuses6 missing
 assets and6 native HTTP404 responses. Those values are not normalized to PASS;
-physical light/dark modes were not dispatched. Resource-closure analysis is next.
+physical light/dark modes were not dispatched. The subsequent resource-closure
+repair is recorded below, not attributed to this original attempt.
 
 Exact fixture uninstall and switch to user0 were acknowledged. The subsequent
 remove-user command failed because the ephemeral profile disappeared during the
@@ -123,11 +124,68 @@ switch. Its failed ACK remains. Frozen cleanup-reconcile then proved user15 abse
 fixture absent, original users restored, and unchanged candidate18/protected test
 data without another removal. No successful original cleanup result is fabricated.
 
+## Resource Closure Repair
+
+The pinned HTML/CSS declare seven fonts/icons absent from the original R2 APK.
+This explains its native missing-resource failures; the numeric counter6 alone
+does not identify the six actually requested URLs. All seven resources match
+the canonical candidate18 APK and current public assets by bytes/SHA256.
+
+Narrow helper/source review passed, original APK closure RED0/1, source GREEN13/13
+with13 compiled omissions. Parent read-only check passed without SDK/signer/device
+effects. One actual repack then added only those seven entries using the existing
+JDK/Android tools and separate accepted QA signer. Ten ordered tool stages exited0
+with empty stderr. Signature, identity, no permissions and alignment pass; all11
+old non-signature entries, including DEX/manifest/web bundle, are byte-identical.
+There was no Java/DEX/web/full-Gradle rebuild or rewrite of the original ACKs.
+
+| Retained artifact | Value |
+| --- | --- |
+| New fictional fixture APK | 1,488,412 bytes |
+| APK SHA256 | fd673c178108713d80574965edd5119e634f79f18968768dcc6ead3fd824c9e7 |
+| Source binding SHA256 | 46cce1583a64371e828a87a4106cb683dfb7dd19b5452062b3c9d1d19d3fc210 |
+| Actual artifact proof SHA256 | 12d4cbea8cbaab5aadd121202f427bc8bd718974026290338d3720471afe039e |
+
+Output is retained under `.ops-private/search-android-assets-r3-20261011/build`.
+This is artifact acceptance, not a new device boot or physical-input result.
+Fresh owned profile/custody and finite light/dark input checks remain required.
+
+## Fresh R7 Device Checkpoint
+
+Frozen R7 source binding42d1d0b90f223ffdf5687a6dae43dc4df7baabb69df4c848d0e1aa37ffcf9ba1
+is independently source-accepted. Coordinator byte/source check performs zero
+ADB commands. Actual prepare creates/selects ephemeral QA16; installation has a
+recognized ACK and exact current R3 APK custody. It does not repeat the earlier
+primary18 upgrade or reinterpret old installation acknowledgements.
+
+The sole automatic attempt stops at command016: AM launch exits0 with301 stdout
+bytes/empty stderr, but its exact output is not recognised and the ACK staysfalse.
+The original raw launch output was not retained; its spelling is unknown, not
+guessed. There is no automatic-result or physical-light/dark acceptance receipt.
+Separate owned `run-as` read-only diagnostics, observed in the actual tool output
+but not reconstructed as a historical receipt, report stage8/fixtureReadytrue,
+zero JS errors/rejections,9 native assets served,2 missing/HTTP errors and404.
+The seven declared resources are artifact-complete, not a proven complete
+runtime request closure. Exact missing routes still require observation/audit.
+
+Actual fixture uninstall and switch0 have recognized ACKs. The subsequent
+remove16 fails (exit1/35 stderr bytes); that failure is retained. A new read-only
+reconciliation then finds QA16 and the fixture absent, users[0] restored and
+primary18/test APK/UID/CE/DE unchanged, without replaying removal. It does not
+assert the profile vanished during the switch; its later absence is measured.
+Reconciliation SHA256:
+f606cc1add5ed5cc6968013657919d4b60467d25280f099168fba45a8b609d4e.
+Records remain in `.ops-private/search-android-search-r7-20261011/`.
+
+The shared Bell fix323c4988 is now live in web/Windows, but existing candidate18
+predates it. A later bundle/candidate is required; do not overwrite retained18
+artifacts or waive its unpassed search gates to claim platform parity.
+
 ## Remaining Acceptance
 
 Use a fresh owned ephemeral Realme profile. Preserve the existing primary/test
-package UIDs, CE/DE data identities and original users. Verify the actual canonical
-upgrade and anonymous launch separately from the offline fictional search
+package UIDs, CE/DE data identities and original users. Reuse the accepted canonical
+upgrade; its unknown anonymous-launch ACK is separate from the offline fictional search
 fixture. That fixture must bind its source/APK/signer/current profile and distinguish
 eight synthetic semantic cases from actual ordered ADB input in both themes.
 Calibration and physical-input proof cannot be supplied by declarations or

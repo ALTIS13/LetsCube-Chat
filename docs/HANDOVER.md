@@ -1,26 +1,37 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator, feature checkpoint `5869257e`;
-web search `2ad69fc2` is live accepted. Main-based Android0.1.17/build18 APK
-92ac6568/7,630,879 bytes independently passes actual signature/permissions,
-canonical Firebase4 value digests and36 embedded files/search guards. Original
-post-build observer refusal is retained; four equivalent generated Gradle paths
-normalized, no SDK rebuild or fabricated original exit receipt. Realme ephemeral
-QA15 was created/selected; the separately reviewed upgrade installed18 with its
-own accepted ACK, preserving primary/test UIDs and data. Original copy/launch ACK
-refusals remain unknown and were not replayed. Offline fixture installation was
-reconciled read-only after its unknown ACK. Automatic search reached its eight
-semantic cases, but missing6 native assets/HTTP404 refused strict boot acceptance;
-there is no physical-search PASS. QA15 and the fixture are removed, exact read-only
-cleanup reconciliation accepted; primary18 and protected test data are unchanged.
-Next: repair the fixture resource closure, then fresh bounded physical search and
-publication; continue the independent native ARM diagnostic/queue meanwhile. Stable
-remains0.1.16/build17. Item93 broad lag remains OPEN/PARTIAL. Separate Task3
-diagnostic test APK466,941 bytes is SDK/DEX accepted; ARM cause and next device
-attempt remain pending. Protocol0/rich/person/display are not promoted.
+**Current resume,2026-10-11:** coordinator, feature source checkpoint9adb4966;
+shared-web Bell fix323c4988 is runtime-accepted. Android candidate0.1.17/build18
+signature/Firebase/36-file artifact and Realme upgrade are accepted, not Stable.
+Fresh search QA16 prepare/install ACKs pass with exact R3 fixturefd673c17.
+Automatic launch ACK is unknown; separate read-only fictional diagnostics show
+two remaining native404 resources, so no boot/physical PASS or release promotion.
+QA16/fixture are now absent, current user0 and original primary18/test UID/CE/DE
+state are read-only reconciled; failed remove ACK retained, no effect replay.
+Blocker: identify exact missing resource paths and actual launch-output form,
+not weaken the checks. Next: narrow resource/observer repair, bounded physical
+search and new bundled Android parity. Task3 fresh-host source review also found
+two parser/cleanup-epoch issues under author repair; no new Task3 device attempt.
+Stable remains0.1.16/build17, item93 broad lag OPEN/PARTIAL. Protocol0/rich/person/
+display remain closed. Historical accepted stages are not repeated.
 [Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
 [Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
 [Task3 artifact, refusal and cleanup](operations/2026-10-11-native-preview-user-choice-device.md).
+
+**Parallel product fix,2026-10-11:** notification-bell consumer lifetime guards
+are source-accepted: owner/epoch/mount/replacement action, invite awaits and exact
+selected-chat delayed jumps. Original23 behavioral RED -> mounted61/61 incl18
+compiled mutants; independent review found a further passive-cleanup gap. Four
+actual asynchronous parent-removal RED cases -> layout retirement, affected6/6
+GREEN; original61 reused, not claimed as a fresh66. Narrow main-based tree
+`323c4988` contains only two reviewed fix commits, own-tree42 imports resolved,
+typecheck and real build PASS (`sw.js build32a0af85cc7c06c0`,34.26s). Local fixture
+configuration hashes are not production expectations. Actual main323c4988 is
+healthy at15:04:58 UTC; public/container JS+SW match, guarded-jump markers change
+in both directions and old entry/image are retained. Feature branch9adb4966
+is pushed. Candidate18 predates this fix; bundled
+Android parity is not claimed. Markup/styles/schema/provider unchanged.
+[Notification action boundary](operations/2026-10-11-notification-click-lifetime.md).
 
 **Earlier checkpoint, 2026-10-11:** coordinator, direct owner resume; branch
 `codex/bot-inline-media-20261002`, base `d8c6a4bf`. Task2 actual fictional Settings
