@@ -181,6 +181,36 @@ The shared Bell fix323c4988 is now live in web/Windows, but existing candidate18
 predates it. A later bundle/candidate is required; do not overwrite retained18
 artifacts or waive its unpassed search gates to claim platform parity.
 
+## Declared JS Resource Closure, R4
+
+Read-only compiled-JS/AST analysis finds ten additional declared brand/product
+assets absent from R3. Each matches canonical APK18 and current public source
+bytes. Five resolved module edges are two static and three literal dynamic
+imports; all module files are already present, no unresolved dynamic import is
+accepted. The two native404 counts do not identify two unique requested routes.
+
+Independent source review accepts the narrow recipe. Old actual R3 closure is
+RED; focused source checks pass8/8 with twelve detected compiled omissions.
+Coordinator check reads no signing material and invokes no SDK or device tool.
+One actual SDK repack then passes ten ordered stages with no failures: base and
+new signature, exact package/identity, no permissions, alignment and ZIP checks.
+All eighteen old nonsignature entries remain byte-identical; exactly ten declared
+files are added. No Java/web/Gradle rebuild or original ACK edit occurs.
+
+New fictional QA APK2,345,428 bytes, SHA256:
+8617108502242cd8c88a50c5872d200350023f23abfbb6fdb5fc11bf84397fa3.
+Actual artifact proof SHA256:
+dd152783f4e1c1353fbf68ec122f2f468716673a8f42e576ae1561af41ae6f3c.
+Source binding SHA256:
+8f34dcd970437f39fe8abdcd8ae97cb0cab09f0d30536ba0b77cd909b3512d85.
+Output is retained in `.ops-private/search-android-assets-r4-20261011/build/`.
+
+This is artifact acceptance only. A fresh R8 host observer is being prepared to
+accept SDK-defined informational launch states without relaxing component,
+status, timing, foreground or zero-native404 checks. Unknown fictional launch
+stdout will be retained in a bounded exact record; the historical R7 stdout and
+false ACK remain unknown. No new profile/input/boot result or release is claimed.
+
 ## Remaining Acceptance
 
 Use a fresh owned ephemeral Realme profile. Preserve the existing primary/test

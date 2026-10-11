@@ -1,6 +1,6 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator, feature source checkpoint9adb4966;
+**Current resume,2026-10-11:** coordinator, feature source checkpointb3259458;
 shared-web Bell fix323c4988 is runtime-accepted. Android candidate0.1.17/build18
 signature/Firebase/36-file artifact and Realme upgrade are accepted, not Stable.
 Fresh search QA16 prepare/install ACKs pass with exact R3 fixturefd673c17.
@@ -8,10 +8,18 @@ Automatic launch ACK is unknown; separate read-only fictional diagnostics show
 two remaining native404 resources, so no boot/physical PASS or release promotion.
 QA16/fixture are now absent, current user0 and original primary18/test UID/CE/DE
 state are read-only reconciled; failed remove ACK retained, no effect replay.
-Blocker: identify exact missing resource paths and actual launch-output form,
-not weaken the checks. Next: narrow resource/observer repair, bounded physical
-search and new bundled Android parity. Task3 fresh-host source review also found
-two parser/cleanup-epoch issues under author repair; no new Task3 device attempt.
+Actual R4 repack adds ten canonical-equivalent declared JS assets; all eighteen
+old nonsignature entries stay equal. SDK signature/identity/alignment and ten
+ordered commands pass; this is artifact proof, not runtime404 or physical-input
+acceptance. Next: fresh strict launch observer, bounded physical search and new
+bundled Android parity. Task3 parser/cleanup-epoch fixes are now
+independently accepted (RED3/GREEN16). Fresh target/observer install and twelve-field
+SDK custody pass: UID10576/10577, primary18/test/users preserved, no Auth yet.
+Fresh host-bound AndroidTest-only compile and separate actual DEX verification
+pass: APK4412b8ce,466,749 bytes, real Javac, all non-test tasks skipped and998
+retained artifacts unchanged. Historical004e is unusable for the new UID/epochs.
+Next Task3: separately bound diagnostic runtime, then exact-owned cleanup; neither
+has run yet. Exact cleanup binding is prepared, removals not yet performed.
 Stable remains0.1.16/build17, item93 broad lag OPEN/PARTIAL. Protocol0/rich/person/
 display remain closed. Historical accepted stages are not repeated.
 [Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
@@ -28,7 +36,7 @@ GREEN; original61 reused, not claimed as a fresh66. Narrow main-based tree
 typecheck and real build PASS (`sw.js build32a0af85cc7c06c0`,34.26s). Local fixture
 configuration hashes are not production expectations. Actual main323c4988 is
 healthy at15:04:58 UTC; public/container JS+SW match, guarded-jump markers change
-in both directions and old entry/image are retained. Feature branch9adb4966
+in both directions and old entry/image are retained. Feature branchb3259458
 is pushed. Candidate18 predates this fix; bundled
 Android parity is not claimed. Markup/styles/schema/provider unchanged.
 [Notification action boundary](operations/2026-10-11-notification-click-lifetime.md).

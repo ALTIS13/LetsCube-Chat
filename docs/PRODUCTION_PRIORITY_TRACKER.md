@@ -2,24 +2,25 @@
 
 Status: active production-hardening tracker, updated 2026-10-11.
 
-**Current continuation,2026-10-11:** coordinator; shared search-focus race repaired
-and main2ad69fc2 accepted live14:31 Moscow: exact healthy image, old/new markers,
-public/container JS+SW parity and previous assets retained. Unit18/18/four mutants,
-browser8/8 and20 inspected crops accepted; item93 stays OPEN / PARTIAL for native
-general lag. Task2 fictional Settings26/26 retained. Task3 R2 failed before login
-at ARM; exact-owned QA cleanup passed and protected apps/users unchanged. New
-AndroidTest-only diagnostics pass17/17 plus real SDK compile and actual DEX:
-466,941 bytes, target/cache unchanged, no new install/Auth/save. No actual choice,
-person/display proof. Protocol0/effective-none/rich flags and Stable remain closed.
-Android0.1.17/build18 now has an independently verified actual APK92ac6568,
-7,630,879 bytes: canonical signature/Firebase4 value digests,36 embedded files
-and compiled search guards pass. Original post-build observer refusal is retained,
-generated-only path normalization is verified; no SDK rebuild. Actual Realme
-upgrade18 is accepted with preserved data. Offline fixture boot refused6 missing
-assets/HTTP404; no physical input is accepted. Own QA15/fixture cleanup reconciled
-read-only, primary18/test/users preserved. Stable remains17. Next: repair the
-fixture resource closure and fresh physical search before publication; concrete ARM
-diagnosis stays queued independently. Do not replay accepted Enter/FCM checks.
+**Current continuation,2026-10-11:** coordinator, feature checkpointb3259458.
+Shared search-focus and Bell consumer-lifetime fixes are live at main323c4988;
+exact healthy image, old/new markers, public/container JS+SW parity and retained
+previous assets are accepted. Unchanged source/browser proof is reused; item93
+stays OPEN / PARTIAL for broader native lag. Task2 Settings26/26 stays accepted.
+Candidate0.1.17/build18 APK92ac6568, signature/Firebase/36 embedded files and Realme
+data-preserving upgrade pass, not Stable. Fresh R7 fixture install passes but its
+launch ACK remains unknown and separate diagnostics find2 native404s. Exact QA16
+absence/protected state is reconciled read-only; failed remove ACK stays failed.
+R4 then adds10 canonical-equivalent declared JS assets, preserving18 old payload
+entries. Actual ten-stage SDK repack/signature/identity/alignment and independent
+artifact review pass; fresh boot/physical search remain next, not inferred.
+Task3 parser/cleanup-epoch fixes and new host custody10576/10577 are accepted.
+New host-bound diagnostic AndroidTest4412b8ce,466,749 bytes, real Javac/actual DEX
+and998 unchanged retained artifacts pass independent review. No fresh runtime,
+Auth, Settings choice/save or ARM cause is claimed; exact cleanup is prepared.
+Stable remains0.1.16/build17. Protocol0/effective-none/rich/person/display gates
+remain closed. Next: bounded device search and fresh ARM diagnosis, then a new
+Android bundle/candidate including Bell parity. Do not replay accepted Enter/FCM.
 [Android candidate](operations/2026-10-11-android-search-release.md).
 [Search evidence](operations/2026-10-11-sidebar-search-focus.md).
 [Current device evidence](operations/2026-10-11-native-preview-user-choice-device.md).

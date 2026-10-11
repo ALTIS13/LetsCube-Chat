@@ -145,9 +145,11 @@ not itself fix that refusal. Protocol0 and rich-preview gates are unchanged.
 
 ## Next Action And Limits
 
-Coordinator: use the accepted diagnostic artifact in a separately bound
-diagnostic attempt. Locate the concrete
-ARM/lifecycle failure rather than assuming the diagnostic change fixes it.
+Coordinator: use the new host-bound diagnostic AndroidTest artifact below in a
+separately bound diagnostic attempt; generation and SDK compilation are complete.
+Historical APK004e contains old UID/epoch literals; it cannot be reused for this
+installation. Locate the concrete ARM/lifecycle failure rather than assuming
+the diagnostic change fixes it.
 Existing source/browser/SDK
 evidence is retained, not rerun. Any retry needs a changed, reviewed input and
 a fresh named attempt/incarnation, never reuse an old receipt or extend the
@@ -158,3 +160,63 @@ sequence remains unaccepted. Continue independent approved queue work meanwhile.
 Checked/enabled Settings is the real hook's ACK/fresh-capability consumer, not a
 separate server observer. No preview card, background delivery, lock-screen/OEM,
 installed iPhone, production protocol1 or Stable promotion acceptance is claimed.
+
+## Fresh R4 Host, 2026-10-11
+
+Source review found two P2 issues: the SDK prints a permission-only `User 0:`
+header beside the real CE/DE row, and target epochs were checked before rather
+than after the cleanup intent. Both are fixed with exact state-row validation
+and a fresh post-intent twelve-field SDK incarnation check. Actual author RED3
+-> GREEN16 includes three compiled omissions; historical32 are not replayed.
+Independent scoped re-review accepts the fixes; original READY remains unchanged.
+Amended READY SHA256:
+588a4ecb22665f9a297b589d5927ed77fe1ffa7b230b747d27fc539f4f5b886d.
+
+Coordinator bound the accepted target/observer artifacts and exact current
+primary18/test APK/UID/CE/DE/user0 state without another app/web/Gradle build.
+Fresh host binding SHA256:
+f154a8502215c8b24a9610d405ffbfa8cb5df682ea681c3b7cfe17d0e2325c0f.
+The separately invoked installation/metadata sequence passes with recognized
+target and observer ACKs, not a reconstruction of old unknown ACKs. Target UID
+is10576 with equal install/update epoch1791731823724; observer UID10577 with
+equal epoch1791731831347. All twelve incarnation fields and owner/intent/ACK
+hashes agree. Independent actual-record review accepts this metadata boundary.
+
+Actual status is `PASS_METADATA_ONLY`, `authStarted:false`, cleanup pending.
+The private cleanup binding is prepared against this exact custody and amended
+source, SHA2567d92f6fc0eb02bb54ee00360f41510964caad706a8f60445ec1207c38a34da38;
+its preparation performs no removal. Records reside under
+`.ops-private/native-preview-choice-device-host-20261011-r4/records-r1/`.
+No fresh instrumentation, Auth, Settings choice/save, ARM result or native-display
+acceptance is claimed at this metadata checkpoint. The new compilation below
+supersedes only the earlier test-artifact limit.
+
+## Fresh Host-Bound Diagnostic Artifact
+
+Independent source review accepts the six exact R4 custody/owner/ACK receipts
+and twelve installation fields. The accepted diagnostic Java remains unchanged;
+only HostEvidence, source/receipt bindings and private output paths are derived.
+Coordinator generation SHA256:
+329196fd1b8b5c6d0143f611e6ee5a39370919ddae470a06ac37448b86f346bc.
+The new artifact is not a copy of historical APK004e or its old installation.
+
+The actual AndroidTest-only SDK build reports `BUILD SUCCESSFUL in 29s` and one
+executed `compileReleaseAndroidTestJavaWithJavac`. All non-test tasks are skipped,
+all seven project outputs are isolated, and998 retained app/cache artifacts stay
+equal. Main target APK and signing environment checks pass. New test APK466,749
+bytes, SHA2564412b8ce66c0b06b6793168539ec01c499ae7e97b9235a3bb04c56e44cd9c1c6.
+Signature and exact instrumentation package/runner/target pass.
+
+Separate inspection of the actual APK verifies the diagnostic DEX class and
+D8 synthetic forwarding to atomic `compareAndSet`, not a source-only marker.
+Artifact proof SHA256:
+409dc618455183c269c13bc71e995ecca31f675912e0bff3c46b217a0fff3977.
+Build result SHA256:
+bf31f82b574ba68ab96379dcb44bbef56b23a6a69a82e015a3ef3c39f52d2ed1.
+Records reside in
+`.ops-private/native-preview-choice-diagnostic-fresh-20261011/`.
+
+This is compilation/artifact evidence only. No new device instrumentation, Auth,
+Settings save or ARM diagnosis has run. Fresh runtime source is being prepared
+against these exact artifacts; target/observer cleanup remains pending and bound.
+Protocol0/effective-none/richfalse and person-choice limits remain unchanged.
