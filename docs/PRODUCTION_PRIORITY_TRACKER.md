@@ -11,8 +11,16 @@ at ARM; exact-owned QA cleanup passed and protected apps/users unchanged. New
 AndroidTest-only diagnostics pass17/17 plus real SDK compile and actual DEX:
 466,941 bytes, target/cache unchanged, no new install/Auth/save. No actual choice,
 person/display proof. Protocol0/effective-none/rich flags and Stable remain closed.
-Next: separate Android0.1.17/build18 search release build/physical QA; concrete ARM
+Android0.1.17/build18 now has an independently verified actual APK92ac6568,
+7,630,879 bytes: canonical signature/Firebase4 value digests,36 embedded files
+and compiled search guards pass. Original post-build observer refusal is retained,
+generated-only path normalization is verified; no SDK rebuild. Actual Realme
+upgrade18 is accepted with preserved data. Offline fixture boot refused6 missing
+assets/HTTP404; no physical input is accepted. Own QA15/fixture cleanup reconciled
+read-only, primary18/test/users preserved. Stable remains17. Next: repair the
+fixture resource closure and fresh physical search before publication; concrete ARM
 diagnosis stays queued independently. Do not replay accepted Enter/FCM checks.
+[Android candidate](operations/2026-10-11-android-search-release.md).
 [Search evidence](operations/2026-10-11-sidebar-search-focus.md).
 [Current device evidence](operations/2026-10-11-native-preview-user-choice-device.md).
 

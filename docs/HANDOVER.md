@@ -1,18 +1,24 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator, feature base `fa63e966`; independent
-main-based search repair `2ad69fc2` accepted live14:31 Moscow: exact healthy image,
-old/new content markers, public/container JS+SW parity and previous assets pass.
-Actual browser8/8, portable unit18/18/four mutants,20 inspected crops,
-typecheck and production build accepted. Item93 remains OPEN / PARTIAL for native
-general-lag proof. Task3 Realme R2 refused at ARM before login/Settings; exact
-owned test/target/V3 observer cleanup passed, protected apps/users unchanged.
-Reviewed AndroidTest-only diagnostics pass17/17 source/JVM checks and actual
-fresh SDK compile:466,941-byte test APK, exact signer/target and new DEX accepted;
-retained native tasks skipped, target/cache unchanged. No new install/Auth/save.
-Protocol0/rich/Stable unchanged, no person/display acceptance. Next: independently
-build/verify Android0.1.17/build18 from main-based2ad69fc2 with the accepted search
-repair; diagnose the still-unresolved ARM boundary in its separate QA lane.
+**Current resume,2026-10-11:** coordinator, feature checkpoint `5869257e`;
+web search `2ad69fc2` is live accepted. Main-based Android0.1.17/build18 APK
+92ac6568/7,630,879 bytes independently passes actual signature/permissions,
+canonical Firebase4 value digests and36 embedded files/search guards. Original
+post-build observer refusal is retained; four equivalent generated Gradle paths
+normalized, no SDK rebuild or fabricated original exit receipt. Realme ephemeral
+QA15 was created/selected; the separately reviewed upgrade installed18 with its
+own accepted ACK, preserving primary/test UIDs and data. Original copy/launch ACK
+refusals remain unknown and were not replayed. Offline fixture installation was
+reconciled read-only after its unknown ACK. Automatic search reached its eight
+semantic cases, but missing6 native assets/HTTP404 refused strict boot acceptance;
+there is no physical-search PASS. QA15 and the fixture are removed, exact read-only
+cleanup reconciliation accepted; primary18 and protected test data are unchanged.
+Next: repair the fixture resource closure, then fresh bounded physical search and
+publication; continue the independent native ARM diagnostic/queue meanwhile. Stable
+remains0.1.16/build17. Item93 broad lag remains OPEN/PARTIAL. Separate Task3
+diagnostic test APK466,941 bytes is SDK/DEX accepted; ARM cause and next device
+attempt remain pending. Protocol0/rich/person/display are not promoted.
+[Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
 [Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
 [Task3 artifact, refusal and cleanup](operations/2026-10-11-native-preview-user-choice-device.md).
 
