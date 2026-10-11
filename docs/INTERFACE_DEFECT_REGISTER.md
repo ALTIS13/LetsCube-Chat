@@ -25495,6 +25495,12 @@ The notification hook's read guards protected its own state, not this consumer.
 or cancelled. Actual mounted worker61/61 including18 compiled omission mutants,
 23 behavioral RED against the original source; coordinator typecheck/diffcheck
 pass. Independent review and actual main build/runtime remain pending.
+Review found passive cleanup left a DOM-removal window that the original
+`flushSync` fixture masked. Four actual asynchronous parent-removal RED cases
+confirmed it; synchronous layout cleanup now passes affected6/6, including the
+compiled timing omission and live control. Historical61 are reused. New delta
+review accepts with no P1/P2 and post-review typecheck passes; main build/runtime
+remain pending.
 No markup/style, schema, provider or permission changes. Android candidate18
 does not contain the fix. No natural FCM/card-click or D-349 explanation follows.
 [Evidence and boundary](operations/2026-10-11-notification-click-lifetime.md).

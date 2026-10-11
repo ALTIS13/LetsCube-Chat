@@ -71,6 +71,7 @@ const stubs = new Map([
         window.calls.push({phase:'rpc-start',name});
         await held(name.startsWith('group_invite_') ? 'invite' : 'read');
         window.calls.push({phase:'rpc-done',name});
+        window.lifecycle.push('rpc-finished');
         if(name.startsWith('group_invite_')) return {data:name==='group_invite_accept' ? '${CHAT}' : {status:'declined'},
           error:window.inviteError ? {code:'42501'} : null};
         for(const row of window.rows) if(row.user_id===owner &&
@@ -102,6 +103,8 @@ async function compile(change) {
             assert.equal(source.split(change[0]).length-1,1,"compiled omission must match once");
             replacements++; source=source.replace(change[0],change[1]);
           }
+          source=source.replace('mountedRef.current = false;',
+            "window.lifecycle.push('bell-retired'); mountedRef.current = false;");
           // Test-only access to the real scheduling helper; no production export.
           source+='\nwindow.probeScheduleNotificationMessageJump= scheduleNotificationMessageJump;';
           return {contents:source,loader:"tsx",resolveDir:resolve(sourceRoot,"components/sidebar")};
@@ -109,11 +112,12 @@ async function compile(change) {
       });
     }}],
     stdin: {loader:"tsx",resolveDir:kubRoot,contents:`
-      import React from 'react';
+      import React, {useEffect, useLayoutEffect, useState} from 'react';
       import {createRoot} from 'react-dom/client'; import {flushSync} from 'react-dom';
       import {useAppStore} from './src/store/app.store.ts';
       import {NotificationBell} from './src/components/sidebar/NotificationBell.tsx';
       window.effects=[]; window.calls=[]; window.holds=new Set(); window.gates=new Map(); window.jumps=new Map();
+      window.lifecycle=[];
       window.state={currentUser:{id:'${A}'},accountEpoch:1,mutedChatIds:[],selectedChatId:null,
         chats:[{id:'${CHAT}'},{id:'manual-chat'}],
         setSelectedChatId(id){window.effects.push({type:'selected',id});useAppStore.setState({selectedChatId:id});},
@@ -123,7 +127,23 @@ async function compile(change) {
         : timeout(fn,delay,...args);
       window.addEventListener('kub:chat-message-jump',e => window.effects.push({type:'jump',...e.detail}));
       const root=createRoot(document.getElementById('root'));
-      flushSync(() => root.render(<NotificationBell/>));
+      function RemovalParent() {
+        const [present,setPresent]=useState(true);
+        window.removeBell=() => setPresent(false);
+        useLayoutEffect(() => {
+          if(present) return;
+          window.lifecycle.push(document.querySelector('[data-testid="notification-bell-button"]')
+            ? 'layout-dom-present' : 'layout-dom-absent');
+          window.gates.get(window.removalPhase)?.();
+          // Real layout work exceeds React's cooperative task budget; no
+          // scheduler/effect mock and no forced passive flush on removal.
+          const until=performance.now()+12;
+          while(performance.now()<until) {}
+        },[present]);
+        useEffect(() => {if(!present) window.lifecycle.push('parent-passive');},[present]);
+        return present ? <NotificationBell/> : null;
+      }
+      flushSync(() => root.render(window.parentRemoval ? <RemovalParent/> : <NotificationBell/>));
       window.retire=kind => {
         if(kind==='unmount') {flushSync(() => root.unmount());window.detached=true;return;}
         const patch={currentUser:kind==='logout' ? null : {id:kind==='account' ? '${B}' : '${A}'},
@@ -153,14 +173,14 @@ function row(kind="task_assigned",extra={}) {
       invite_id:INVITE,status:"pending",chat_name:"Fictional group"},...extra};
 }
 
-async function fixture(rows=[row()],code=bundle) {
+async function fixture(rows=[row()],code=bundle,parentRemoval=false) {
   const context=await browser.newContext({serviceWorkers:"block"});
   const page=await context.newPage(); const errors=[]; const network=[];
   page.setDefaultTimeout(3000);
   page.on("pageerror",e => errors.push(e.message));
   await page.route("**/*",route => {network.push("blocked request");return route.abort();});
   await page.setContent('<div id="root"></div>');
-  await page.evaluate(rows => {window.rows=rows;},rows);
+  await page.evaluate(({rows,parentRemoval}) => {window.rows=rows;window.parentRemoval=parentRemoval;},{rows,parentRemoval});
   await page.addScriptTag({content:code});
   const drain=() => page.evaluate(async () => {
     for(let i=0;i<30;i++) await Promise.resolve(); await new Promise(resolve => setTimeout(resolve,0));
@@ -384,4 +404,37 @@ for(const [name,change,oracle] of omissions) test(`compiled omission rejected: $
   const code=await compile(change);
   await assert.rejects(() => oracle(code),error => error.code==='ERR_ASSERTION'
     && !error.message.includes('held boundary'),"actual mounted literal oracle must reject the compiled omission");
+});
+
+async function parentRemovalBoundary(action,code=bundle) {
+  const phase=action==='task' || action==='message' ? 'read' : 'invite';
+  const f=await fixture([row(action==='task' ? 'task_assigned' : action==='message' ? 'message' : 'group_invite')],code,true);
+  try {
+    await f.page.evaluate(phase => {window.removalPhase=phase;window.inviteError=true;},phase);
+    await f.hold(phase);await f.click(action,action==='accept' || action==='decline' ? action : undefined);await f.gated(phase);
+    await f.page.evaluate(() => {window.lifecycle=[];window.removeBell();});
+    await f.page.waitForFunction(() => window.lifecycle.includes('parent-passive'));
+    await f.drain();
+    const lifecycle=await f.page.evaluate(() => window.lifecycle);
+    assert.equal(lifecycle.includes('layout-dom-present'),false,'real removal commit must remove Bell DOM');
+    assert.equal(lifecycle.includes('layout-dom-absent'),true,'layout observer must observe actual DOM absence');
+    assert.equal(lifecycle.includes('rpc-finished'),true,'held provider completion must really run');
+    assert.equal(lifecycle.includes('bell-retired'),true,'actual Bell cleanup must be observed');
+    assert.deepEqual(await f.effects(),[],`parent removal must suppress late UI continuation; order=${lifecycle.join(',')}`);
+    assert.deepEqual(lifecycle,['bell-retired','layout-dom-absent','rpc-finished','parent-passive'],
+      'layout retirement must precede provider continuation without flushing passive effects');
+    assert.equal(await f.page.evaluate(() => window.jumps.size),0,'parent removal must not schedule a late jump');
+    return lifecycle;
+  } finally {await f.close();}
+}
+
+for(const action of ['task','message','accept','decline'])
+  test(`async parent removal retires held ${action} before passive cleanup`,() => parentRemovalBoundary(action));
+
+test('compiled passive cleanup timing omission reproduces actual removal window',async () => {
+  const code=await compile(['useLayoutEffect(() => {\n    mountedRef.current = true;',
+    'useEffect(() => {\n    mountedRef.current = true;']);
+  await assert.rejects(() => parentRemovalBoundary('task',code),error => error.code==='ERR_ASSERTION'
+    && error.message.includes('order=layout-dom-absent,rpc-finished,bell-retired,parent-passive'),
+    'real asynchronous removal must reject passive retirement, not mutation setup');
 });
