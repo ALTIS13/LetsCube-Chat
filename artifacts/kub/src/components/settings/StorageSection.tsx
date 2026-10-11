@@ -130,8 +130,8 @@ export function StorageSection() {
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-4 py-3 @min-[38rem]:grid-cols-[auto_minmax(0,1fr)_auto]">
         <KubIcon name="folder" size={16} className="mt-0.5 text-[color:var(--kub-cyan)]" />
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[color:var(--kub-text)]">
-            Хранилище приложения
+          <div className="flex items-center gap-x-1.5 text-sm text-[color:var(--kub-text)]">
+            <span className="min-w-0">Хранилище приложения</span>
             <InfoHint
               term="Хранилище приложения"
               text="Папка на диске, где LETSCUBE держит переписку, скачанные файлы и вход в аккаунт. Её можно перенести — например, туда, где больше свободного места. Новая папка начнёт использоваться после перезапуска."
