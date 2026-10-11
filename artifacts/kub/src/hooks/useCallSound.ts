@@ -106,8 +106,10 @@ export function playMessageSentSoundFor(input: {
   readonly chatId: string;
   readonly topicId: string | null;
 }): void {
+  const accountEpoch = useAppStore.getState().accountEpoch;
   const allowed = () => {
     const store = useAppStore.getState();
+    if (store.accountEpoch !== accountEpoch) return false;
     return messageSendSoundAllowed({
       ...input,
       enabled: getAudioSettings().notificationSoundEnabled && ownAlertPolicySnapshot(input.userId) === "allow",
