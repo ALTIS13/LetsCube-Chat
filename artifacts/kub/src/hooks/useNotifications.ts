@@ -371,7 +371,8 @@ export function useNotifications() {
         (payload) => {
           if (!current()) return;
           const row = payload.new as Notification;
-          setItems((prev) => current() ? prev.map((n) => (n.id === row.id ? row : n)) : prev);
+          setItems((prev) => current() ? prev.map((n) =>
+            (n.id === row.id ? mergeNotificationRows([n], [row], 1)[0] : n)) : prev);
         },
       )
       .subscribe((status) => {
