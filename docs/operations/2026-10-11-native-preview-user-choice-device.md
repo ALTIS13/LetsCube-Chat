@@ -220,3 +220,38 @@ This is compilation/artifact evidence only. No new device instrumentation, Auth,
 Settings save or ARM diagnosis has run. Fresh runtime source is being prepared
 against these exact artifacts; target/observer cleanup remains pending and bound.
 Protocol0/effective-none/richfalse and person-choice limits remain unchanged.
+
+## Fresh Runtime Refusal And Complete Owned Cleanup
+
+Independent affected review accepts builderR2's exact recipe pin correction;
+original READY/refused composition remain unchanged. The actual exclusive writer
+passes with binding SHA256
+348fcfa9bac10ed4063cb9fd10af9d298cca8784cdc512cf5a3eb3a7d4816d74,
+59 source pins and17 records. It does not perform device/Auth effects.
+
+Coordinator performs one ordinary wake and one separately invoked runtime.
+Test installation, exact owner custody, notification-permission ACK/readback and
+source-after checks pass. The attempt stops at OWNED_QA_INPUTS with
+NMPUC_SCREEN_NOT_READY, before acquiring credentials or dispatching instrumentation.
+No Auth/Settings/ARM result is claimed. Result SHA256:
+bee7a0bfcd43379604490f99b5f77e7832f290e40c09f95aa638417fb8bbf3e0.
+A later separate read-only calibration returns three normal children/empty stderr,
+power204792/window4794/activity42330 bytes within limits, but Awake is not confirmed.
+This later observation does not identify the historical refusal's exact field
+or establish why the screen changed; raw text/screens are not retained.
+
+Separate exact-owned-test cleanup passes, receipt SHA256
+22ba78866886304719153349a8d98434258c42f2d925f45f78d2d806ad484da7.
+Separate host target/observer cleanup then passes with recognized removals and
+fresh post-intent epochs; both are absent across users and test QA is already absent.
+Primary18, protected test, UID/CE/DE and original user0 state remain unchanged.
+Host cleanup result SHA256:
+8e74a662d67c1def63c8cbe58810301ae9b49918b1268092d88204bbf91985ce.
+Records: runtime `execution-r1/` and host `cleanup-r1/` under their named private
+directories above. No cleanup, Auth or original runtime is replayed.
+
+Next Task3 needs a new screen-ready, freshly owned diagnostic input. Retain the
+accepted SDK/source proof; do not rebuild unchanged test code merely to repeat it.
+The Settings none/sender/message/none native sequence, person choice, natural FCM,
+display and production protocol1 remain unaccepted. Continue independent search/
+existing-candidate inspection meanwhile.

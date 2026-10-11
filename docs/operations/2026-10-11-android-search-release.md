@@ -211,6 +211,68 @@ status, timing, foreground or zero-native404 checks. Unknown fictional launch
 stdout will be retained in a bounded exact record; the historical R7 stdout and
 false ACK remain unknown. No new profile/input/boot result or release is claimed.
 
+## Fresh R8 Runtime And Cleanup
+
+R8 source bindingb1482d41 is independently accepted. A new ephemeral QA17 and
+fresh R4 fixture installation have recognized acknowledgements; primary18 and
+protected-test APK/UID/CE/DE are unchanged. The actual COLD launch has Statusok,
+the exact fixture component, TotalTime1258, WaitTime1264 and a Complete footer.
+Its original312-byte fictional launch output is privately retained, not inferred
+from the older unknown R7 acknowledgement.
+
+The one automatic attempt reaches its120-second limit and refuses. Separate
+owned read-only numeric diagnostics show all15 native assets served, zero missing,
+HTTP/resource/console errors and nativeErrorCode0. JavaScript boot stage8 and
+module/fixture readiness pass. This proves the resource repair reached the
+device, not full search acceptance. The intentional Java Enter-field aliases
+decode to6/8 completed cases,4 page errors, errorCode15 and one completed theme.
+Code15 is the fixture watchdog; the source puts the incomplete case in dark-theme
+navigation. Neither the timeout nor these counters establish a product cause.
+No physical-light/dark mode or automatic replay was dispatched.
+
+Exact owned uninstall and switch0 were acknowledged. The subsequent remove17
+command failed; its original failure remains. A separately invoked read-only
+reconciliation proves QA17/fixture absent, current user0, original users and
+primary18/protected-test state preserved. It does not assert when the profile
+disappeared. Reconciliation SHA256:
+32edd8cf4951195bfa6b2cc773c36dfb6a784056d641a0c27980482bab868547.
+Records remain in `.ops-private/search-android-search-r8-20261011/`.
+
+Next: identify the failed fixture rule without weakening zero-error/semantic
+checks, then one separately bound changed-input check. Candidate19 preparation
+is independent; no18/19 publication or broad native lag acceptance is claimed.
+
+## Candidate19 Build And Retained Observer Refusal
+
+The main-based tree323c4988 has only the metadata overlay0.1.18/build19. Before
+its sole build,82 previous output/dist/sync/config files were privately copied and
+verified. Its actual build child exits0, no signal/error, empty stderr,95.365s.
+The post-build source gate refuses generated Capacitor absolute paths. Coordinator
+restores only those four generated paths to their tracked relative versions;
+the tree again has only the intended metadata change. No build is repeated.
+
+The retained79-file candidate includes APK7,631,211 bytes, SHA256
+7597eb9b6dd4794887b34a4f6822755f96b51cdc6bc7961308af9193eea6fc8c,
+and AAB7,266,145 bytes, SHA256
+3cf605995cdde11c977e8ab42cd1b35db6448edb0f6e9b60b9f2d7de600fb529.
+Embedded/dist/sync SW49e176d396a0da9d differs from real embedded18 SW5f45ba4441d2b1c1,
+local Bell fixture32a0af85cc7c06c0 and Stable17. Independent recovery-source review
+accepts all three stale-build refusals and actual preserved APK/sync comparison.
+The original build ACK remains postBuildSourceAccepted:false; no ordinary accepted
+build receipt is fabricated. Nested build text was not retained by the launcher,
+so no invented `built in Ns` marker is claimed.
+
+Coordinator invokes the reviewed existing-artifact observer once at17:00:31 UTC.
+It refuses after6.46s, retaining recovery-artifact-intent but no artifact PASS.
+The exact throw is unknown because that catch did not record its stage. A source
+audit finds a concrete transport regression: this derived observer missed the
+accepted18 direct Java executable port and again routed JBR through cmd.exe.
+This is an established source defect, not measured causality for the current
+refusal. Next input restores that exact port and adds bounded safe stage codes;
+the first intent, bytes, source/review records and unknown result remain immutable.
+No19 installation, publication or new signer/Firebase acceptance is claimed.
+Private records: `.ops-private/android-0.1.18-20261011/`.
+
 ## Remaining Acceptance
 
 Use a fresh owned ephemeral Realme profile. Preserve the existing primary/test

@@ -2,7 +2,7 @@
 
 Status: active production-hardening tracker, updated 2026-10-11.
 
-**Current continuation,2026-10-11:** coordinator, feature checkpointb3259458.
+**Current continuation,2026-10-11:** coordinator, feature checkpointb920f0b7.
 Shared search-focus and Bell consumer-lifetime fixes are live at main323c4988;
 exact healthy image, old/new markers, public/container JS+SW parity and retained
 previous assets are accepted. Unchanged source/browser proof is reused; item93
@@ -13,14 +13,23 @@ launch ACK remains unknown and separate diagnostics find2 native404s. Exact QA16
 absence/protected state is reconciled read-only; failed remove ACK stays failed.
 R4 then adds10 canonical-equivalent declared JS assets, preserving18 old payload
 entries. Actual ten-stage SDK repack/signature/identity/alignment and independent
-artifact review pass; fresh boot/physical search remain next, not inferred.
+artifact review pass. Fresh R8 launch is acknowledged; read-only native diagnostics
+now show15 assets served/zero missing or resource/HTTP/console errors. The single
+automatic attempt refuses at120s:6/8 cases,4 page errors and watchdog15. Cause
+unresolved, no physical search PASS. QA17/fixture absence and user0/protected18/
+test state are reconciled read-only; failed removal ACK is retained, no replay.
 Task3 parser/cleanup-epoch fixes and new host custody10576/10577 are accepted.
 New host-bound diagnostic AndroidTest4412b8ce,466,749 bytes, real Javac/actual DEX
-and998 unchanged retained artifacts pass independent review. No fresh runtime,
-Auth, Settings choice/save or ARM cause is claimed; exact cleanup is prepared.
+and998 unchanged retained artifacts pass independent review. Fresh binding348fcfa9
+has59 source pins/17 records. One actual attempt refuses screen readiness before
+credentials/instrumentation; exact owned test/target/observer cleanup all pass.
+No Auth, Settings choice/save or historical ARM cause is claimed. Candidate19
+APK7597eb9b/AAB3cf60599 are built once from main323c4988 after preserving82 files;
+artifact inspection refuses. Restore the accepted direct-Java observer transport
+with new reviewed inputs, retaining the original unknown failure and all bytes.
 Stable remains0.1.16/build17. Protocol0/effective-none/rich/person/display gates
 remain closed. Next: bounded device search and fresh ARM diagnosis, then a new
-Android bundle/candidate including Bell parity. Do not replay accepted Enter/FCM.
+Android physical acceptance including Bell parity. Do not replay accepted Enter/FCM.
 [Android candidate](operations/2026-10-11-android-search-release.md).
 [Search evidence](operations/2026-10-11-sidebar-search-focus.md).
 [Current device evidence](operations/2026-10-11-native-preview-user-choice-device.md).

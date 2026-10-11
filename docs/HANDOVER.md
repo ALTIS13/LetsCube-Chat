@@ -1,27 +1,15 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-11:** coordinator, feature source checkpointb3259458;
-shared-web Bell fix323c4988 is runtime-accepted. Android candidate0.1.17/build18
-signature/Firebase/36-file artifact and Realme upgrade are accepted, not Stable.
-Fresh search QA16 prepare/install ACKs pass with exact R3 fixturefd673c17.
-Automatic launch ACK is unknown; separate read-only fictional diagnostics show
-two remaining native404 resources, so no boot/physical PASS or release promotion.
-QA16/fixture are now absent, current user0 and original primary18/test UID/CE/DE
-state are read-only reconciled; failed remove ACK retained, no effect replay.
-Actual R4 repack adds ten canonical-equivalent declared JS assets; all eighteen
-old nonsignature entries stay equal. SDK signature/identity/alignment and ten
-ordered commands pass; this is artifact proof, not runtime404 or physical-input
-acceptance. Next: fresh strict launch observer, bounded physical search and new
-bundled Android parity. Task3 parser/cleanup-epoch fixes are now
-independently accepted (RED3/GREEN16). Fresh target/observer install and twelve-field
-SDK custody pass: UID10576/10577, primary18/test/users preserved, no Auth yet.
-Fresh host-bound AndroidTest-only compile and separate actual DEX verification
-pass: APK4412b8ce,466,749 bytes, real Javac, all non-test tasks skipped and998
-retained artifacts unchanged. Historical004e is unusable for the new UID/epochs.
-Next Task3: separately bound diagnostic runtime, then exact-owned cleanup; neither
-has run yet. Exact cleanup binding is prepared, removals not yet performed.
-Stable remains0.1.16/build17, item93 broad lag OPEN/PARTIAL. Protocol0/rich/person/
-display remain closed. Historical accepted stages are not repeated.
+**Current resume,2026-10-11:** coordinator; feature checkpointb920f0b7,
+web/main323c4988 runtime-accepted. Android19 bytes are built from that main,
+but artifact inspection refused; no rebuild or publication. Correct the inherited
+Java observer transport with separately reviewed inputs and safe stage diagnostics.
+Search R8 boots without missing resources but fails6/8 at120s; R9 diagnosis pending.
+Task3's one fresh attempt refused screen readiness before credentials/instrumentation;
+owned test, target and observer cleanup all pass, primary18/test data preserved.
+Next: existing19 artifact inspection, changed-input search diagnosis and physical
+acceptance; Task3 needs a fresh screen-ready diagnostic, not replay of its attempt.
+Stable stays0.1.16/build17; rich/person/display gates stay closed. Reuse accepted proof.
 [Android candidate and retained refusals](operations/2026-10-11-android-search-release.md).
 [Search cause and limits](operations/2026-10-11-sidebar-search-focus.md).
 [Task3 artifact, refusal and cleanup](operations/2026-10-11-native-preview-user-choice-device.md).
