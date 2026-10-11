@@ -4577,7 +4577,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     mount/action guards and exact selected-chat jump checks are implemented;
     actual mounted fictional Chromium worker61/61 including18 compiled omission
     mutants, original23 behavioral RED, coordinator kub typecheck/diffcheck pass.
-    Independent review and narrow main build/runtime checks remain pending.
+    The original61 also pass in main-based81b28cb8. Independent review exposed a
+    passive-cleanup gap: four actual asynchronous parent-removal RED cases now
+    pass with synchronous layout retirement. Affected GREEN6/6 includes the
+    cleanup-timing mutant and live control; historical61 are not replayed.
+    Independent delta review accepts with no P1/P2; coordinator post-review
+    typecheck passes. Narrow main build/runtime checks remain pending.
     Android candidate18 predates this fix; do not claim bundled Android parity
     or explain D-349/natural OS delivery from these consumer tests.
     [Cause and acceptance boundary](operations/2026-10-11-notification-click-lifetime.md).

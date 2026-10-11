@@ -19,6 +19,7 @@ were no production requests, accounts, screenshots, traces or recordings.
 ## Changed Behavior
 
 - Bind each action to its owner, account epoch, mounted lifetime and revision.
+  Retire mounted lifetime in layout cleanup, in the actual DOM-removal commit.
 - A newer notification action retires only the old UI continuation, not an
   already issued backend RPC. No automatic RPC retry or cancellation is added.
 - Check after read/invite/refresh awaits and pass the same guard to
@@ -45,12 +46,23 @@ Frozen SHA256:
 
 | File | SHA256 |
 | --- | --- |
-| NotificationBell.tsx | cb1a9f69038883dd2687ee6b34d303d33458e4ad3f4d3315dc1ca1633ee93d0d |
-| notify-click-owner-lifetime.test.mjs | 3997cce0d1f9c27dbe1476e2d919de5fa1e92c398276318df98de164304dadf8 |
+| NotificationBell.tsx | 573f7456ca775febf95eeca01ac43cba074ff8ce3ea8a6e9dad3504522d8cd71 |
+| notify-click-owner-lifetime.test.mjs | 1fba78514a70fea0edb9b049444f458abba1935a38fa69d099737d317f62a4f3 |
 
-Coordinator actual kub typecheck and `git diff --check` pass against these files.
-Independent review, main-tree build and running-image/content verification are
-still pending at this checkpoint. Only the narrow fix may be carried to main;
+The original61 also pass in the main-based tree81b28cb8. Independent review then
+identified a passive-cleanup timing gap masked by the original synchronous root
+unmount fixture. Four new real asynchronous parent-removal cases reproduce RED:
+DOM absent -> held RPC finished -> passive retirement, with route/select/alert
+effects. A real12ms layout workload exposes React's cooperative scheduling gap;
+no effect/scheduler mock or forced passive flush is used for removal. Layout
+cleanup fixes that boundary; affected GREEN6/6 covers four new cases, one compiled
+passive-cleanup omission and the live-action control. Historical61 are reused,
+not presented as66 new passes or rerun without changed inputs.
+
+Coordinator actual post-review kub typecheck and `git diff --check` pass.
+Independent delta review accepts the layout-retirement fix with no P1/P2.
+Main-tree build and running-image/content verification are still pending at this
+checkpoint. Only the narrow fix may be carried to main;
 unfinished native-preview feature commits and unowned sidebar work are excluded.
 
 ## Acceptance Boundary

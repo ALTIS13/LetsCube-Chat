@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
@@ -110,7 +110,7 @@ export function NotificationBell() {
   const mountedRef = useRef(false);
   const actionRevisionRef = useRef(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
