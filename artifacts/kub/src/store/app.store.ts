@@ -34,6 +34,23 @@ import {
 import { mapPgError } from '@/lib/errors'
 import { appOutbox } from '@/lib/outbox/appOutbox'
 
+type ChatMuteOwner = { userId: string | null; accountEpoch: number;
+  chats: Map<string, { revision: number; draft: number; pending: number; confirmed: ChatMutePreference | null }> }
+export type ChatMuteReadGuard = { owner: ChatMuteOwner; revisions: Map<string, number> }
+let muteOwner: ChatMuteOwner | null = null
+// Keep issued writes ordered even when the same account is retired/re-entered.
+const muteWrites = new Map<string, Promise<void>>()
+function chatMuteOwner(state: AppState): ChatMuteOwner {
+  const userId = state.currentUser?.id ?? null
+  if (!muteOwner || muteOwner.userId !== userId || muteOwner.accountEpoch !== state.accountEpoch) {
+    muteOwner = { userId, accountEpoch: state.accountEpoch, chats: new Map() }
+  }
+  return muteOwner
+}
+function currentMuteOwner(state: AppState, owner: ChatMuteOwner): boolean {
+  return state.currentUser?.id === owner.userId && state.accountEpoch === owner.accountEpoch
+}
+
 interface AppState {
   // Current user
   currentUser: Profile | null
@@ -133,8 +150,9 @@ interface AppState {
   /** Show what this browser remembered — only until the account answers. */
   applyCachedChatMutes: (userId: string | null, raw: string | null) => void
   /** The account's own answer, which replaces whatever was on screen. */
-  applyServerChatMutes: (userId: string | null, rows: ChatMutePreferenceRow[] | null) => void
-  setChatMutesError: (userId: string | null, message: string) => void
+  captureChatMuteRead: () => ChatMuteReadGuard
+  applyServerChatMutes: (userId: string | null, rows: ChatMutePreferenceRow[] | null, guard?: ChatMuteReadGuard) => void
+  setChatMutesError: (userId: string | null, message: string, guard?: ChatMuteReadGuard) => void
   /** Re-derive the ids — for the moment a timed mute lifts. */
   refreshChatMutes: () => void
   /**
@@ -382,6 +400,7 @@ function retireAccountState(state: AppState) {
   // Stop outgoing ACK publication before synchronously publishing the new owner.
   appOutbox.stop();
   return { accountEpoch: state.accountEpoch + 1, chats: [], messages: {},
+    chatMutes: EMPTY_CHAT_MUTES, mutedChatIds: [],
     replyToMessage: null, editingMessage: null, forwardingMessages: null, pendingForward: null,
     messageSelection: null, messageDeleteRequest: null,
     // Only the initial owner may retain a pending first-boot deep link.
@@ -599,58 +618,104 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => commitChatMutes(state, chatMutesForUser(state.chatMutes, userId))),
 
   applyCachedChatMutes: (userId, raw) =>
-    set((state) => commitChatMutes(state, applyCachedMutes(state.chatMutes, readCachedMutes(raw), userId))),
-
-  applyServerChatMutes: (userId, rows) =>
     set((state) => {
-      const next = applyServerMutes(state.chatMutes, userId, rows);
-      writeChatMuteCache(next);
+      const owner = chatMuteOwner(state);
+      if (userId !== owner.userId) return state;
+      let next = applyCachedMutes(state.chatMutes, readCachedMutes(raw), userId);
+      for (const id of owner.chats.keys()) {
+        next = applyLocalMute(next, userId, id, chatMuteFor(state.chatMutes, id));
+      }
       return commitChatMutes(state, next);
     }),
 
-  setChatMutesError: (userId, message) =>
-    set((state) => commitChatMutes(state, applyMutesError(state.chatMutes, userId, message))),
+  captureChatMuteRead: () => {
+    const owner = chatMuteOwner(get());
+    return { owner, revisions: new Map([...owner.chats].map(([id, chat]) => [id, chat.revision])) };
+  },
+
+  applyServerChatMutes: (userId, rows, guard) =>
+    set((state) => {
+      const owner = chatMuteOwner(state);
+      if (userId !== owner.userId || (guard && !currentMuteOwner(state, guard.owner))) return state;
+      let next = applyServerMutes(state.chatMutes, userId, rows);
+      for (const [id, chat] of owner.chats) {
+        if (chat.pending || (guard && (guard.revisions.get(id) ?? 0) !== chat.revision)) {
+          next = applyLocalMute(next, userId, id, chatMuteFor(state.chatMutes, id));
+        } else chat.confirmed = chatMuteFor(next, id);
+      }
+      if (![...owner.chats.values()].some((chat) => chat.pending > 0)) writeChatMuteCache(next);
+      return commitChatMutes(state, next);
+    }),
+
+  setChatMutesError: (userId, message, guard) =>
+    set((state) => {
+      if (guard && (!currentMuteOwner(state, guard.owner) || [...guard.owner.chats].some(([id, chat]) =>
+        chat.pending || (guard.revisions.get(id) ?? 0) !== chat.revision))) return state;
+      return commitChatMutes(state, applyMutesError(state.chatMutes, userId, message));
+    }),
 
   refreshChatMutes: () => set((state) => commitChatMutes(state, state.chatMutes)),
 
   setChatMute: async (chatId, option) => {
     const userId = get().currentUser?.id ?? null;
     if (!userId) return { ok: false, error: MUTE_SIGNED_OUT };
+    const owner = chatMuteOwner(get());
+    let chat = owner.chats.get(chatId);
+    if (!chat) {
+      chat = { revision: 0, draft: 0, pending: 0, confirmed: chatMuteFor(get().chatMutes, chatId) };
+      owner.chats.set(chatId, chat);
+    }
+    const choice = chat;
+    const draft = ++choice.draft;
+    choice.revision += 1;
+    choice.pending += 1;
     const muting = option !== 'off';
     const pref: ChatMutePreference = muting ? chatMutePreferenceFor(option, Date.now()) : CHAT_MUTE_OFF;
 
-    // Optimistic, because the control that starts this is a menu item that
-    // closes behind the press — the same reason `personalBlocksStore` is. The
-    // row that was there is kept so a refusal can put it back: a screen that
-    // keeps a mute the account does not have is this defect in miniature.
-    const before = chatMuteFor(get().chatMutes, chatId);
-    set((state) => commitChatMutes(state, applyLocalMute(state.chatMutes, userId, chatId, pref)));
+    // Rollback uses the last ACK, not a previous unconfirmed menu choice.
+    set((state) => commitChatMutes(state, applyLocalMute(chatMutesForUser(state.chatMutes, userId), userId, chatId, pref)));
 
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('chat_notification_preferences')
-        .upsert(
-          {
-            chat_id: chatId,
-            user_id: userId,
-            push_enabled: pref.pushEnabled,
-            muted_until: pref.mutedUntil,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'chat_id,user_id' },
-        );
-      if (error) throw error;
-      writeChatMuteCache(get().chatMutes);
-      return { ok: true, error: null };
-    } catch (error) {
-      // The cause goes to the log, where somebody who can act on it reads it;
-      // the screen gets one sentence about the situation. The bare `catch {}`
-      // this replaces is why a half-applied mute was invisible.
-      console.error('[chat-mute] upsert failed.', (error as { code?: string })?.code ?? '', (error as { message?: string })?.message ?? '');
-      set((state) => commitChatMutes(state, applyLocalMute(state.chatMutes, userId, chatId, before)));
-      return { ok: false, error: muteRefusalText(muting, mapPgError(error)) };
-    }
+    const key = JSON.stringify([userId, chatId]);
+    const write = (muteWrites.get(key) ?? Promise.resolve()).then(async () => {
+      if (!currentMuteOwner(get(), owner)) { choice.pending -= 1; return { ok: false, error: null }; }
+      try {
+        const supabase = createClient();
+        const { error } = await supabase
+          .from('chat_notification_preferences')
+          .upsert(
+            {
+              chat_id: chatId,
+              user_id: userId,
+              push_enabled: pref.pushEnabled,
+              muted_until: pref.mutedUntil,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'chat_id,user_id' },
+          );
+        if (error) throw error;
+        choice.pending -= 1;
+        choice.revision += 1;
+        if (!currentMuteOwner(get(), owner)) return { ok: false, error: null };
+        choice.confirmed = pref;
+        if (![...owner.chats.values()].some((chat) => chat.pending > 0)) writeChatMuteCache(get().chatMutes);
+        return { ok: choice.draft === draft, error: null };
+      } catch (error) {
+        choice.pending -= 1;
+        choice.revision += 1;
+        if (!currentMuteOwner(get(), owner)) return { ok: false, error: null };
+        if (choice.draft !== draft) return { ok: false, error: null };
+        console.error('[chat-mute] upsert failed.');
+        if (choice.pending === 0) {
+          set((state) => commitChatMutes(state, applyLocalMute(state.chatMutes, userId, chatId, choice.confirmed)));
+          if (![...owner.chats.values()].some((chat) => chat.pending > 0)) writeChatMuteCache(get().chatMutes);
+        }
+        return { ok: false, error: muteRefusalText(muting, mapPgError(error)) };
+      }
+    });
+    const tail = write.then(() => undefined, () => undefined);
+    muteWrites.set(key, tail);
+    void tail.then(() => { if (muteWrites.get(key) === tail) muteWrites.delete(key); });
+    return write;
   },
 
   // Opening a chat with nothing unread used to rebuild the whole list anyway,

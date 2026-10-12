@@ -76,6 +76,8 @@ const DESKTOP_MENU_HEIGHT_ESTIMATE = 388;
 export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateChange }: ChatListProps) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const muteOwnerId = currentUser?.id ?? null;
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
   const setChats = useAppStore((s) => s.setChats);
   const setMessages = useAppStore((s) => s.setMessages);
@@ -236,15 +238,21 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
    * on drawing a bell that is crossed out over a chat that is still delivering.
    */
   const applyMute = useCallback(async (chatId: string, option: ChatMuteOptionId | "off") => {
+    const ownsMute = () => {
+      const current = useAppStore.getState();
+      return muteOwnerId !== null && current.currentUser?.id === muteOwnerId && current.accountEpoch === accountEpoch;
+    };
+    if (!ownsMute()) return;
     const at = Date.now();
     setMuteChoiceOpen(false);
     const result = await setChatMute(chatId, option);
+    if (!ownsMute()) return;
     showActionFeedback(
       result.ok
         ? { kind: "success", title: chatMuteChoiceTitle(option, at), key: `chat-mute:${chatId}` }
         : { kind: "error", title: result.error ?? "", key: `chat-mute:${chatId}` },
     );
-  }, [setChatMute]);
+  }, [accountEpoch, muteOwnerId, setChatMute]);
 
   const updateChatList = useCallback((updater: (current: ChatWithLastMessage[]) => ChatWithLastMessage[]) => {
     const next = sortChatsForSidebar(updater(useAppStore.getState().chats), currentUser?.id ?? null);
