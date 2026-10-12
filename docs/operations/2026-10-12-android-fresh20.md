@@ -135,6 +135,13 @@ or a license to assume a missing field false on unknown output.
 Require a bound structural profile and honest conditional-state provenance
 before changing the reader. Do not substitute another unverified field name.
 
+A bounded pure four-row reference prototype ends8/8 fictional controls with
+native adapter HOLD. It deliberately does not parse the full real root dump;
+its result is not readiness, an OEM stop-state proof or another native attempt.
+The prototype remains unused/ignored, with no host/SDK/device effect. Do not
+repeat its accepted controls or grow a successor framework: establish the
+actual root/lifecycle/conditional-stop input, then amend the existing reader.
+
 ## Next Actions
 
 1. Preserve the separate current-state probe and original failed packet. Unknown
