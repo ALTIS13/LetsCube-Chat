@@ -1,19 +1,27 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-12 00:47 UTC:** coordinator; web runtime `d252b4a5`
-remains accepted. Actual signed Android `0.1.19`/build20 artifact, exact native22
-provenance, embedded web parity and protected Realme upgrade are accepted.
-Stable stays `0.1.16`/build17. Fresh isolated R11 refuses before semantic cases:
-foreground predicate4 sees zero resumed-activity rows despite acknowledged ADB.
-Exact-owned cleanup is reconciled read-only; fixture/profile absent, current0,
-primary20/test data preserved. Blocker: establish screen/keyguard/foreground
-cause, not another unchanged QA loop. Next: bounded sanitized observation, then
-changed-input strict native acceptance; independently advance item77. No SQL,
-native publication or rich/person/display acceptance. Preserve unowned sidebar/
-search paths and private main metadata. Original build-source refusal and
-failed remove ACK remain failures, with separately proved recovery/absence.
-[Current artifact, upgrade, refusal and next actions](operations/2026-10-12-android-fresh20.md).
-[Accepted hidden-history web rollout](operations/2026-10-12-hidden-history-batches.md).
+**Current resume, 2026-10-12 01:48 UTC:** coordinator; narrow main/runtime
+`c2e1397e` accepted. Account/epoch-owned chat-mute reads, confirmed rollback,
+per-chat write ordering, pending-cache guards and retained callback/effect
+admission are deployed. Final29/29, adjacent82/82, independent review, main
+typecheck/build,47 own-tree aliases, old/new compiled consumer, healthy image,
+public/container JS+SW parity, retained old image/entry and anonymous smoke pass.
+Item77's persisted topic/channel override feature remains open, not relabelled
+complete. Next product slice: canonical scoped preferences and trusted delivery
+eligibility with migration rehearsal and cross-device alignment.
+
+Signed private Android `0.1.19`/build20 and protected Realme upgrade remain
+accepted, but this APK predates the new mute repair. Stable stays0.1.16/build17.
+Awake20 R11 reaches top-resumed but refuses token cardinality before semantics;
+cleanup reconciliation proves exact QA24/fixture absence, current0 and unchanged
+primary20/test. Current0 numeric evidence plus official Android15 formatter
+establish the old mandatory stopped-key mismatch, not033's exact cause or OEM
+semantic acceptance. Next native slice: bound structural formatter profile,
+then one changed-input strict8/two-theme/physical4+4 attempt. No blind rerun,
+age renewal, SQL, native publication or rich/person/display promotion.
+Preserve unowned sidebar/search paths and private main version overlay.
+[Accepted chat-mute repair and rollout](operations/2026-10-12-chat-mute-ownership.md).
+[Artifact, actual attempts, cleanup and formatter boundary](operations/2026-10-12-android-fresh20.md).
 
 ## Historical Checkpoints
 

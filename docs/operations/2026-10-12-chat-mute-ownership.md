@@ -1,6 +1,6 @@
 # Chat Mute Ownership
 
-Owner: coordinator. Stage: reviewed source repair; runtime integration pending.
+Owner: coordinator. Stage: narrow main/runtime `c2e1397e` accepted at01:48 UTC.
 This closes demonstrated chat-mute races, not tracker item77's channel/topic
 override feature. No SQL, permissions, delivery provider or layout change.
 
@@ -62,3 +62,45 @@ preserve the unrelated sidebar/search work and private Android version overlay.
 Android's existing private build20 predates this fix; it is not native bundle
 parity for it. Windows loads the deployed web application, but its native
 notification/device acceptance is not implied by this frontend repair.
+
+## Actual Integration And Rollout
+
+Feature `25aafbf5` is cherry-picked as main `c2e1397e99c6ae514fec06a7013ad6ee5dd16858`.
+Exactly five paths enter main. All four source/test hashes match the reviewed
+inputs;47 aliases resolve in their own commit tree. Main keeps only its existing
+private Android version overlay dirty; unowned sidebar/search paths are excluded.
+Typecheck `624b37`/`7f2016` exits0. Actual Vite `e6e8c6`/`0f41fa` exits0 with
+`sw.js build cfc7ed93ace400a7` and25.49s. Existing sourcemap, mixed-import and
+large-chunk warnings remain; no build-warning repair is claimed.
+
+One bounded compiled marker checks the exact read-owner helper/getter and the
+per-chat revision Map consumer, not every mute callback or remote ordering.
+Its first source-only calibration passes4/4 but the actual bundle refuses
+`2d76b5`: minifier frequency allocation changes local identifier names. The
+equivalence repair uses lexical AST binding ordinals, keeping literal fields,
+free globals and resolved helper/getter exact. Actual affected calibration1/1,
+exact omission and revision-to-draft controls pass; compiled `0f0ffb` accepts.
+Original refusal is retained, not a product failure or an earlier actual PASS.
+
+Runtime before `27af1f` at01:30 UTC matches accepted `d252b4a5`. Push `e6bdb6`
+starts Coolify deployment `obqfyr46ws84hx1yyropevx5`; its queue status is not the
+acceptance proof. Actual after `21ed44`,01:48:01 UTC, accepts the sole healthy
+`c2e1397e` image, read-owner marker old1/new0 -> old0/new1, and all five prior
+hidden-history/notification/send-epoch/voice/Storage consumers unchanged0/1.
+Public/container JS and SW digests match. Previous entry and image are retained.
+
+```text
+entry /assets/index-CX3KnNFa.js
+JS SHA256 d25a1b7d292a1adcedcdecbb47d955860a6fd37edc67e3b96e1589f284587b7c
+SW SHA256 b63b84f47ef29041e2c600a9139511e526e04072e19cdffe995f98170541843c
+image sha256:7abacc1ab1dfd9adbf110eaf3994168ad495707a65e20423bac531cd08e3c6bf
+```
+
+Anonymous smoke `6b817b`,01:48:23 UTC, mounts `/` and follows the actual login
+link using that entry:0 page errors/0 mutation requests. No personal session,
+screenshots, trace, video or download. This is boot/routing proof, not a live
+account mute write or independently mounted ownership-race test. Local and
+production bundle hashes differ by their existing configuration domains.
+
+No DB or native release changed. Item77 still needs persisted topic overrides,
+canonical trusted enqueue/pre-send eligibility and cross-device alignment.

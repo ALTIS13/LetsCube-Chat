@@ -85,13 +85,64 @@ The existing setup has no wake/awake precondition. The next minimal source slice
 will establish that precondition before an owned launch, keeping the strict
 foreground parser and semantic/physical criteria unchanged.
 
+## Awake20 Changed-Input Attempt
+
+A separately measured current-user0 wake/readback at01:08 UTC observes Awake
+and the explicit `dumpsys activity top-resumed` root-field format. Pinned AOSP
+references support that dedicated command; they are not the OEM's exact source.
+The source derivative adds acknowledged WAKEUP/Awake before owned setup and
+selects top-resumed for both foreground reads. Expected QA user, exact fixture
+package/component and RESUMED/stopped/finishing requirements remain strict.
+Source parser RED1 ->7/7 plus four omissions; independent review accepts.
+
+Binding `e9bc3a92` materializes exactly seven modules. Actual materialize
+`f94c4e`, prepare `090126` and fixture install `b26e29` pass. Automatic `212483`
+refuses after5.76s at first foreground edge033, before semantic cases:
+ACK0/no error/signal/stderr,4621 stdout bytes, predicate5 fails lexical token
+cardinality. Metadata does not identify which token or distinguish missing from
+duplicate; repeated OR-mask bits63/63 do not mean all fields passed. Exact
+owner/component/state checks were not reached. No raw dump retained, no native,
+physical or publication acceptance.
+
+Cleanup `2d9428` refuses and remains failed. Separate read-only reconciliation
+`b9d63e`,01:23:39 UTC, proves exact QA24/fixture absence, current0/users[0] and
+unchanged primary20/protected test. Result SHA
+`fe3965749b108887764927b8be1a884dc5dab2cea1c30e8c06f28e7b23d54d02`.
+No effects replay, personal app launch or needed command remains outstanding.
+
+The parser counts lexical words across the entire dump rather than structurally
+binding the root ActivityRecord fields. This is a diagnostic/grammar gap, not a
+proven particular duplicate or product failure. The smallest next measurement
+is numeric-only root/word assignment cardinality; do not rerun semantic cases
+to discover a token. Current-user0 grammar evidence is not the QA24 observation.
+Original artifact expiry remains06:20:56 UTC; no read/derivative renews it.
+
+One separately bounded read-only current0 formatter observation at01:37:41 UTC
+has two acknowledged commands/196ms, no wake/launch/install/profile effect and
+no raw retention. Whole word/assignment buckets are `[1,1,1,1,0,1]` for the six
+fixed fields: `stopped` is absent. Root anchors are1111 but lifecycle shape fails
+the old contract; root identity/state are not admitted from this observation.
+It is not QA24's dump or proof of033's missing/duplicate token.
+
+Direct bounded official HTTPS reads resolve Android15 release
+`android-15.0.0_r1` to `4e43ad12e1b211f15152e9c5b16b0fe88e6b93f3`.
+Its lifecycle row prints state/delayedResume/finishing, not stopped. Separate
+`mAppStopped` is printed only when true. The dedicated top-resumed route dumps
+one server record with an empty prefix. This explains why the old mandatory
+key is not a portable formatter contract; it is not an exact OEM fingerprint
+or a license to assume a missing field false on unknown output.
+[Pinned ActivityRecord formatter](https://android.googlesource.com/platform/frameworks/base/+/4e43ad12e1b211f15152e9c5b16b0fe88e6b93f3/services/core/java/com/android/server/wm/ActivityRecord.java#1247).
+Require a bound structural profile and honest conditional-state provenance
+before changing the reader. Do not substitute another unverified field name.
+
 ## Next Actions
 
 1. Preserve the separate current-state probe and original failed packet. Unknown
    keyguard fields remain unknown; do not infer the old failure from this read.
-2. Establish the explicit wake/awake setup precondition, then use one changed-input
-   attempt with the strict behavioral and physical acceptance unchanged. Stop
-   unchanged refusal cycles; no new SDK build solely to redate an artifact.
+2. Measure and fix structural root-field parsing with literal collision and
+   duplicate-root controls before another changed-input native attempt. Wake
+   setup is now present; do not repeat its source preparation unchanged. No new
+   SDK build solely to redate an artifact or blind automatic/physical replay.
 3. Complete native behavior and checked publication before changing Stable.
    Native preview/person/display promotion remains separately unaccepted.
 4. Advance item77's channel/topic preference contract independently. Preserve

@@ -1,5 +1,32 @@
 # QA Results
 
+## 2026-10-12 - Chat Mute Owner, Draft And Retained Action Boundaries
+
+Actual full compiled hook/store RED2/12 ->20/20 with seven omissions. Independent
+review finds retained hook/ChatList callbacks and deferred old/null effects:
+seven new literal regressions RED; corrected React callback port and guarded
+product final29/29, zero skips. Adjacent mute/auth-session contracts82/82 are
+reused only at their unchanged boundaries. Final independent review accepts.
+Exactly five reviewed paths integrate into mainc2e1397e, four source hashes match;
+47 aliases resolve, private metadata/unowned changes preserved. Main typecheck
+and actual Vite25.49s/SWcfc7ed93ace400a7 pass. Initial compiled marker refuses
+minifier identifier allocation; lexical AST amendment actual calibration1/1
+and compiled0f0ffb pass, original refusal retained.
+
+Actual before27af1f/after21ed44 accepts healthy c2e1397e at01:48 UTC, compiled
+read-owner old1/new0 ->old0/new1, five prior consumers unchanged0/1, public/
+container JS+SW parity and retained prior asset/image. Anonymous smoke6b817b
+passes home/login:0 errors/0 mutations, no captures/personal session.
+No SQL, cross-device ordering guarantee, whole item77 or Android parity claim.
+[Source boundaries and real rollout](operations/2026-10-12-chat-mute-ownership.md).
+
+Awake20's separate actual automatic212483 fails foreground token cardinality
+before semantics; cleanup2d9428 remains failed, reconciliationb9d63e proves exact
+QA24/fixture absence and preserved primary20/test/current0. Current0 numeric-only
+measurement and pinned official Android15 show old stopped-key format mismatch;
+033's exact token and OEM acceptance remain unproven. Stable17 unchanged.
+[Native formatter boundary](operations/2026-10-12-android-fresh20.md).
+
 ## 2026-10-12 - Fresh Android20 Artifact And Protected Upgrade
 
 One actual signing-wrapper build completes its child command, but caller4c9a99

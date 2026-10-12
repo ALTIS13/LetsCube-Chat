@@ -2,20 +2,25 @@
 
 Status: active production-hardening tracker, updated 2026-10-12.
 
-**Current actual checkpoint,2026-10-12 00:47 UTC:** web/runtime d252b4a5 remains
-accepted. Actual signed private Android0.1.19/build20 artifact, native22 provenance,
-embedded web parity and protected Realme upgrade pass. Stable remains17, not20.
-Fresh R11 preparation/install pass; automatic refuses foreground predicate4
-before semantic/physical checks, with acknowledged transport but zero resumed
-rows. Exact cleanup reconciles absence and unchanged primary20/test/user0.
-Next: bounded screen/keyguard/grammar diagnosis, not unchanged replay; strict
-native acceptance/publication remain open. Independently advance item77's scoped
-notification contract. No DB/release change or rich/person/display promotion.
-Original source-check/remove ACK refusals stay retained as failures, not PASS.
+**Current actual checkpoint,2026-10-12 01:48 UTC:** web/runtime c2e1397e accepted;
+chat-mute owner/epoch/read/write/cache and retained action/effect repairs pass
+29/29, adjacent82/82, independent review, typecheck/build,47 aliases, compiled
+consumer old/new and healthy public/container parity plus anonymous smoke.
+Item77's persisted child override/canonical provider decision remains open.
+Actual signed private Android0.1.19/build20/protected upgrade pass, but predates
+this mute fix. Stable remains17. Awake20's new top-resumed reader refuses lexical
+cardinality before semantics; exact QA24/fixture cleanup reconciles current0 and
+protected data. Numeric current0/official Android15 show mandatory stopped-key
+format mismatch, not old033's exact cause/OEM acceptance. Next: structural native
+profile, then changed-input8/two-theme/4+4; independently scoped preferences.
+No DB/release/rich/person/display promotion or unchanged refusal replay.
+[Actual chat-mute repair and rollout](operations/2026-10-12-chat-mute-ownership.md).
 [Actual artifact, upgrade and QA boundary](operations/2026-10-12-android-fresh20.md).
 [Accepted hidden-history rollout](operations/2026-10-12-hidden-history-batches.md).
 
-**Current actual checkpoint, 2026-10-12:** narrow main/runtime `0176253a` is
+Older checkpoint paragraphs below are chronology, not competing current stages.
+
+**Historical checkpoint, 2026-10-12:** narrow main/runtime `0176253a` is
 healthy, with public/container JS+SW parity and retained prior entry/image. Voice
 duplicate-pending-pointer repair passes 53 affected checks and independent review;
 compiled consumer changes old1/new0 to old0/new1. D-222 Storage heading follow-up
