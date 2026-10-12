@@ -2,21 +2,18 @@
 
 Status: active production-hardening tracker, updated 2026-10-12.
 
-**Current actual checkpoint,2026-10-12:** web main/runtime d252b4a5 accepted
-23:34:04 UTC. Hidden-history checks overlap at most two100-ID reads, keeping full
-verification before admission: source9/9, calibrated full React RED ->4/4 patched
-1440/390 both themes with inspected pixels, independent reviews, typecheck/build
-and29 own-tree aliases pass. Healthy exact image, compiled old/new helper,
-public/container JS+SW and retained previous entry/image pass; anonymous smoke
-passes. Notification read, sound-epoch, Voice/Storage fixes remain accepted.
-No DB/native release change; item87's unidentified client/cause remains open.
-QA22 refusal/cleanup retained, private19 expired, Stable stays17. Source-only
-foreground metadata8/8 is accepted, not native acceptance. Next: fresh20 source
-and exact native22 byte provenance; existing source aggregate changed, so old
-19 pins cannot be reused blindly. No old scenario replay or freshness renewal.
-[Hidden-history rollout](operations/2026-10-12-hidden-history-batches.md).
-[Notification read](operations/2026-10-12-notification-read-realtime.md).
-[Pending sound epoch](operations/2026-10-12-message-send-sound-epoch.md).
+**Current actual checkpoint,2026-10-12 00:47 UTC:** web/runtime d252b4a5 remains
+accepted. Actual signed private Android0.1.19/build20 artifact, native22 provenance,
+embedded web parity and protected Realme upgrade pass. Stable remains17, not20.
+Fresh R11 preparation/install pass; automatic refuses foreground predicate4
+before semantic/physical checks, with acknowledged transport but zero resumed
+rows. Exact cleanup reconciles absence and unchanged primary20/test/user0.
+Next: bounded screen/keyguard/grammar diagnosis, not unchanged replay; strict
+native acceptance/publication remain open. Independently advance item77's scoped
+notification contract. No DB/release change or rich/person/display promotion.
+Original source-check/remove ACK refusals stay retained as failures, not PASS.
+[Actual artifact, upgrade and QA boundary](operations/2026-10-12-android-fresh20.md).
+[Accepted hidden-history rollout](operations/2026-10-12-hidden-history-batches.md).
 
 **Current actual checkpoint, 2026-10-12:** narrow main/runtime `0176253a` is
 healthy, with public/container JS+SW parity and retained prior entry/image. Voice

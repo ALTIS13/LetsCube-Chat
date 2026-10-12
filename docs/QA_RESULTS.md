@@ -1,5 +1,23 @@
 # QA Results
 
+## 2026-10-12 - Fresh Android20 Artifact And Protected Upgrade
+
+One actual signing-wrapper build completes its child command, but caller4c9a99
+refuses four generated cap-sync path changes. Original refusal retained; exact
+same-directory normalization then one artifact inspectionaad226 passes actual
+SDK/signature/Firebase/36 embedded files and compiled-consumer checks. Recovery
+is explicit, not fabricated ordinary build completion or a renewed age. Independent
+source/artifact reviews accept. Protected upgradeb229e2/ecb612 installs20 once
+in11.7s without clearing primary data or changing protected test/original users.
+
+Fresh strict R11 check/materialize/prepare/install pass, independent review
+accepted. Automatice69690 refuses at foreground predicate4 after5.34s: ACKtrue,
+modern0/legacy0; no8/8 semantics or physical4+4. Exact cleanup1f9a9d has a failed
+remove ACK, retained. Read-only reconciliation26546e proves owned fixture/profile
+absence and primary20/test/user0 preservation, no effect replay. Stable17 unchanged.
+Webd252 remains accepted; no production SQL, personal captures or publication.
+[Detailed evidence and next finite gate](operations/2026-10-12-android-fresh20.md).
+
 ## 2026-10-12 - Hidden-History Waiting Boundary
 
 Actual helper/caller3 PASS/2 RED ->9/9 with four compiled omission controls.
