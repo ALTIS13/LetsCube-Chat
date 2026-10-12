@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { mapPgError } from "@/lib/errors";
-import { useAppStore } from "@/store/app.store";
+import { useAppStore, type ChatMuteReadGuard } from "@/store/app.store";
 import {
   CHAT_MUTE_CACHE_KEY,
   chatMuteFor,
@@ -28,12 +28,19 @@ import {
  * The read is guarded at module scope rather than per component because three
  * surfaces mount it — the chat header, the contact card and the chat list — and
  * a query per mounted surface would ask the same question three times on every
- * chat switch. The guard is the shape `personalBlocksStore` uses: load once per
- * person, and forget on sign-out.
+ * chat switch. Reads belong to an account epoch, not only a person's ID.
  */
 
-let loadedFor: string | null = null;
-let inFlight: Promise<void> | null = null;
+type ReadOwner = { userId: string; accountEpoch: number };
+let loadedFor: ReadOwner | null = null;
+let inFlight: { owner: ReadOwner; request: Promise<void> } | null = null;
+function currentOwner(owner: ReadOwner): boolean {
+  const state = useAppStore.getState();
+  return state.currentUser?.id === owner.userId && state.accountEpoch === owner.accountEpoch;
+}
+function sameOwner(a: ReadOwner | null | undefined, b: ReadOwner): boolean {
+  return a?.userId === b.userId && a.accountEpoch === b.accountEpoch;
+}
 
 /** For the specs that need the account asked again from scratch. */
 export function resetChatMuteReads(): void {
@@ -41,7 +48,8 @@ export function resetChatMuteReads(): void {
   inFlight = null;
 }
 
-async function readChatMutes(userId: string): Promise<void> {
+async function readChatMutes(owner: ReadOwner, guard: ChatMuteReadGuard): Promise<void> {
+  const { userId } = owner;
   const store = useAppStore.getState();
   try {
     const supabase = createClient();
@@ -50,19 +58,13 @@ async function readChatMutes(userId: string): Promise<void> {
       .select("chat_id,push_enabled,muted_until")
       .eq("user_id", userId);
     if (error) throw error;
-    // The person may have signed out while the read was in flight; an answer
-    // for somebody else must never become this person's list. The store checks
-    // it again, because `applyServerMutes` is what makes the source «server».
-    if (useAppStore.getState().currentUser?.id !== userId) return;
-    loadedFor = userId;
-    store.applyServerChatMutes(userId, (data ?? []) as ChatMutePreferenceRow[]);
+    if (!currentOwner(owner)) return;
+    loadedFor = owner;
+    store.applyServerChatMutes(userId, (data ?? []) as ChatMutePreferenceRow[], guard);
   } catch (error) {
-    if (useAppStore.getState().currentUser?.id !== userId) return;
-    // The cause goes to the log; the screen keeps whatever the cache had, and
-    // the source stays «cache», so the account's own answer still wins when it
-    // arrives.
-    console.error("[chat-mute] read failed.", (error as { code?: string })?.code ?? "", (error as { message?: string })?.message ?? "");
-    store.setChatMutesError(userId, mutesReadFailureText(mapPgError(error)));
+    if (!currentOwner(owner)) return;
+    console.error("[chat-mute] read failed.");
+    store.setChatMutesError(userId, mutesReadFailureText(mapPgError(error)), guard);
   }
 }
 
@@ -75,12 +77,15 @@ async function readChatMutes(userId: string): Promise<void> {
  */
 export function useChatMutes() {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const snapshot = useAppStore((s) => s.chatMutes);
   const syncChatMuteUser = useAppStore((s) => s.syncChatMuteUser);
   const applyCachedChatMutes = useAppStore((s) => s.applyCachedChatMutes);
   const refreshChatMutes = useAppStore((s) => s.refreshChatMutes);
 
   useEffect(() => {
+    const current = useAppStore.getState();
+    if ((current.currentUser?.id ?? null) !== userId || current.accountEpoch !== accountEpoch) return;
     syncChatMuteUser(userId);
     if (!userId) {
       loadedFor = null;
@@ -96,11 +101,13 @@ export function useChatMutes() {
       raw = null;
     }
     applyCachedChatMutes(userId, raw);
-    if (loadedFor === userId || inFlight) return;
-    inFlight = readChatMutes(userId).finally(() => {
-      inFlight = null;
+    const owner = { userId, accountEpoch };
+    if (!currentOwner(owner) || sameOwner(loadedFor, owner) || sameOwner(inFlight?.owner, owner)) return;
+    const request = readChatMutes(owner, useAppStore.getState().captureChatMuteRead()).finally(() => {
+      if (inFlight?.request === request) inFlight = null;
     });
-  }, [applyCachedChatMutes, syncChatMuteUser, userId]);
+    inFlight = { owner, request };
+  }, [accountEpoch, applyCachedChatMutes, syncChatMuteUser, userId]);
 
   // A timed mute is the one piece of state that changes with nothing happening.
   // One timer to the earliest end, re-armed whenever the rows change.
@@ -131,14 +138,17 @@ export interface ChatMuteControl {
  * is the timer above, and that re-renders every reader of the snapshot.
  */
 export function useChatMute(chatId: string | null | undefined): ChatMuteControl {
+  const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const snapshot = useChatMutes();
   const setChatMute = useAppStore((s) => s.setChatMute);
   const pref = chatId ? chatMuteFor(snapshot, chatId) : null;
   const state = useMemo(() => chatMuteState(pref, Date.now()), [pref]);
   const setMute = useCallback(
     (option: ChatMuteOptionId | "off") =>
-      chatId ? setChatMute(chatId, option) : Promise.resolve({ ok: false, error: null }),
-    [chatId, setChatMute],
+      chatId && userId && currentOwner({ userId, accountEpoch })
+        ? setChatMute(chatId, option) : Promise.resolve({ ok: false, error: null }),
+    [accountEpoch, chatId, setChatMute, userId],
   );
   return { state, setMute };
 }
