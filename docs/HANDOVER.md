@@ -1,22 +1,21 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15:** coordinator; shared-web main/runtime
-c9f86afb accepted for D-362 (transport/SDK48, real-loopback browser13) and D-360
-(final63, unchanged hook26/28 reused). Two independent player P2s were repaired
-before publication. Final review, main typecheck/build,68 own-tree aliases,
-actual healthy image, old/new body consumer0/1, JS/SW public/container parity,
-retained previous image/entry and fresh anonymous smoke pass at13:45UTC.
-Item87's fixture-only warm trace now passes4/4 (1440/390, both themes), final
-independent review and retained-receipt/source-pin checks accepted. Saved text
-survives pending history/media; continuous trust skips hidden/membership reads,
-while an unknown B row is withheld until verification. Project collection is
-scoped to four primary-Chromium cases without replaying them. This is not a
-production/device/paint benchmark or the tester's cause. Next: one changed-input
-local loss/rejoin/revival trace with privacy revalidation; reuse accepted warm
-and D-362 evidence. No SQL/native release. Preserve unowned sidebar/search files
-and main Android overlay. Semantic media intake remains incomplete.
-[Current ledger](operations/2026-10-15-network-body-and-playback.md).
-[Warm trace, exact scope and next acceptance](operations/2026-10-15-warm-open-measurement.md).
+**Current resume, 2026-10-15 16:32 UTC:** coordinator; shared-web main/runtime
+5828284e accepted for D-363 stale hidden-answer admission and D-364 pending
+clear-mark/membership-seed retirement across loss/rejoin. Affected165/165,
+cache30/30, independent review, final main typecheck/build,29 own-tree aliases,
+healthy exact image, old/new consumer1/0 ->0/1, public/container JS+SW parity,
+retained rollback image/entry and anonymous smoke pass. Recovery fixture1/1
+observes real cut/rejoin/ping, fresh privacy, withheld new row, missed-hide removal
+and49 duplicate-free rows without reload. Accepted warm4 prefix/evidence reused.
+Item87's tester/device/VPN latency cause and semantic5-image/1-video intake stay
+open. Next: finish that bounded intake and measure the current-client opening
+path; prepare a current-source Android candidate with affected Realme QA, not a
+replay of deferred native-preview attempts. APK remains unchanged in this slice;
+no SQL, provider, signing or identity change. Preserve unowned sidebar/search
+paths and main Android overlay. Completed tests are not work to repeat.
+[Current cause, checks and release](operations/2026-10-15-network-revival-measurement.md).
+[Earlier warm baseline and limits](operations/2026-10-15-warm-open-measurement.md).
 
 **Accepted checkpoint, 2026-10-15 11:51 UTC:** coordinator; tester-priority web rollout accepted.
 One selected read-only Nikita intake returned 19 new rows (13 text/5 images/1

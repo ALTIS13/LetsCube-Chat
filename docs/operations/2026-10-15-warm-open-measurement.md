@@ -89,15 +89,17 @@ bytes remain unchanged after that config-only integration.
 $env:KUB_QA_ALLOW_MUTATIONS = '0'
 $env:KUB_QA_WARM_BOOT_DIAG = '0'
 $run = Join-Path $env:TEMP ('letscube-warm-' + [guid]::NewGuid())
-pnpm.cmd exec playwright test tests/e2e/chat-warm-open-measurement.spec.ts --project=chromium-desktop-1440 --workers=1 --reporter=line --max-failures=1 --global-timeout=120000 --output "$run"
+pnpm.cmd exec playwright test tests/e2e/chat-warm-open-measurement.spec.ts --project=chromium-desktop-1440 --grep="per-open" --workers=1 --reporter=line --max-failures=1 --global-timeout=120000 --output "$run"
 ```
 
-## Next Changed Input
+## Follow-Up Accepted
 
-Use the existing local network-loss/rejoin fixture through the actual revival
-and privacy-revalidation path. Require authoritative recovery without reload and
-preserved approved history where allowed. Reuse the accepted D-362 body/SDK and
-current warm evidence; do not replay them or change the owner's VPN/routes.
-Route-response release is not native body EOF. That recovery stage is not yet
-implemented or accepted, and no speculative cache replacement follows from this
-passing warm trace.
+The later changed-input loss/rejoin/revival case passes1/1. It is appended
+separately; this accepted baseline prefix remains byte-identical. Collection
+now lists5 primary-Chromium cases (warm4 plus recovery1), not a replay of warm4.
+The subsequent D-363/D-364 source repairs and shared-web5828284e acceptance
+are recorded separately; the historical timings above still describe their
+original source, not a benchmark of that newer release. Reuse D-362 body/SDK
+evidence; route-response release is not native body EOF. No new cache framework
+or owner VPN/routing change was introduced.
+[Recovery, repairs and actual release](2026-10-15-network-revival-measurement.md).

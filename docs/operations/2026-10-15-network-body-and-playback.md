@@ -287,3 +287,9 @@ duplicated project matrix. The initial refused gates above remain chronology,
 not current failures or product defects. The next changed input is recovery
 after network loss, not another warm baseline run.
 [Results, interpretation and reproduction](2026-10-15-warm-open-measurement.md).
+
+Subsequent network-loss recovery is accepted1/1 without replaying warm4.
+It led to separately reproduced D-363/D-364 and shared-web5828284e acceptance;
+the earlier source/runtime evidence in this report remains historical and valid
+for its own slice, not the latest release pointer.
+[Current cross-gap source and runtime acceptance](2026-10-15-network-revival-measurement.md).

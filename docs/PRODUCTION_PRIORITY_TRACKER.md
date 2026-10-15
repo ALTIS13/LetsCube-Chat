@@ -2,20 +2,22 @@
 
 Status: active production-hardening tracker, updated 2026-10-15.
 
-**Active priority, 2026-10-15 13:45 UTC:** the owner's instruction puts Nikita's
+**Active priority, 2026-10-15 16:32 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
 (13 text,5 images,1 video, no new voice). Item87 now has warm chat-switch/open
 latency reports; VPN-associated opening failure and lock-screen preview lack
 are reported, not diagnosed. Cache already exists. Prior dc5a7c70 repairs stay
-accepted; new main/runtime c9f86afb closes scoped D-360/D-362. Final source48,
-browser13, player63, unchanged hook26/28, independent review, main typecheck/build,
-68 own-tree aliases, healthy image, actual old/new consumer, public/container
-JS+SW, rollback assets and anonymous smoke pass. The fixture-only warm trace now
-passes4/4 with independent review and exact source/receipt checks. Next: one
-changed-input loss/rejoin/revival trace, not a new caching framework. No APK.
+accepted, including c9f86afb's D-360/D-362. New main/runtime5828284e closes
+D-363/D-364 cross-gap privacy reads: affected165/165, cache30/30, review,
+typecheck/build,29 own-tree aliases, healthy image, old/new consumer, public/
+container JS+SW, rollback and anonymous smoke pass. Recovery fixture1/1 verifies
+actual cut/rejoin/privacy/duplicate-free restoration. Warm4 evidence is reused.
+Next: incomplete semantic media intake and current-client opening measurements,
+then a current-source Android candidate with affected QA. No APK in this slice.
 Native-preview diagnostics are deferred, not a reason to replay old attempts.
 [Intake, privacy boundaries and cache direction](operations/2026-10-15-tester-feedback.md).
 [Current acceptance and next measured stage](operations/2026-10-15-network-body-and-playback.md).
+[Cross-gap repairs and actual rollout](operations/2026-10-15-network-revival-measurement.md).
 
 **Accepted checkpoint,2026-10-12 01:48 UTC:** web/runtime c2e1397e accepted;
 chat-mute owner/epoch/read/write/cache and retained action/effect repairs pass
@@ -4598,6 +4600,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     paint, an SLA or the tester's cause. Next changed input is actual revival/
     privacy revalidation through local network loss/rejoin; keep this item open.
     [Measurement and limits](operations/2026-10-15-warm-open-measurement.md).
+    Changed-input recovery1/1 now passes: actual old-read cut, new joins/ping,
+    fresh privacy, unknown-row withholding, missed-hide removal and49 unique
+    allowed rows without document reload. Separately reproduced D-363/D-364
+    cross-gap completion failures are shared-web5828284e accepted. This does not
+    establish the reported device/VPN cause or update an installed APK. Semantic
+    media intake and current-client measurements remain next; this item stays open.
+    [Recovery and delivered boundary](operations/2026-10-15-network-revival-measurement.md).
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
     Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
@@ -4769,19 +4778,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
      transport dependency, write retry or network change.
      [Scope, upstream comparison and acceptance](operations/2026-10-15-network-body-and-playback.md).
 
-102. `[~]` Fence hidden-message admission across network gaps, **D-363**.
+102. `[x]` Fence hidden-message admission across network gaps, **D-363**, shared web.
      Original actual-hook control passes while the delayed pre-gap privacy
      answer admits an unknown row after rejoin. Read-period tickets now guard
      batched helpers and caller continuations. Affected165/165, local real-hook
-     recovery1/1; independent review and narrow production rollout pending.
+     recovery1/1; review, typecheck/build and actual5828284e image/content/parity/
+     rollback/anonymous smoke accepted16:32UTC.
      No new cache framework, live data or native release.
      [Evidence and limits](operations/2026-10-15-network-revival-measurement.md).
 
-103. `[~]` Retire pending clear marks and membership seeds across loss/rejoin,
+103. `[x]` Retire pending clear marks and membership seeds across loss/rejoin,
      **D-364**. Seven RED/six controls ->30/30 including8 omissions and6 adjacent
      cache cases. New pending ownership survives old completion; old loaders
      do not auto-retry across connection loss. Completed young-answer3s reuse
-     and per-chat clear behavior remain intact. Review/rollout pending.
+     and per-chat clear behavior remain intact. Review and shared-web5828284e
+     rollout accepted16:32UTC. No immediate offline revocation claim.
      [Evidence and limits](operations/2026-10-15-network-revival-measurement.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
