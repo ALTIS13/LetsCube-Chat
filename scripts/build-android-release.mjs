@@ -47,6 +47,14 @@ function run(command, args, env, cwd = root) {
     throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}.`);
   }
 
+  // Surface only genuine completion records; child output may contain config.
+  const output = `${result.stdout}\n${result.stderr}`.replace(/\x1b\[[0-9;]*m/g, "");
+  for (const line of output.split(/\r?\n/)) {
+    const marker = line.trim().match(/^(?:\[plugin kub-service-worker-build\]\s*)?(sw\.js build [a-f0-9]{8,64})$/)
+      ?? line.trim().match(/^(?:[\u2713\u2714]\s*)?(built in \d+(?:\.\d+)?(?:ms|s))$/)
+      ?? line.trim().match(/^(BUILD SUCCESSFUL in \d+(?:\.\d+)?(?:ms|s|m|h)(?: \d+(?:\.\d+)?(?:ms|s|m|h))*)$/);
+    if (marker) console.log(marker[1]);
+  }
   return result.stdout.trim();
 }
 
