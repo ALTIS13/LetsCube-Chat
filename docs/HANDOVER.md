@@ -1,11 +1,12 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15 20:42 UTC:** coordinator; D-365 actual native and
+**Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned
 pending position for detach and explicit seek. Final90/90, adjacent59/59, final
 typecheck/build4e6fd0ace2bbe363/11.52s and independent-review P2 fix pass accepted.
-Only05d4cd7e/59f1fe8b reached main;14 own-tree aliases resolve. Single healthy
-59f1fe8b runtime accepted: old/new compiled consumer1/0 ->0/1, public/container
+Product commits05d4cd7e/59f1fe8b reached main;14 own-tree aliases resolve. The
+later docs-only main/runtime80e4069e is single/healthy, with identical product
+JS+SW to59f1fe8b. Actual acceptance: old/new consumer1/0 ->0/1, public/container
 JS+SW parity, rollback image/entry and anonymous zero-error/zero-mutation smoke.
 Next: measured item87/current-client work, not replaying
 accepted player/source checks. Preserve unowned sidebar/search files and private

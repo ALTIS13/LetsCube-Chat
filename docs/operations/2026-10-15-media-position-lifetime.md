@@ -96,7 +96,7 @@ installed client replacement or new native publication were performed.
 
 ## Actual Web Rollout
 
-Only05d4cd7e and59f1fe8b reached main; the complete outgoing range was read
+The product rollout contains only05d4cd7e and59f1fe8b; its outgoing range was read
 separately and all14 aliases in the changed source file resolve against its own
 tree. Final source/test bytes were preserved on the coordinator branch too;
 unowned sidebar/search and the private Android version overlay retain their hashes.
@@ -117,3 +117,10 @@ for rollback. Fresh anonymous Chromium home/login smoke20:41:59UTC observes the
 new entry, zero page errors/zero mutations, no personal session or captures.
 This proves the shared-web source release, not new physical Windows/iOS/Android
 behavior, FCM21, authenticated upgrade or a new APK. Stable21 predates D-365.
+
+The later docs-only80e4069e places the current checkpoint, compact execution order,
+defect closure and safe intake report in main. Product/native/SQL trees are
+byte-identical to59f1fe8b. At20:50UTC one healthy4b8f87937f8a runs exact80e4069e;
+public/container JS+SW hashes above remain identical, both compiled markers and
+the old entry/5828284e image remain verified. Earlier anonymous/browser/native
+fixture evidence is reused rather than replayed for documentation-only changes.
