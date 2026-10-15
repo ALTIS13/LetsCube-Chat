@@ -4769,6 +4769,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
      transport dependency, write retry or network change.
      [Scope, upstream comparison and acceptance](operations/2026-10-15-network-body-and-playback.md).
 
+102. `[~]` Fence hidden-message admission across network gaps, **D-363**.
+     Original actual-hook control passes while the delayed pre-gap privacy
+     answer admits an unknown row after rejoin. Read-period tickets now guard
+     batched helpers and caller continuations. Affected165/165, local real-hook
+     recovery1/1; independent review and narrow production rollout pending.
+     No new cache framework, live data or native release.
+     [Evidence and limits](operations/2026-10-15-network-revival-measurement.md).
+
+103. `[~]` Retire pending clear marks and membership seeds across loss/rejoin,
+     **D-364**. Seven RED/six controls ->30/30 including8 omissions and6 adjacent
+     cache cases. New pending ownership survives old completion; old loaders
+     do not auto-retry across connection loss. Completed young-answer3s reuse
+     and per-chat clear behavior remain intact. Review/rollout pending.
+     [Evidence and limits](operations/2026-10-15-network-revival-measurement.md).
+
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
 `main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.

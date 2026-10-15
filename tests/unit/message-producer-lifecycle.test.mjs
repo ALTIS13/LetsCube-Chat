@@ -124,7 +124,7 @@ function fixture({ text = source, holdInitially, visibility = "visible", history
       hasFresh: () => false, getOrLoad: async (_chat, _user, load) => { const result = await load(); return result.ok ? result.value : undefined; }, evictChat: noop,
     } },
     "@/lib/hiddenMessagesLive": { hiddenMessagesLive: {
-      subscribe: () => noop, canSkip: () => false, markVerified: () => publish("verified"),
+      subscribe: () => noop, canSkip: () => false, captureRead: () => () => true, markVerified: () => publish("verified"),
     } },
     "@/lib/recentReactions": { rememberReactionUse: noop },
   };
@@ -255,6 +255,7 @@ test("retired initial fetch rejection is inert", () => lateFailure());
 async function lateHiddenBatch(options) {
   const f = fixture({ ...options, historyRows: Array.from({ length: 101 }, (_, n) => ({ ...row(n + 1), reply_to_id: row(n + 1001).id })) });
   await f.drain(); await f.fireTimers();
+  f.state.messages[CHAT].push(row(501));
   const old = f.hold("hidden"), pending = f.view.refetch(); await f.drain();
   assert.ok(f.calls.some(call => call.name === "hidden"), "held hidden batch positive control");
   f.unmount(); f.clear(); old.resolve({ data: [], error: null }); await pending; await f.drain();
@@ -335,8 +336,8 @@ const mutations = [
     '    } catch (error) {\n      console.error("Messages fetch error:", error);'),
     lateFailure, "retired history rejection cannot publish monitoring or UI state"],
   ["hidden batch continuation guard", () => replaceOnce(source,
-    '      .in("message_id", ids.slice(offset, offset + 100));\n    if (!isCurrent()) return null;',
-    '      .in("message_id", ids.slice(offset, offset + 100));'),
+    '      .in("message_id", batch)));\n    if (!isCurrent()) return null;',
+    '      .in("message_id", batch)));'),
     lateHiddenBatch, "retired hidden batch cannot issue another page request"],
   ["hidden helper owner propagation", () => replaceOnce(source,
     "fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent)",

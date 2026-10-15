@@ -25770,6 +25770,31 @@ the reproduced wait, so
 this is not an established cause of Nikita's visible opening delay.
 [Scope and evidence](operations/2026-10-15-tester-feedback.md).
 
+## D-363 `[~]` A pre-gap hidden answer admits a new row after rejoin
+
+**Surface:** `hooks/useMessages.ts`, hidden-ID helper and asynchronous consumers;
+`lib/hiddenMessagesLive.ts`.
+**Observed2026-10-15:** real-hook no-gap control passes, while a delayed old empty
+hidden snapshot publishes an unknown REST row after lost/joined/ping. Reusable
+trust correctly stays false but does not guard publication. Source ticket and
+post-await consumer guards now pass affected165/165, including helper-to-caller
+yield and omission checks. Local recovery1/1 verifies actual cut/rejoin/privacy
+withholding and duplicate-free reconciliation; independent review/rollout pending.
+No claim about the tester's VPN or device cause.
+[Cause and acceptance](operations/2026-10-15-network-revival-measurement.md).
+
+## D-364 `[~]` A new clear-mark read reuses a pre-gap pending answer
+
+**Surface:** `lib/clearedAtCache.ts`, direct read/pending ownership and membership
+seed generation.
+**Observed2026-10-15:** a post-gap lookup receives the old pending null; delayed
+membership seed can also cross the gap. Seven behavioral REDs with six controls
+lead to30/30 including8 omissions and6 adjacent cache cases. Connection generation
+retires old pending/seeds, preserves newer same-key pending and per-chat clear
+semantics. Completed answers retain deliberate literal3s reuse. Independent
+review/rollout pending; this is not immediate offline access revocation.
+[Cause and acceptance](operations/2026-10-15-network-revival-measurement.md).
+
 ## D-362 `[x]` Fetch deadlines retire at headers while a JSON body still waits
 
 **Surface:** `lib/supabase/deadlineFetch.ts:89-97`, installed by

@@ -53,7 +53,7 @@ function actual(text = source) {
     {module: mergeModule, exports: mergeModule.exports, require: name => {
       assert.equal(name, './messageActor.ts'); return actorModule.exports;
     }});
-  const context = vm.createContext({console: {error() {}}, ...mergeModule.exports});
+  const context = vm.createContext({console: {error() {}}, hiddenMessagesLive: {captureRead: () => () => true}, ...mergeModule.exports});
   const helpers = ['fetchHiddenMessageIdSet', 'captureMessageAccount', 'messageBelongsToTopic',
     'getMessageAndReplyIds', 'sanitizeHiddenReply', 'sanitizeHiddenReplies'].map(declaration).join('\n');
   vm.runInContext(javascript(`${helpers}\nconst ${variable('MESSAGE_PAGE_SIZE')};
@@ -113,7 +113,7 @@ function fixture(count, text = source) {
     setVerifyingChatId: value => { context.verifyingChatId = value; },
     setMessages: (chat, rows) => { published.push(rows); state.messages[chat] = rows; },
     rememberHiddenMessageIds: ids => { for (const id of ids) context.hiddenMessageIds.add(id); },
-    hiddenMessagesLive: {markVerified: (...args) => marks.push(args)},
+    hiddenMessagesLive: {captureRead: () => () => true, canSkip: () => false, markVerified: (...args) => marks.push(args)},
     fetchedMessageScopes: new Set(), getPinnedKey: () => 'fictional-scope',
     document: {visibilityState: 'hidden'}, isIncomingMessage: () => false,
     shouldMarkDeliveredForPrivateChat: () => false, keepsDeletedPlaceholder: () => true,
@@ -237,8 +237,8 @@ async function requireRetirement(text) {
 }
 test('compiled omission mutant: helper current-owner check is independently load-bearing', async () => {
   await requireRetirement(source);
-  await assert.rejects(requireRetirement(mutatedHelper('if (!isCurrent()) return null;\n    for (const { data, error }',
-    'for (const { data, error }')), /RETIRED_HELPER_MUST_REFUSE/);
+  await assert.rejects(requireRetirement(mutatedHelper('if (!isCurrent()) return null;\n    if (!privacyReadIsCurrent()) return null;',
+    'if (!privacyReadIsCurrent()) return null;')), /RETIRED_HELPER_MUST_REFUSE/);
 });
 test('compiled omission mutant: failed hidden read cannot admit actual caller', async () => {
   const text = mutatedHelper('console.error("Hidden message ids fetch error:", error);\n        return null;',

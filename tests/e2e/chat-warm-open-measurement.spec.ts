@@ -627,3 +627,323 @@ for (const width of (bootDiagnosis ? [1440] : [1440, 390])) for (const theme of 
     });
   });
 }
+
+type RecoveryRead = { startedAt: number; headers: boolean; aborted: boolean;
+  cut: 'none' | 'network-change' | 'deadline' | 'caller-or-other' };
+declare global {
+  interface Window {
+    __networkRecoveryProbe: { armed: boolean; reads: RecoveryRead[]; overflow: boolean;
+      online: number; revived: number; privacyHeld: boolean; newRowBeforePrivacy: boolean };
+  }
+}
+
+// Separate registration: selecting this tag must not replay the accepted warm4.
+test.describe('recovery-1440-dark', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+  test('fixture-only stranded read, loss of trust and online recovery without reload', async ({ page, fixtureOrigin }, info) => {
+    test.setTimeout(40_000);
+    expect(process.env.KUB_QA_ALLOW_MUTATIONS, 'QA0 required').toBe('0');
+    expect(bootDiagnosis, 'recovery is not a boot-diagnosis run').toBe(false);
+    const at = Date.now() - 3_600_000;
+    const stamp = (i: number) => new Date(at + i * 1000).toISOString();
+    const textIds = Array.from({ length: 48 }, (_, i) => rowId(i + 1));
+    const heldIds = [...textIds, rowId(49)];
+    const newId = rowId(51);
+    const deniedId = rowId(48);
+    const rows: Row[] = textIds.map((id, i) => message(id, A, OTHER, `Fixture retained line ${i + 1}`, stamp(i)));
+    rows.push(message(rowId(49), A, OTHER, '', stamp(49), {
+      type: 'image', media_bucket: 'chat-media', media_path: 'fixture-pixel.png',
+      media_url: FIXTURE_HOST + MEDIA_PATH, media_metadata: { width: 1, height: 1 },
+    }));
+    rows.push(message(rowId(50), B, OTHER, 'Fixture other conversation', stamp(50)));
+    const allowedAfter = [...textIds.slice(0, 47), rowId(49), newId];
+    const knownIds = new Set([...heldIds, rowId(50), newId]);
+    const hidden = new Set<string>();
+    const memberships = [A, B].flatMap((id) => [membership(id, ME, 'owner', stamp(60)), membership(id, OTHER, 'member', stamp(60))]);
+    const emptyWorld = createEmptyFixtureWorld(ME.id, [A, B], Date.now, { memberships, messages: rows });
+    const rt = new RealtimeFixture();
+    let pings = 0;
+    await openFixture(page, {
+      me: ME, people: [OTHER], theme: 'dark', messages: rows, memberships,
+      chats: [chat(A, 'group', 'Fixture A', stamp(49)), chat(B, 'group', 'Fixture B', stamp(50))],
+      rpc(name) {
+        if (name === 'hides_live_ping') pings += rt.broadcast('hides:', 'ping', {});
+        return undefined;
+      },
+    });
+    await page.addInitScript(installSampler, { textIds, controlId: newId });
+    await page.addInitScript(({ backend, chatId, newId }) => {
+      const probe: Window['__networkRecoveryProbe'] = { armed: false, reads: [], overflow: false,
+        online: 0, revived: 0, privacyHeld: true, newRowBeforePrivacy: false };
+      window.__networkRecoveryProbe = probe;
+      window.addEventListener('online', () => { probe.online++; });
+      // Observe the real hook's output; the fixture never dispatches this event.
+      window.addEventListener('kub:connection-revived', () => { probe.revived++; });
+      new MutationObserver(() => {
+        if (probe.privacyHeld && document.querySelector(`[data-message-id="${newId}"]`)) probe.newRowBeforePrivacy = true;
+      }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-message-id'] });
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
+        const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+        let read: RecoveryRead | undefined;
+        if (probe.armed && url.origin === backend && url.pathname === '/rest/v1/messages' && method === 'GET' &&
+            url.searchParams.get('chat_id') === `eq.${chatId}` && url.searchParams.get('limit') === '101') {
+          if (probe.reads.length >= 40) probe.overflow = true;
+          else {
+            read = { startedAt: Date.now(), headers: false, aborted: false, cut: 'none' };
+            probe.reads.push(read);
+            const signal = init?.signal ?? (input instanceof Request ? input.signal : null);
+            const recordAbort = () => {
+              read!.aborted = true;
+              const reason: unknown = signal?.reason;
+              const cut = reason && typeof reason === 'object' && 'kubCut' in reason ? reason.kubCut : null;
+              read!.cut = cut === 'network-change' || cut === 'deadline' ? cut : 'caller-or-other';
+            };
+            if (signal?.aborted) recordAbort();
+            else signal?.addEventListener('abort', recordAbort, { once: true });
+          }
+        }
+        // Pass through input/init, native Response and rejection unchanged. No body access.
+        return nativeFetch(input, init).then((response) => { if (read) read.headers = true; return response; });
+      };
+    }, { backend: FIXTURE_HOST, chatId: A, newId });
+    await rt.install(page);
+    let blockedHttp = 0;
+    let blockedSockets = 0;
+    let closedDevSockets = 0;
+    const refusals = new Set<string>();
+    const bootErrors: string[] = [];
+    page.on('pageerror', (error) => { bootErrors.push(error.name); });
+    await page.routeWebSocket((url) => socketClass(url, ownedDevSocket) !== 'supabase-fixture', async (socket) => {
+      if (socketClass(new URL(socket.url()), ownedDevSocket) === 'closed-vite-dev') closedDevSockets++;
+      else blockedSockets++;
+      await socket.close();
+    });
+    const heldHistory = gate();
+    const privacy = gate();
+    let network: 'prime' | 'hold' | 'dark' | 'recovering' = 'prime';
+    let darkReadRefusals = 0;
+    let privacyWithNewAndDenied = 0;
+    let recoveryHistoryFinished = 0;
+    const recoveryMarkReads = { ownMembershipList: 0, directClearedAt: 0 };
+    const total = counts();
+    const recoveryCounts = counts();
+    const historyA = (url: URL, method: string) => url.origin === FIXTURE_HOST && kind(url, method) === 'history' &&
+      url.searchParams.get('chat_id') === `eq.${A}`;
+    page.on('response', async (response) => {
+      if (network !== 'recovering' || !historyA(new URL(response.url()), response.request().method()) || response.status() !== 200) return;
+      if (await response.finished().catch(() => 'failed') === null) recoveryHistoryFinished++;
+    });
+    const hiddenRequestIds = (url: URL, method: string, headers: Record<string, string>) => {
+      const query = url.searchParams;
+      if (url.origin !== FIXTURE_HOST || url.pathname !== '/rest/v1/message_hidden_for_users' || method !== 'GET' ||
+          [...query].length !== 2 || query.getAll('select').length !== 1 || query.get('select') !== 'message_id' ||
+          query.getAll('message_id').length !== 1 || headers.prefer || headers.range || headers['range-unit'] ||
+          (headers.accept ?? '').includes('vnd.pgrst.object')) return null;
+      const list = query.get('message_id')?.match(/^in\.\(([^)]+)\)$/)?.[1].split(',');
+      return list?.length && new Set(list).size === list.length && list.every((id) => knownIds.has(id)) ? list : null;
+    };
+    const hiddenControl = new URL(FIXTURE_HOST + '/rest/v1/message_hidden_for_users');
+    hiddenControl.searchParams.set('select', 'message_id');
+    hiddenControl.searchParams.set('message_id', `in.(${deniedId},${newId})`);
+    expect(hiddenRequestIds(hiddenControl, 'GET', {})?.length === 2, 'literal known privacy set').toBe(true);
+    expect(hiddenRequestIds(hiddenControl, 'POST', {}) === null, 'privacy writes refused').toBe(true);
+    expect(hiddenRequestIds(hiddenControl, 'GET', { range: '0-1' }) === null, 'privacy range refused').toBe(true);
+    const foreignControl = new URL(hiddenControl); foreignControl.searchParams.set('message_id', `in.(${rowId(999)})`);
+    expect(hiddenRequestIds(foreignControl, 'GET', {}) === null, 'foreign privacy ID refused').toBe(true);
+    const extraControl = new URL(hiddenControl); extraControl.searchParams.set('limit', '100');
+    expect(hiddenRequestIds(extraControl, 'GET', {}) === null, 'extra privacy filter refused').toBe(true);
+    await page.route('**/*', async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const method = request.method();
+      if (url.origin === fixtureOrigin && (url.pathname === '/' ||
+          (url.pathname === '/package.json' && method === 'GET' && request.resourceType() === 'script') ||
+          (url.pathname === '/brand/letscube/letscube-mark.svg' && method === 'GET' && request.resourceType() === 'image') ||
+          /^\/(?:src\/|node_modules\/|@|fonts\/|favicon\.|manifest\.|icons\/)/.test(url.pathname))) return route.fallback();
+      if (url.origin !== FIXTURE_HOST) {
+        blockedHttp++; refusals.add(url.origin === fixtureOrigin ? 'app-static-unknown' : 'origin-unknown');
+        return route.abort('blockedbyclient');
+      }
+      const resource = url.pathname.replace('/rest/v1/', '');
+      let body: unknown = null;
+      if (method !== 'GET' && method !== 'HEAD') { try { body = request.postDataJSON(); } catch { body = undefined; } }
+      const headers = request.headers();
+      const modeled = emptyWorld.respond({ url, method, body, accept: headers.accept ?? '', prefer: headers.prefer ?? '',
+        range: headers.range || headers['range-unit'] || '' });
+      if (modeled !== undefined) {
+        if (modeled === null) { blockedHttp++; refusals.add('empty-model-contract'); return route.abort('blockedbyclient'); }
+        total.other++;
+        if (network === 'recovering') recoveryCounts.other++;
+        return route.fulfill({ status: modeled.status, contentType: 'application/json', body: JSON.stringify(modeled.body) });
+      }
+      const known = url.pathname === '/auth/v1/user' || url.pathname === MEDIA_PATH ||
+        (url.pathname.startsWith('/rest/v1/') && (TABLES.has(resource) || (resource.startsWith('rpc/') && RPCS.has(resource.slice(4)))));
+      if (!known || !['GET', 'HEAD', 'POST', 'PATCH', 'OPTIONS'].includes(method)) {
+        blockedHttp++; refusals.add('backend-operation-unknown'); return route.abort('blockedbyclient');
+      }
+      const category = kind(url, method);
+      total[category]++;
+      if (network === 'recovering') {
+        recoveryCounts[category]++;
+        if (category === 'membership' && method === 'GET' && url.searchParams.get('user_id') === `eq.${ME.id}`) {
+          const select = url.searchParams.get('select')?.replace(/\s+/g, '');
+          if (select === 'cleared_at' && url.searchParams.get('chat_id') === `eq.${A}`) recoveryMarkReads.directClearedAt++;
+          if (select === 'chat_id,joined_at,last_read_at,last_delivered_at,hidden_at,cleared_at,pinned,pinned_at,pinned_order' &&
+              !url.searchParams.has('chat_id')) recoveryMarkReads.ownMembershipList++;
+        }
+      }
+      if (network === 'hold' && historyA(url, method)) {
+        heldHistory.entered++; heldHistory.pending++;
+        try { await heldHistory.promise; } finally { heldHistory.pending--; }
+        // Cleanup only AFTER the native signal cut is proved; never feed stale data.
+        return route.abort('internetdisconnected');
+      }
+      if (network === 'dark' && ['history', 'hidden', 'membership'].includes(category)) {
+        darkReadRefusals++; return route.abort('internetdisconnected');
+      }
+      if (category === 'hidden') {
+        const ids = hiddenRequestIds(url, method, headers);
+        if (!ids) { blockedHttp++; refusals.add('privacy-model-contract'); return route.abort('blockedbyclient'); }
+        if (network === 'recovering') {
+          if (ids.includes(newId) && ids.includes(deniedId)) privacyWithNewAndDenied++;
+          privacy.entered++; privacy.pending++;
+          try { await privacy.promise; } finally { privacy.pending--; }
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json',
+          body: JSON.stringify(ids.filter((id) => hidden.has(id)).map((message_id) => ({ message_id }))) });
+      }
+      if (url.pathname === MEDIA_PATH) return route.fulfill({ status: 200, contentType: 'image/png',
+        headers: { 'cache-control': 'no-store', 'access-control-allow-origin': '*' }, body: PNG });
+      return route.fallback();
+    });
+    const allRows = page.locator('[data-message-id^="87333333-"]');
+    const newRow = page.locator(`[data-message-id="${newId}"]`);
+    const deniedRow = page.locator(`[data-message-id="${deniedId}"]`);
+    const open = async (name: 'A' | 'B') => {
+      await page.getByTestId('chat-list-item').filter({ hasText: `Fixture ${name}` }).click();
+      await expect(page.getByTestId('chat-header-info-button')).toContainText(`Fixture ${name}`);
+    };
+    const chatJoins = () => rt.joins.filter((topic) => topic.endsWith(`messages:chat:${A}`)).length;
+    let navigations = 0;
+    page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations++; });
+    let stage = 'fake-config-preflight';
+    let receipt: Record<string, unknown> = { stratum: 'recovery-1440-dark', result: 'not-calibrated',
+      holdBoundary: 'preheader-not-native-body-eof' };
+    try {
+      const source = await (await page.request.get(fixtureOrigin + '/src/lib/supabase/client.ts')).text();
+      expect(source.includes(FIXTURE_HOST) && source.includes('playwright-public-fixture'), 'explicit fake config only').toBe(true);
+      await page.goto(fixtureOrigin, { waitUntil: 'domcontentloaded' });
+      const initialNavigation = navigations;
+      const initialDocument = await page.evaluate(() => performance.timeOrigin);
+      stage = 'prime-actual-live-trust';
+      await expect(page.getByTestId('chat-list-item')).toHaveCount(2);
+      expect(await page.evaluate(() => navigator.serviceWorker.controller === null)).toBe(true);
+      await expect.poll(() => pings).toBeGreaterThan(0);
+      await open('A');
+      await expect(allRows).toHaveCount(49);
+      await expect.poll(async () => await trust(page, heldIds)).toEqual({ live: true, verified: true, membership: true });
+      await expect.poll(() => chatJoins()).toBeGreaterThan(0);
+      await expect.poll(async () => page.evaluate(() => window.__warmOpenProbe.frames.some((f) => f.text === 48 && f.visibleText > 0 && f.imageReady))).toBe(true);
+      expect(total.history > 0 && total.hidden > 0 && total.membership > 0 && total.media > 0, 'positive cold controls').toBe(true);
+      expect(blockedHttp + blockedSockets, 'calibrated closed fixture').toBe(0);
+      await page.waitForTimeout(800);
+      await open('B');
+      await expect(allRows).toHaveCount(1);
+      await page.waitForTimeout(800);
+      expect(await trust(page, heldIds)).toEqual({ live: true, verified: true, membership: true });
+      stage = 'hold-authoritative-preheader-read';
+      network = 'hold';
+      await page.evaluate(() => { window.__networkRecoveryProbe.armed = true; window.__warmOpenProbe.reset(); });
+      await open('A');
+      await expect.poll(() => heldHistory.entered).toBeGreaterThan(0);
+      await frames(page, 5);
+      expect(await deniedRow.count(), 'held row positive control before missed hide').toBe(1);
+      expect(await page.evaluate(() => window.__warmOpenProbe.frames.some((f) => f.text === 48 && f.visibleText > 0 && !f.duplicate)),
+        'approved retained history while background read waits').toBe(true);
+      expect(await page.evaluate(() => window.__networkRecoveryProbe.reads[0]?.headers)).toBe(false);
+      expect(navigations, 'fixture SPA navigation calibration').toBeGreaterThan(initialNavigation);
+      const beforeLoss = { pings, hides: rt.joinCount('hides:'), members: rt.joinCount('chat-members:user:'), messages: chatJoins(), navigations };
+      stage = 'rt-loss-invalidates-trust';
+      network = 'dark';
+      await rt.goDark();
+      await expect.poll(async () => (await trust(page, heldIds)).live).toBe(false);
+      expect((await trust(page, heldIds)).verified).toBe(false);
+      expect(rt.isJoined('hides:') || rt.isJoined('chat-members:user:')).toBe(false);
+      // Mutate only the fake server world. No missed broadcast, store or trust injection.
+      hidden.add(deniedId);
+      rows.push(message(newId, A, OTHER, 'Fixture recovered after outage', stamp(51)));
+      stage = 'aged-held-read-before-online';
+      await expect.poll(async () => page.evaluate(() => {
+        const read = window.__networkRecoveryProbe.reads[0];
+        return Boolean(read && !read.headers && !read.aborted && Date.now() - read.startedAt >= 3_100);
+      }), { timeout: 5_000, intervals: [100] }).toBe(true);
+      expect((await trust(page, heldIds)).membership, 'expired unjoined mark cannot retain live trust').toBe(false);
+      expect(await newRow.count()).toBe(0);
+      const beforeOnline = await page.evaluate(() => ({ online: window.__networkRecoveryProbe.online, revived: window.__networkRecoveryProbe.revived }));
+      stage = 'restore-online-real-doubt-hook';
+      network = 'recovering';
+      rt.restore();
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      await expect.poll(async () => page.evaluate(() => window.__networkRecoveryProbe.reads[0]?.cut)).toBe('network-change');
+      expect(await page.evaluate(() => window.__networkRecoveryProbe.reads[0]?.headers)).toBe(false);
+      expect(await page.evaluate(() => window.__networkRecoveryProbe.online), 'one browser online hint').toBe(beforeOnline.online + 1);
+      expect(await page.evaluate(() => window.__networkRecoveryProbe.revived), 'real hook must emit revival after its cut').toBeGreaterThan(beforeOnline.revived);
+      heldHistory.release();
+      await expect.poll(() => heldHistory.pending).toBe(0);
+      stage = 'rejoin-and-privacy-read-withheld';
+      await expect.poll(() => rt.joinCount('hides:'), { timeout: 8_000 }).toBeGreaterThan(beforeLoss.hides);
+      await expect.poll(() => rt.joinCount('chat-members:user:')).toBeGreaterThan(beforeLoss.members);
+      await expect.poll(() => chatJoins()).toBeGreaterThan(beforeLoss.messages);
+      await expect.poll(() => pings).toBeGreaterThan(beforeLoss.pings);
+      await expect.poll(async () => (await trust(page, [])).live).toBe(true);
+      await expect.poll(() => recoveryHistoryFinished).toBeGreaterThan(0);
+      await expect.poll(() => privacyWithNewAndDenied).toBeGreaterThan(0);
+      expect(privacy.pending).toBeGreaterThan(0);
+      expect(recoveryMarkReads.ownMembershipList + recoveryMarkReads.directClearedAt,
+        'fresh own membership list seed or direct mark read after the aged trust gap').toBeGreaterThan(0);
+      await frames(page, 5);
+      expect(await newRow.count(), 'unknown row cannot pass held privacy lookup').toBe(0);
+      expect(await page.evaluate(() => window.__networkRecoveryProbe.newRowBeforePrivacy)).toBe(false);
+      expect((await trust(page, [newId])).verified, 'returned ping alone does not verify new IDs').toBe(false);
+      expect(await page.evaluate(() => window.__warmOpenProbe.frames.every((f) => f.control === 0 && !f.duplicate))).toBe(true);
+      receipt = { ...receipt, lostTrust: true, preheaderNetworkCut: true, rejoined: true,
+        returnedRecoveryPing: true, membershipRechecked: true, unknownWithheld: true,
+        retainedBeforeLoss: true, historyFinished: recoveryHistoryFinished, privacyReadsWithNewAndDenied: privacyWithNewAndDenied };
+      stage = 'privacy-release-and-recovery';
+      await page.evaluate(() => { window.__networkRecoveryProbe.privacyHeld = false; });
+      privacy.release();
+      await expect(newRow).toBeVisible();
+      await expect(deniedRow, 'missed hide removed by authoritative privacy read').toHaveCount(0);
+      await expect(allRows).toHaveCount(49);
+      await expect.poll(async () => await trust(page, allowedAfter)).toEqual({ live: true, verified: true, membership: true });
+      await expect.poll(() => privacy.pending + heldHistory.pending).toBe(0);
+      await frames(page, 5);
+      const recovered = await page.evaluate(({ allowed, initialDocument }) => {
+        const ids = [...document.querySelectorAll<HTMLElement>('[data-testid="message-scroll-container"] [data-message-id]')]
+          .map((node) => node.dataset.messageId ?? '');
+        return { sameDocument: performance.timeOrigin === initialDocument, allowedRetained: allowed.every((id) => ids.includes(id)),
+          duplicateFree: ids.length === new Set(ids).size, rows: ids.length,
+          unknownBeforePrivacy: window.__networkRecoveryProbe.newRowBeforePrivacy, observerOverflow: window.__networkRecoveryProbe.overflow };
+      }, { allowed: allowedAfter, initialDocument });
+      expect(recovered).toEqual({ sameDocument: true, allowedRetained: true, duplicateFree: true, rows: 49,
+        unknownBeforePrivacy: false, observerOverflow: false });
+      expect(navigations, 'recovery without additional SPA or document navigation').toBe(beforeLoss.navigations);
+      expect(blockedHttp + blockedSockets, 'unknown HTTP/WS stay failed closed').toBe(0);
+      expect(bootErrors.length, 'no unhandled page errors').toBe(0);
+      receipt = { ...receipt, result: 'passed', deniedRemoved: true, recovered,
+        pendingGates: privacy.pending + heldHistory.pending };
+      stage = 'complete';
+    } catch (error) {
+      receipt = { ...receipt, result: 'failed' };
+      throw error;
+    } finally {
+      heldHistory.release(); privacy.release(); rt.restore();
+      console.log('NETWORK_REVIVAL_RECEIPT ' + JSON.stringify({ ...receipt, stage, total, recoveryCounts,
+        recoveryMarkReads, darkReadRefusals, blockedHttp, blockedSockets, closedDevSockets, refusals: [...refusals], bootErrors,
+        emptyModel: emptyWorld.snapshot() }));
+      info.annotations.push({ type: 'isolation', description: 'QA0; owned loopback; fail-closed HTTP/WS; captures/SW off; preheader hold only' });
+    }
+  });
+});
