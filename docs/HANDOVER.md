@@ -1,20 +1,22 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15 13:45 UTC:** coordinator; shared-web main/runtime
+**Current resume, 2026-10-15:** coordinator; shared-web main/runtime
 c9f86afb accepted for D-362 (transport/SDK48, real-loopback browser13) and D-360
 (final63, unchanged hook26/28 reused). Two independent player P2s were repaired
 before publication. Final review, main typecheck/build,68 own-tree aliases,
 actual healthy image, old/new body consumer0/1, JS/SW public/container parity,
-retained previous image/entry and fresh anonymous smoke pass. Next: item87's
-test-only warm-open trace (Rawls, new e2e file only): separate retained text,
-privacy admission, history and media phases in four viewport/theme strata.
-Probe is not accepted: static bootstrap/HMR/101-row classification are repaired;
-one cold stratum reaches49 rows, image and live trust, but strict fixture isolation
-still rejects68 calls to unmodelled empty-scene operations. Hume audits their
-actual contracts; Rawls owns explicit mock models. No warm/matrix data yet.
-No latency/VPN cause or semantic media acceptance is established; no SQL/native
-release. Preserve unowned sidebar/search files and main Android overlay.
+retained previous image/entry and fresh anonymous smoke pass at13:45UTC.
+Item87's fixture-only warm trace now passes4/4 (1440/390, both themes), final
+independent review and retained-receipt/source-pin checks accepted. Saved text
+survives pending history/media; continuous trust skips hidden/membership reads,
+while an unknown B row is withheld until verification. Project collection is
+scoped to four primary-Chromium cases without replaying them. This is not a
+production/device/paint benchmark or the tester's cause. Next: one changed-input
+local loss/rejoin/revival trace with privacy revalidation; reuse accepted warm
+and D-362 evidence. No SQL/native release. Preserve unowned sidebar/search files
+and main Android overlay. Semantic media intake remains incomplete.
 [Current ledger](operations/2026-10-15-network-body-and-playback.md).
+[Warm trace, exact scope and next acceptance](operations/2026-10-15-warm-open-measurement.md).
 
 **Accepted checkpoint, 2026-10-15 11:51 UTC:** coordinator; tester-priority web rollout accepted.
 One selected read-only Nikita intake returned 19 new rows (13 text/5 images/1

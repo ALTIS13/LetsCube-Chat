@@ -10,8 +10,9 @@ are reported, not diagnosed. Cache already exists. Prior dc5a7c70 repairs stay
 accepted; new main/runtime c9f86afb closes scoped D-360/D-362. Final source48,
 browser13, player63, unchanged hook26/28, independent review, main typecheck/build,
 68 own-tree aliases, healthy image, actual old/new consumer, public/container
-JS+SW, rollback assets and anonymous smoke pass. Next: one fixture-only per-open
-request/admission/retained-text/media trace, not a new caching framework. No APK.
+JS+SW, rollback assets and anonymous smoke pass. The fixture-only warm trace now
+passes4/4 with independent review and exact source/receipt checks. Next: one
+changed-input loss/rejoin/revival trace, not a new caching framework. No APK.
 Native-preview diagnostics are deferred, not a reason to replay old attempts.
 [Intake, privacy boundaries and cache direction](operations/2026-10-15-tester-feedback.md).
 [Current acceptance and next measured stage](operations/2026-10-15-network-body-and-playback.md).
@@ -4588,6 +4589,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     checks based on the tester's cache hypothesis. Five images/one video were
     privately acquired; full semantic intake remains incomplete.
     [New evidence boundary](operations/2026-10-15-tester-feedback.md).
+    Warm fixture trace2026-10-15 accepted4/4 (1440/390, both themes), first1 then
+    remaining3 without replay. Real hook/live-ping admission, B withholding,
+    retained48 texts under pending history/media, zero duplicate/unknown/pending
+    and final decode/reconciliation pass; independent source review and exact
+    receipt/source pin accepted. Warm history1/hidden0/membership0 in continuous
+    trust. This is a synthetic working-tree/layout result, not production/native
+    paint, an SLA or the tester's cause. Next changed input is actual revival/
+    privacy revalidation through local network loss/rejoin; keep this item open.
+    [Measurement and limits](operations/2026-10-15-warm-open-measurement.md).
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
     Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,

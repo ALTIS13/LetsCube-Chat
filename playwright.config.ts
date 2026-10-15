@@ -35,10 +35,12 @@ export default defineConfig({
     },
     {
       name: "chromium-desktop-1920",
+      testIgnore: /chat-warm-open-measurement\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1920, height: 1080 } },
     },
     {
       name: "chromium-desktop-3840",
+      testIgnore: /chat-warm-open-measurement\.spec\.ts$/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 3840, height: 2160 } },
     },
     {
@@ -47,6 +49,7 @@ export default defineConfig({
       // — three of five findings from a width nothing had ever been checked at.
       // 360x800 is that phone: 720x1600 physical at density 320.
       name: "chromium-mobile-360",
+      testIgnore: /chat-warm-open-measurement\.spec\.ts$/,
       use: {
         ...devices["Pixel 7"],
         viewport: { width: 360, height: 800 },
@@ -55,6 +58,7 @@ export default defineConfig({
     },
     {
       name: "chromium-mobile-390",
+      testIgnore: /chat-warm-open-measurement\.spec\.ts$/,
       use: {
         ...devices["Pixel 7"],
         viewport: { width: 390, height: 844 },
@@ -62,6 +66,7 @@ export default defineConfig({
     },
     {
       name: "chromium-mobile-412",
+      testIgnore: /chat-warm-open-measurement\.spec\.ts$/,
       use: {
         ...devices["Pixel 7"],
         viewport: { width: 412, height: 915 },
@@ -79,6 +84,7 @@ export default defineConfig({
       // One project, deliberately: the engine is the variable worth having,
       // and the viewport matrix above is already the width coverage.
       name: "webkit-mobile-390",
+      testIgnore: /chat-warm-open-measurement\.spec\.ts$/,
       use: {
         ...devices["iPhone 14 Pro"],
         // The installed PWA gets the whole screen rather than Safari's shorter

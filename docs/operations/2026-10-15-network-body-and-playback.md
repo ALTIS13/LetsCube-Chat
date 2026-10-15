@@ -11,7 +11,7 @@ overlay remain outside this change.
 | --- | --- | --- |
 | D-362 finite PostgREST body ownership | Shared web accepted | Six original transport REDs; final affected transport/SDK selection48/48, five compiled omissions. Chromium/WebKit real-loopback13/13. Independent review and actual c9f86afb runtime accepted; compatibility limits below remain explicit. |
 | D-360 authoritative playback retirement | Shared web accepted | Two P2 omissions reproduced and repaired before publication. Parent final63/63 includes14 compiled omissions; unchanged hook26/28 evidence is reused. Independent final delta and actual c9f86afb runtime accepted. |
-| Item87 warm-open trace | Test-only preparation, not accepted | Cold boot/live/49-row/image controls reached in one stratum; strict empty-scene fixture contracts remain incomplete. No warm timing or new product defect. |
+| Item87 warm-open trace | Fixture-only accepted4/4 | Final source review and retained-receipt/source-pin checks accepted. Privacy control, retained text under gates, reconciliation and unknown/pending0 pass; no production/native/tester cause claim. |
 | Main integration and production acceptance | Accepted13:45:09UTC | Eleven owned files only; main typecheck/build,68 own-tree imports, actual healthy image, old/new body consumer, public/container JS+SW parity, retained rollback image/entry and anonymous smoke pass. |
 
 No DB/schema, package identity, native signing, APK release or privacy-setting
@@ -277,3 +277,13 @@ being checked before explicit fake responses; no generic unknown-route allowance
 or privacy bypass is accepted. The sidebar's brand-mark GET/image is separately
 grounded in its actual component/factory and an existing public SVG. All of this
 is new fixture work, outside the shipped product and unchanged accepted suites.
+
+Final fixture delta is accepted4/4 after the explicit contracts were completed:
+first1440/light then only remaining three, identical source pin and no accepted
+suite replay. Parent parsed all four retained receipts and verified the exact
+passing spec SHA; independent delta review found no remaining P1/P2. Collection
+after config-only integration lists exactly four primary-Chromium tests, no
+duplicated project matrix. The initial refused gates above remain chronology,
+not current failures or product defects. The next changed input is recovery
+after network loss, not another warm baseline run.
+[Results, interpretation and reproduction](2026-10-15-warm-open-measurement.md).
