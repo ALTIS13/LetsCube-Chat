@@ -50,3 +50,12 @@ console.log('BUILD SUCCESSFUL in 7private');`);
     assert.deepEqual(output,['BUILD SUCCESSFUL in 1m 7s','sw.js build fedcba9876543210']);
   } finally {console.log=previous;rmSync(dir,{recursive:true,force:true});}
 });
+
+test('release runner supports an absolute executable path containing spaces', {skip:process.platform!=='win32'}, () => {
+  const dir=mkdtempSync(join(tmpdir(),'letscube-release-executable-'));
+  const fixture=join(dir,'child.cjs');
+  try {
+    writeFileSync(fixture,"console.log('executable-path-control');");
+    assert.equal(runReleaseCommand(process.execPath,[fixture],process.env,dir),'executable-path-control');
+  } finally {rmSync(dir,{recursive:true,force:true});}
+});
