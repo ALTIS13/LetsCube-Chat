@@ -127,6 +127,79 @@ async function mounted(changed = source) {
         deliver(events){act(()=>{for(const detail of events)dispatchChatsRefresh(detail)})},
         unrelated(){act(()=>patch({messages:{...useAppStore.getState().messages,'unrelated':Array.from({length:1000},(_,i)=>({...row,id:'foreign-'+i,chat_id:'unrelated',deleted_at:'2026-10-15T00:01:00Z'}))}}))},
         forgetCache(){act(()=>patch({messages:{}}))},
+        detachMetadata(action){
+          this.start();media.currentTime=17;
+          const own=document.querySelector('audio');
+          let at=0,ready=false,ownPaused=true;const seeks=[];
+          Object.defineProperties(own,{
+            currentTime:{get:()=>at,set:value=>{if(!ready)throw new DOMException('metadata pending','InvalidStateError');at=value;seeks.push(value)}},
+            duration:{get:()=>ready?60:NaN},paused:{get:()=>ownPaused},ended:{get:()=>false}
+          });
+          own.play=()=>{ownPaused=false;return Promise.resolve()};own.pause=()=>{ownPaused=true};
+          own.load=()=>{at=0;ready=false};
+          act(()=>{api.detach('message-a',media);api.leaveChat('chat-a')});
+          const detached={id:api.currentItem?.id,active:api.isActiveElement(own),at};
+          if(action==='deleted')this.tombstone();
+          if(action==='hidden')this.hide();
+          if(action==='close'||action==='same-item')act(()=>api.close());
+          if(action==='owner')this.retire();
+          if(action==='unmount')this.destroy();
+          if(!['current','paused','seek','source','resume','transfer-again','unmount'].includes(action)){
+            const c=action==='same-item'?item:{...item,id:'message-c',chatId:'chat-c',url:'https://media.invalid/fixture-c'};
+            const inline=isolatedMedia();
+            act(()=>{api.registerChat(c.chatId,[c]);api.play(c,inline.element)});
+            act(()=>api.pause());act(()=>api.play(c));
+          }
+          if(action==='paused')act(()=>api.pause());
+          if(action==='resume'){act(()=>api.pause());act(()=>api.play(item));}
+          if(action==='source'){own.src='https://media.invalid/replacement';own.load();}
+          if(action==='transfer-again'){
+            const next=isolatedMedia();next.element.currentTime=29;
+            act(()=>api.play(item,next.element));
+            act(()=>api.detach(item.id,next.element));
+          }
+          ready=true;
+          if(action==='seek')act(()=>api.seek(9));
+          act(()=>own.dispatchEvent(new Event('loadedmetadata')));
+          return {detached,at,seeks,id:api.currentItem?.id??null,paused:ownPaused,src:own.getAttribute('src')};
+        },
+        async nativeDetach(retire,bytes,reuse,seekPending){
+          const firstUrl=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'audio/wav'}));
+          const nextUrl=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'audio/wav'}));
+          const inline=document.createElement('audio');inline.muted=true;inline.preload='metadata';
+          const own=document.querySelector('audio');own.muted=true;
+          const metadata=element=>element.readyState>=1?Promise.resolve():new Promise((resolve,reject)=>{
+            const timer=setTimeout(()=>reject(new Error('native fixture metadata deadline')),5000);
+            element.addEventListener('loadedmetadata',()=>{clearTimeout(timer);resolve()},{once:true});
+          });
+          inline.src=firstUrl;document.body.append(inline);
+          try{
+            await metadata(inline);inline.currentTime=17;
+            const a={...item,url:firstUrl};
+            act(()=>{patch({messages:{'chat-a':[row]}});api.registerChat('chat-a',[a]);api.activate(a,inline)});
+            act(()=>api.detach(a.id,inline));
+            const detached=api.isActiveElement(own);
+            const pendingMetadata=own.readyState===0;
+            if(seekPending)act(()=>api.seek(9));
+            let afterRetire=null,afterNextLoad=null;
+            if(retire){
+              this.tombstone();
+              afterRetire=own.currentTime;
+              const c={...item,id:'native-c',chatId:'chat-c',url:nextUrl};
+              act(()=>{api.registerChat('chat-c',[c]);api.play(c)});
+              afterNextLoad=own.currentTime;
+            }
+            await metadata(own);
+            if(reuse){
+              inline.currentTime=9;
+              act(()=>api.activate(a,inline));act(()=>api.detach(a.id,inline));
+            }
+            return {detached,pendingMetadata,at:own.currentTime,id:api.currentItem?.id??null,duration:own.duration,afterRetire,afterNextLoad};
+          }finally{
+            act(()=>api.close());inline.pause();inline.removeAttribute('src');inline.load();inline.remove();
+            URL.revokeObjectURL(firstUrl);URL.revokeObjectURL(nextUrl);
+          }
+        },
         replay(){act(()=>api.play(item,media))},close(){act(()=>api.closeIfCurrent('message-a'))},
         snapshot:()=>({id:api.currentItem?.id??null,paused,src:media.getAttribute('src'),next:api.canNext,retired:window.__retiredCount(),registered:window.__registeredIds('chat-a'),revoked:window.__revokedCount()}),
         destroy(){act(()=>app.unmount())}};
@@ -161,6 +234,69 @@ for (const action of ["leave", "partial", "other-item", "other-chat"]) test(`con
 test("owner epoch retirement closes playback", () => scenario("retire", true));
 test("confirmed hide retires exact playback", () => scenario("hide", true));
 test("existing explicit close clears transport", () => scenario("close", true));
+
+async function detachMetadataContract(action, expected, changed = source) {
+  const f = await mounted(changed);
+  try {
+    const result = await f.page.evaluate(action => window.fixture.detachMetadata(action), action);
+    assert.deepEqual(result.detached,{id:"message-a",active:true,at:0},"real detach transfers A while metadata remains pending");
+    assert.equal(result.at,expected,"metadata restores only the current transport's latest seek intent");
+    if(action==='seek')assert.deepEqual(result.seeks,[9],"metadata writes only the latest seek intent, never an obsolete intermediate seek");
+    if(action==='current')assert.equal(result.id,"message-a");
+    if(action==='paused')assert.equal(result.paused,true,"metadata cannot resume a paused transport");
+    if(action==='deleted'||action==='hidden'||action==='owner'||action==='close')assert.equal(result.id,"message-c");
+  } finally { await f.close(); }
+}
+test("detach metadata: current transfer restores its 17 seconds",()=>detachMetadataContract("current",17));
+test("detach metadata: pausing preserves pending position without resuming",()=>detachMetadataContract("paused",17));
+for(const action of ["deleted","hidden","owner","close","switch","same-item","unmount"])
+  test(`detach metadata: ${action} retires the old position`,()=>detachMetadataContract(action,0));
+test("detach metadata: explicit seek supersedes pending transfer position",()=>detachMetadataContract("seek",9));
+test("detach metadata: same transport resume preserves pending position",()=>detachMetadataContract("resume",17));
+test("detach metadata: changed source rejects the previous resource position",()=>detachMetadataContract("source",0));
+test("detach metadata: latest transfer owns the pending position",()=>detachMetadataContract("transfer-again",29));
+
+function nativeWav() {
+  const samples=8000*30,bytes=Buffer.alloc(44+samples,128);
+  bytes.write('RIFF',0);bytes.writeUInt32LE(36+samples,4);bytes.write('WAVEfmt ',8);
+  bytes.writeUInt32LE(16,16);bytes.writeUInt16LE(1,20);bytes.writeUInt16LE(1,22);
+  bytes.writeUInt32LE(8000,24);bytes.writeUInt32LE(8000,28);
+  bytes.writeUInt16LE(1,32);bytes.writeUInt16LE(8,34);bytes.write('data',36);bytes.writeUInt32LE(samples,40);
+  return Array.from(bytes);
+}
+async function nativeDetachContract(retire,changed=source,reuse=false,seekPending=false){
+  const f=await mounted(changed);try{
+    const result=await f.page.evaluate(({retire,bytes,reuse,seekPending})=>window.fixture.nativeDetach(retire,bytes,reuse,seekPending),{retire,bytes:nativeWav(),reuse,seekPending});
+    assert.equal(result.detached,true,"actual provider hands off to its own unmodified audio element");
+    assert.equal(result.duration,30,"native decoder reads the generated WAV metadata");
+    assert.equal(result.id,retire?'native-c':'message-a');
+    if(retire)assert.ok(result.at<1,`fresh C starts at zero, not A's stale 17 seconds: ${JSON.stringify(result)}`);
+    else assert.ok(Math.abs(result.at-(reuse||seekPending?9:17))<0.1,"current transfer preserves native seek position");
+    if(seekPending)assert.equal(result.pendingMetadata,true,"explicit seek is tested before real native metadata");
+  }finally{await f.close();}
+}
+for(const retire of [false,true])test(`native metadata: ${retire?'retired A cannot seek C':'current A keeps its 17 seconds'}`,()=>nativeDetachContract(retire));
+test("native metadata: already loaded same resource transfers its new position immediately",()=>nativeDetachContract(false,source,true));
+test("native metadata: pending explicit seek remains owned by A",()=>nativeDetachContract(false,source,false,true));
+test("native metadata: retirement cancels pending explicit seek before C",()=>nativeDetachContract(true,source,false,true));
+test("native mutation killed: eager native seek survives load despite listener cancellation",async()=>{
+  const needle="requestPosition(own, item, at, sourceChanged, 0.5);";
+  assert.ok(source.includes(needle));
+  await assert.rejects(()=>nativeDetachContract(true,source.replace(needle,`own.currentTime = at;\n    ${needle}`)),
+    error=>error.code==='ERR_ASSERTION'&&error.message.includes("fresh C starts at zero"));
+});
+
+for(const [name,needle,replacement,action,want] of [
+  ["transfer cancellation omitted","pendingPositionRef.current?.abort();","","same-item",0],
+  ["explicit seek cancellation omitted","    cancelPendingPosition();\n    const intent = new AbortController();","    const intent = new AbortController();","seek",9],
+  ["unmount cancellation omitted","return () => {\n      cancelPendingPosition();","return () => {","unmount",0],
+  ["source admission omitted","element.src !== source || ","","source",0],
+  ["current transfer restore omitted","element.currentTime = time;","void time;","current",17],
+])test(`detach mutation killed: ${name}`,async()=>{
+  assert.ok(source.includes(needle),"exact real player mutation target exists");
+  await assert.rejects(()=>detachMetadataContract(action,want,source.replaceAll(needle,replacement)),
+    error=>error.code==='ERR_ASSERTION'&&error.message.includes("latest seek intent"));
+});
 test("owner UID retirement closes playback", () => scenario("retireOwner", true));
 test("deleted item cannot be replayed", () => scenario("replayAfterDeleted", true));
 test("native play admission cannot revive a deleted item", () => scenario("activateAfterDeleted", true));

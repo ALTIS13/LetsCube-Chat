@@ -103,6 +103,7 @@ async function consumerBundle(kind = "audio"): Promise<string> {
             "function stopClock(): void {\n    if (!clockWindow) return;\n    if (clockTimer !== null) clockWindow.clearTimeout(clockTimer);",
             "function stopClock(): void {\n    if (!clockWindow) return;",
           ],
+          "response-clock": ["signedUrlLifetime(issuedAtMs, ttlSeconds)", "signedUrlLifetime(receivedAtMs, ttlSeconds)"],
           "omit-account-clear": ["if (accountId === nextAccountId) return;", "if (accountId !== undefined) return;"],
           "omit-position": ["element.currentTime = at;", "void at;"],
           "omit-play": ["if (wasPlaying) void element.play().catch(() => {});", "void wasPlaying;"],
@@ -558,25 +559,23 @@ test("mounted idle consumer renews at literal 48 minutes without render or store
   } finally { await f.close(); }
 });
 
-test("mounted renewal deadline follows delayed provider response, not the subscription minute", { timeout: 30000 }, async () => {
+test("mounted renewal charges provider response delay to the URL lifetime", { timeout: 30000 }, async () => {
   const f = await fixture(await consumerBundle(), "audio", 1234);
   try {
-    await f.advance(2_880_000);
-    assert.equal(f.signs.length, 1, "48 minutes since mount is too early for the delayed signature");
-    await f.advance(2_881_233);
+    await f.advance(2_879_999);
     assert.equal(f.signs.length, 1, "one millisecond before actual renewal deadline stays fresh");
-    await f.advance(2_881_234);
+    await f.advance(2_880_000);
     await until(() => f.signs.length === 2, "exact 48-minute lifetime deadline must renew, not wait another subscription minute");
-    assert.deepEqual(f.signs[1], { at: 2_881_234, ttl: 3600, paths: ["owner/voice.wav"] });
+    assert.deepEqual(f.signs[1], { at: 2_880_000, ttl: 3600, paths: ["owner/voice.wav"] });
   } finally { await f.close(); }
 });
 
 test("mounted delayed signature releases its shortened store clock on last unsubscribe", { timeout: 30000 }, async () => {
   const f = await fixture(await consumerBundle(), "audio", 1234);
   try {
-    await f.advance(2_880_000);
-    await f.resumeAt(2_880_000, "focus");
-    assert.equal(f.signs.length, 1, "the delayed signature is not due at 48 minutes since mount");
+    await f.advance(2_878_766);
+    await f.resumeAt(2_878_766, "focus");
+    assert.equal(f.signs.length, 1, "the signature still has 1234ms before request-based renewal");
     const before = await f.page.evaluate(() => (window as any).storeClockState());
     assert.deepEqual(before.delays, [1234], "focus must arm the real store clock for its remaining lifetime");
 
@@ -595,7 +594,7 @@ test("mounted delayed signature releases its shortened store clock on last unsub
     assert.deepEqual(await f.page.evaluate(() => (window as any).resourceCounts()), {
       timers: 0, events: { online: 0, focus: 0, pageshow: 1, visibilitychange: 0 },
     }, "last unsubscribe must cancel even a shortened store deadline timer");
-    await f.advance(2_881_234);
+    await f.advance(2_880_000);
     assert.deepEqual(await f.page.evaluate(() => (window as any).storeClockState()), {
       delays: [], runs: before.runs,
     }, "the cancelled store callback must not run after its deadline");
