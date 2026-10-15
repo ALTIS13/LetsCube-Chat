@@ -31,13 +31,14 @@ function run(command, args, env, cwd = root) {
   const executable = process.platform === "win32" ? env.ComSpec || "cmd.exe" : command;
   const executableArgs =
     process.platform === "win32"
-      ? ["/d", "/s", "/c", [command, ...args].map(quoteWindowsArgument).join(" ")]
+      ? ["/d", "/s", "/c", `"${[command, ...args].map(quoteWindowsArgument).join(" ")}"`]
       : args;
   const result = spawnSync(executable, executableArgs, {
     cwd,
     encoding: "utf8",
     env,
     stdio: "pipe",
+    windowsVerbatimArguments: process.platform === "win32",
   });
 
   if (result.error) {
