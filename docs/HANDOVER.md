@@ -1,5 +1,21 @@
 # LETSCUBE — handover
 
+**Current resume,2026-10-15:** coordinator; tester-priority chat synchronization
+and media-cache release. The selected read-only Nikita intake returned19 new
+rows; slow chat switching/opening, VPN-associated failure and missing lock-screen
+text are reported, not diagnosed. Existing cached history is present. This tree
+contains reviewed D-357 delayed UPDATE admission, D-358 conservative signed URL
+lifetime, D-359 fractional avatar revision keys and D-361 trusted warm-read reuse.
+Affected source checks26/26,28/28 and78/78 pass in separate runs; main-based actual
+typecheck/build pass. Verify this commit's exact running image, old/new consumer,
+public/container JS+SW and rollback assets before calling deployment accepted.
+Then continue item87's measured recovery/latency and D-360 authoritative deleted-
+player retirement. No SQL, native-preview promotion or new APK release is included.
+Preserve the private Android version overlay and other owners' sidebar/search work.
+[Intake, implementation and acceptance boundaries](operations/2026-10-15-tester-feedback.md).
+
+## Earlier Checkpoints
+
 **Current resume,2026-10-11:** coordinator, main-based search-focus repair.
 The actual phone search race is reproduced in Chromium/WebKit; pending focus
 can reopen a closed field. Reviewed fix preserves committed visibility and exact
