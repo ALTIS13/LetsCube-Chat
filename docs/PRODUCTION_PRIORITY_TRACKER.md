@@ -1,6 +1,17 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-10.
+Status: active production-hardening tracker, updated 2026-10-15.
+
+**Current checkpoint,2026-10-15 20:42UTC:** shared-web D-365 at59f1fe8b
+accepted: actual native/controlled RED-to-GREEN90/90, adjacent59/59, final
+typecheck/build,14 own-tree aliases, independent-review P2 fix pass, exact single
+healthy image, old/new consumer, public/container JS+SW parity, retained rollback
+and anonymous smoke. Android0.1.20/build21 is Stable but predates D-365; native
+delivery/authenticated upgrade/OEM acceptance remains separate. Tester item87
+latency/VPN attribution and full media semantics stay open. The compact current
+order below supersedes older version/permission prose; reuse accepted evidence.
+[Position repair and actual deployment](operations/2026-10-15-media-position-lifetime.md).
+[UI-only intake, not new defects](operations/2026-10-15-intake-followup.md).
 
 **Current continuation,2026-10-10:** D-355 installed once after SQL15/15,
 fresh before backup and actual PG17 rollback/six ordered concurrent cases.
@@ -520,13 +531,47 @@ while the hint was offered **and the page was visible**, not wall clock since it
 
 ## Current Execution Order
 
-1. `[x]` Priority 1 - Auth and anti-abuse baseline.
-2. `[x]` Priority 2 - RLS and security audit baseline.
-3. `[!]` Priority 3 - Backup and restore drill follow-ups.
-4. `[x]` Priority 4 - Operator security observability.
-5. `[~]` Priority 5 - Installed web/PWA production shell. iPhone/iPad-specific implementation and QA are externally owned.
-6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
-7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android Stable now publishes the signed `0.1.3/4` APK with authenticated upgrade/logout/login/session restore, foreground/background/killed FCM acceptance, exact taps/read-sync, offline/reconnect, initial read/unread anchoring, fast-upward/prepend/footer stability, bounded geolocation and complete product media/capture acceptance on official-GMS Nothing. Live recovery, signer/Asset Links parity and a fresh official-GMS automatic domain verification passed. Android embeds its web bundle at build time, so unlike the Windows shell it does not pick up deployed web fixes; the published `0.1.3` carries the bundle built from `920c8e8` and is behind. External backup, a rebuild for the stale bundle and Play release remain active gates.
+Current as of2026-10-15; the dated detail under queue items is history, not a
+competing version or permission gate. D-365 shared-web release is accepted;
+continue this order, with independent bounded work in parallel. Auth,
+anti-abuse, RLS, support/email and basic operator security baselines are accepted;
+maintain their affected regressions, do not rebuild them without a new finding.
+
+1. `[~]` Finish Nikita's recorded intake and reproduce current reports: opening/
+   switching delay and VPN behavior87, mic84, read notifications85, task reload86,
+   audio83 and exact emoji79. Five images/one video remain semantically open.
+2. `[~]` Synchronization/cache/recovery2,52,53: retain account-owned warm history,
+   privacy admission, anchors, pending text/files/voice and duplicate-free retries.
+   D-357 throughD-364 are accepted fixes, not instructions to repeat their tests.
+3. `[~]` Notifications75-77,95: safe useful OS context, persisted child overrides,
+   account/device read agreement and exact retained actions. Rich preview/native
+   delivery acceptance is distinct from shared-source fixes.
+4. `[~]` Media25,29,104: finish current positional-intent release, then remaining
+   albums/HD/original/download/cache cases and the pre-send photo/video editor.
+5. `[~]` Faithful recovery82/D-342: isolated restore must preserve actual ACLs and
+   settings; retain verified before-backup/rehearsal/rollback as a prerequisite
+   for applying database work in the next stage. Old permission-only holds do
+   not override the owner's later standing authority; real technical gates do.
+6. `[~]` Trusted media writer/forward/avatar authority78: source/isolated checks
+   are not actual durable Storage/provider/runtime acceptance or an applied SQL
+   migration. Finish those boundaries before promotion.
+7. `[~]` Group/Group-chat separation44-48,80-81, publication channels with actual
+   writer/readers authority, bot shared/personal interfaces and auto voice rooms43.
+8. `[~]` Calls32,44-45: finish remaining group/voice/background delivery and
+   participant scenarios; private calls/history already exist, not a blank stage.
+9. `[~]` Visual/motion consistency18,30-31,34,93: current glass, responsive
+   containers, search motion, typography, controls and keyboards across shells.
+10. `[~]` Product completion17,19-20,27,36-38: public downloads/changelog,
+    profiles/contacts/shared-media depth, scoped roles, tasks/staff and support.
+11. `[~]` Platform acceptance7,9,28: Android Stable0.1.20/build21 is published,
+    but FCM21/authenticated upgrade/broad OEM are not proved and new D-365 needs
+    a later embedded bundle. Use Realme/rented devices, not A063. Windows EXE
+    remains owner-accepted unsigned; WNS killed-process and Win10/11/long-session
+    stay open. Installed iOS PWA/keyboard/safe-area acceptance remains distinct;
+    native Apple release work stays separately owned. No fabricated platform parity.
+12. `[ ]` Monitoring/error/uptime/backup alerting6 after safe recovery, then
+    measured capacity/storage work. Paid cosmetics24 and other optional extras
+    stay behind core reliability; no speculative infrastructure rewrite.
 
 ## Next Execution Queue
 
@@ -4332,6 +4377,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Android candidate18 predates this fix; do not claim bundled Android parity
     or explain D-349/natural OS delivery from these consumer tests.
     [Cause and acceptance boundary](operations/2026-10-11-notification-click-lifetime.md).
+
+104. `[x]` Pending media positions belong to the message/resource, **D-365**.
+    Shared detach/seek intent, no eager native premetadata write, preserved
+    pending inline seek through handoff and exact retirement are accepted.
+    Actual90/90 plus native omission controls, adjacent59/59, typecheck/build,
+    independent-review P2 fix pass and narrow59f1fe8b runtime/rollback/smoke pass.
+    Android Stable21 predates this source; no new native acceptance is inferred.
+    [Evidence](operations/2026-10-15-media-position-lifetime.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

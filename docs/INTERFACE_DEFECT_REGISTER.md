@@ -25505,6 +25505,28 @@ No markup/style, schema, provider or permission changes. Android candidate18
 does not contain the fix. No natural FCM/card-click or D-349 explanation follows.
 [Evidence and boundary](operations/2026-10-11-notification-click-lifetime.md).
 
+## D-365 `[x]` Pending media position survives its message or is lost on handoff
+
+**Status:** P2 reproduced and repaired; shared-web59f1fe8b rollout accepted
+2026-10-15 at20:42UTC. Single healthy exact image, old/new consumer, public/
+container JS+SW parity, rollback image/entry and anonymous smoke pass.
+**Surface:** `components/chat/ChatMediaPlayback.tsx`, shared positional intent,
+detach, explicit seek and synchronous unmount cancellation.
+**Observed cause:** the old detach listener retained A's position independently
+of the current message/transport. Real native audio additionally retains a seek
+written before metadata across load()/source changes; listener cancellation alone
+does not solve it. The same mechanism affected explicit user seeks. Final review
+found the inverse transition also lost a pending inline seek when leaving chat.
+**Repair:** one cancellable message/chat/source/element-owned pending position is
+used by detach and seek, never written natively before metadata, preserved on
+pause and actual same-message handoff, retired on close/account/resource changes.
+Actual mounted suite90/90 includes real WAV metadata and literal mutation controls;
+adjacent59/59, typecheck and actual4e6fd0ace2bbe363/11.52s build accepted. The one
+independent-review P2 has a real native RED-to-GREEN fix pass. No hidden/deleted
+audio restart is inferred and D-360 stays accepted. Android Stable21 predates
+this repair; installed-platform acceptance is not claimed from the source.
+[Cause, review and verification](operations/2026-10-15-media-position-lifetime.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

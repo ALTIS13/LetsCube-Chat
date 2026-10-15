@@ -1,5 +1,23 @@
 # LETSCUBE — handover
 
+**Current resume, 2026-10-15 20:42 UTC:** coordinator; shared-web D-365 is
+accepted at main/runtime59f1fe8b: one cancellable message/resource-owned pending
+position for detach and explicit seek, including pending inline handoff. Final
+90/90, adjacent59/59, native mutation controls, typecheck/build4e6fd0ace2bbe363
+and the independent-review P2 RED-to-GREEN fix pass accepted. Single healthy
+exact image, old/new compiled consumer1/0 ->0/1, public/container JS+SW parity,
+retained rollback image/entry and anonymous zero-error/zero-mutation smoke pass.
+Do not reimplement/retest this without changed inputs. Next: measured tester
+item87/current-client opening/switching and VPN-associated reports; actual cause
+and full5-image/1-video semantics remain open. UI-only intake classifications do
+not establish defects. Android0.1.20/build21 is published Stable,mandatory=false,
+but predates D-365; FCM21/authenticated upgrade/OEM and physical native acceptance
+are separate. Preserve root sidebar/search changes and private Android overlay.
+No SQL or new native install/publication in this stage. Dated paragraphs below
+are history, not competing instructions.
+[Actual position repair and rollout](operations/2026-10-15-media-position-lifetime.md).
+[Intake boundaries](operations/2026-10-15-intake-followup.md).
+
 **Current resume, 2026-10-15:** coordinator; D-362 finite PostgREST body ownership
 and D-360 authoritative playback retirement are in the narrow web candidate.
 Transport/SDK48/48, real-loopback Chromium/WebKit13/13 and final player63/63 pass;
