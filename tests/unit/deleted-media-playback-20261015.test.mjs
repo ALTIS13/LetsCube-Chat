@@ -163,7 +163,7 @@ async function mounted(changed = source) {
           act(()=>own.dispatchEvent(new Event('loadedmetadata')));
           return {detached,at,seeks,id:api.currentItem?.id??null,paused:ownPaused,src:own.getAttribute('src')};
         },
-        async nativeDetach(retire,bytes,reuse,seekPending){
+        async nativeDetach(retire,bytes,reuse,seekPending,seekInline){
           const firstUrl=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'audio/wav'}));
           const nextUrl=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:'audio/wav'}));
           const inline=document.createElement('audio');inline.muted=true;inline.preload='metadata';
@@ -174,9 +174,11 @@ async function mounted(changed = source) {
           });
           inline.src=firstUrl;document.body.append(inline);
           try{
-            await metadata(inline);inline.currentTime=17;
+            if(!seekInline){await metadata(inline);inline.currentTime=17;}
             const a={...item,url:firstUrl};
             act(()=>{patch({messages:{'chat-a':[row]}});api.registerChat('chat-a',[a]);api.activate(a,inline)});
+            const inlineMetadataPending=inline.readyState===0;
+            if(seekInline)act(()=>api.seek(9));
             act(()=>api.detach(a.id,inline));
             const detached=api.isActiveElement(own);
             const pendingMetadata=own.readyState===0;
@@ -194,7 +196,7 @@ async function mounted(changed = source) {
               inline.currentTime=9;
               act(()=>api.activate(a,inline));act(()=>api.detach(a.id,inline));
             }
-            return {detached,pendingMetadata,at:own.currentTime,id:api.currentItem?.id??null,duration:own.duration,afterRetire,afterNextLoad};
+            return {detached,pendingMetadata,inlineMetadataPending,at:own.currentTime,id:api.currentItem?.id??null,duration:own.duration,afterRetire,afterNextLoad};
           }finally{
             act(()=>api.close());inline.pause();inline.removeAttribute('src');inline.load();inline.remove();
             URL.revokeObjectURL(firstUrl);URL.revokeObjectURL(nextUrl);
@@ -264,21 +266,30 @@ function nativeWav() {
   bytes.writeUInt16LE(1,32);bytes.writeUInt16LE(8,34);bytes.write('data',36);bytes.writeUInt32LE(samples,40);
   return Array.from(bytes);
 }
-async function nativeDetachContract(retire,changed=source,reuse=false,seekPending=false){
+async function nativeDetachContract(retire,changed=source,reuse=false,seekPending=false,seekInline=false){
   const f=await mounted(changed);try{
-    const result=await f.page.evaluate(({retire,bytes,reuse,seekPending})=>window.fixture.nativeDetach(retire,bytes,reuse,seekPending),{retire,bytes:nativeWav(),reuse,seekPending});
+    const result=await f.page.evaluate(({retire,bytes,reuse,seekPending,seekInline})=>window.fixture.nativeDetach(retire,bytes,reuse,seekPending,seekInline),{retire,bytes:nativeWav(),reuse,seekPending,seekInline});
     assert.equal(result.detached,true,"actual provider hands off to its own unmodified audio element");
     assert.equal(result.duration,30,"native decoder reads the generated WAV metadata");
     assert.equal(result.id,retire?'native-c':'message-a');
     if(retire)assert.ok(result.at<1,`fresh C starts at zero, not A's stale 17 seconds: ${JSON.stringify(result)}`);
-    else assert.ok(Math.abs(result.at-(reuse||seekPending?9:17))<0.1,"current transfer preserves native seek position");
+    else assert.ok(Math.abs(result.at-(reuse||seekPending||seekInline?9:17))<0.1,`current transfer preserves native seek position: ${JSON.stringify(result)}`);
     if(seekPending)assert.equal(result.pendingMetadata,true,"explicit seek is tested before real native metadata");
+    if(seekInline)assert.equal(result.inlineMetadataPending,true,"inline seek is tested before its real native metadata");
   }finally{await f.close();}
 }
 for(const retire of [false,true])test(`native metadata: ${retire?'retired A cannot seek C':'current A keeps its 17 seconds'}`,()=>nativeDetachContract(retire));
 test("native metadata: already loaded same resource transfers its new position immediately",()=>nativeDetachContract(false,source,true));
 test("native metadata: pending explicit seek remains owned by A",()=>nativeDetachContract(false,source,false,true));
 test("native metadata: retirement cancels pending explicit seek before C",()=>nativeDetachContract(true,source,false,true));
+test("native metadata: inline pending seek survives the transfer to global audio",()=>nativeDetachContract(false,source,false,false,true));
+test("native metadata: transferred pending inline seek still retires before C",()=>nativeDetachContract(true,source,false,false,true));
+test("native mutation killed: detach drops its pending inline position",async()=>{
+  const needle="? pending.time : finiteTime(element.currentTime)";
+  assert.ok(source.includes(needle));
+  await assert.rejects(()=>nativeDetachContract(false,source.replace(needle,"? finiteTime(element.currentTime) : finiteTime(element.currentTime)"),false,false,true),
+    error=>error.code==='ERR_ASSERTION'&&error.message.includes("current transfer preserves native seek position"));
+});
 test("native mutation killed: eager native seek survives load despite listener cancellation",async()=>{
   const needle="requestPosition(own, item, at, sourceChanged, 0.5);";
   assert.ok(source.includes(needle));
@@ -287,7 +298,7 @@ test("native mutation killed: eager native seek survives load despite listener c
 });
 
 for(const [name,needle,replacement,action,want] of [
-  ["transfer cancellation omitted","pendingPositionRef.current?.abort();","","same-item",0],
+  ["transfer cancellation omitted","pendingPositionRef.current?.controller.abort();","","same-item",0],
   ["explicit seek cancellation omitted","    cancelPendingPosition();\n    const intent = new AbortController();","    const intent = new AbortController();","seek",9],
   ["unmount cancellation omitted","return () => {\n      cancelPendingPosition();","return () => {","unmount",0],
   ["source admission omitted","element.src !== source || ","","source",0],
