@@ -25816,6 +25816,23 @@ boundary and BYOB/custom-metadata compatibility limits remain explicitly outside
 this repair. This does not establish the tester's VPN cause.
 [Acceptance and upstream comparison](operations/2026-10-15-network-body-and-playback.md).
 
+## D-365 `[ ]` A retired detach metadata callback may seek a different audio item
+
+**Status:** P2 source candidate, 2026-10-15; runtime NOT REPRODUCED, not fixed.
+**Surface:** `components/chat/ChatMediaPlayback.tsx`, detach loadedmetadata
+callback around526, close around473 and global play reuse around892.
+**Source observation:** detach captures A's position in a one-shot metadata
+listener without current item/source/operation validation. Retirement clears the
+transport but does not remove that listener. When the same global audio later
+loads C, the old callback may seek C to A's position. This is not evidence of
+hidden/deleted media restarting and does not reopen accepted D-360 retirement.
+**Next RED:** actually detach playing A at17s while metadata is pending, retire
+A through authoritative hide/delete, then start C and reuse global transport.
+Deliver metadata C and assert no stale seek. Positive control: current detach
+still restores its own17s. Existing deleted-media detached coverage uses leaveChat
+only, so it does not establish this boundary. Do not patch or close from source
+review alone. [Stage and evidence](operations/2026-10-15-current-client-android.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

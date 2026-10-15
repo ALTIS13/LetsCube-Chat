@@ -1,6 +1,26 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15 17:19 UTC:** coordinator; current-source private
+**Current resume, 2026-10-15 19:56 UTC:** coordinator; Android0.1.20/build21 is
+published Stable, mandatory=false. Exact APK87f1de4f/source0dfb98a1, full public
+redownload and Android verifier pass at19:55:04 UTC; catalogue10696731. Stable17
+has a byte-identical backup and the new artifact is immutable. Signed21 guest/
+plugins/lifecycle and actual old20 ->21 CE/DE sentinel/UID/inode preservation pass;
+owned AVD cleanup and independent review accepted. Physical Realme current-main
+lifecycle/recovery/audio evidence is reused; primary20/data/users are unchanged.
+Publication readers106/106,12 omissions, frozen review and actual local freshness
+check accepted before separate stage/publish/verify. No intent is replayable.
+Next: D-365 source-candidate RED: a delayed detach(A) loadedmetadata listener may
+seek another audio item C after A retires. First reproduce with actual detach and
+current-detach positive control; then fence/cancel the stale callback. No runtime
+reproduction or repair yet; do not reopen D-360 or claim hidden playback resumes.
+Item87 tester/VPN cause/full media semantics and native-preview limits remain open.
+Authenticated-session preservation, FCM21 and broad OEM acceptance are not proved.
+No production SQL, web deploy, physical release replacement or rich-preview
+promotion. Preserve all unowned paths and accepted evidence. Original artifact
+expiry23:10:50 UTC was not renewed; it is not a public-download expiry.
+[Actual evidence, failures and next action](operations/2026-10-15-current-client-android.md).
+
+**Accepted artifact checkpoint, 2026-10-15 17:19 UTC:** coordinator; current-source private
 Android 0.1.20/build21 artifact accepted from 0dfb98a1 over shared-web 5828284e.
 Actual build/SW/Vite/Gradle markers, APK identity/signature/security, four Firebase
 value matches, all 35 eligible packaged-file hashes and AAB signature pass.

@@ -2,7 +2,7 @@
 
 Status: active production-hardening tracker, updated 2026-10-15.
 
-**Active priority, 2026-10-15 17:19 UTC:** the owner's instruction puts Nikita's
+**Active priority, 2026-10-15 19:56 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
 (13 text,5 images,1 video, no new voice). Item87 now has warm chat-switch/open
 latency reports; VPN-associated opening failure and lock-screen preview lack
@@ -16,8 +16,17 @@ One frozen main-blob-pinned compiled 390/dark unread case now passes: 24 unread,
 expected history/privacy waits, 73 unique rows and exact first-unread anchor.
 Private current-source Android 0.1.20/build21 artifact, actual completion markers,
 APK security/Firebase value matches and packaged-byte parity are accepted;
-affected Realme QA and publication remain next. Full media semantics and the
-tester device/VPN latency cause remain open. No installed APK was changed.
+physical lifecycle, recovery/privacy and native audio continuity/UPDATE cases
+pass with owned cleanup; the physical release install20 is unchanged. Signed21
+guest/plugins/lifecycle and real old20 storage ->install-r21 custody now PASS in
+an owned API34 AVD, with exact cleanup and receipt85d30bb6. Old20 UI, authenticated
+session, FCM21 and broad OEM behavior are not claimed. Actual-receipt publication
+readers106/106,12 omissions, independent frozen review and real local source check
+pass. Separate stage/publish/public full-redownload+verifier accepted19:55UTC:
+Android0.1.20/build21 Stable, mandatory=false; prior Stable17 byte-identical backup
+retained. Next source-candidate D-365 needs a real detach/retirement/late-metadata
+RED before any repair. Full media
+semantics and the tester device/VPN latency cause remain open.
 Native-preview diagnostics are deferred, not a reason to replay old attempts.
 [Intake, privacy boundaries and cache direction](operations/2026-10-15-tester-feedback.md).
 [Current acceptance and next measured stage](operations/2026-10-15-network-body-and-playback.md).
@@ -4621,6 +4630,24 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     a device benchmark or a diagnosed VPN cause. Private Android21 artifact is
     verified separately; Realme QA/publication and full media semantics remain.
     [Current-client and artifact boundary](operations/2026-10-15-current-client-android.md).
+    Physical current-main Realme WebView continuation observes the73-row/24-unread
+    portion without reload/duplicates or early privacy admission. Its subsequent
+    DOM-hidden wait remains failed. Separate native-lifecycle-only run passes
+    actual pause/resume,49 retained rows/image, same DOM/anchors and0 CSS px drift;
+    unknown transport/page/native error counters0. Both exact-owned QA apps and
+    forwards removed, release20/data/users preserved. This is a fictional,
+    permissionless WebView shell, not signed Capacitor/auth/FCM acceptance.
+    Physical recovery and signed-candidate guest checks remain next; the latter
+    first refuses host-only DateTime parsing before creating an emulator.
+    Later same-day physical recovery/privacy and native audio continuity/UPDATE
+    retirement pass with exact owned cleanup. Signed candidate21 guest/native
+    plugins/controlled lifecycle and old20 ->21 sentinel custody also pass in
+    an offline owned API34 AVD, receipt85d30bb6. UID and actual CE/DE inodes and
+    markers survive install-r; old20 UI and auth/FCM21 are not claimed. Primary
+    physical20 remains unchanged. Prior refusals stay refused. Android0.1.20/build21
+    Stable publication and full public-redownload/Android verifier pass19:55UTC;
+    catalogue10696731, APK87f1de4f, mandatory=false, prior catalogue backed up exactly.
+    This is not a diagnosed tester VPN cause or full media intake; item87 stays OPEN.
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
     Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
