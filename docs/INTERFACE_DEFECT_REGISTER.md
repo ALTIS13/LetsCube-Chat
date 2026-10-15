@@ -25708,6 +25708,77 @@ No markup/style, schema, provider or permission changes. Android candidate18
 does not contain the fix. No natural FCM/card-click or D-349 explanation follows.
 [Evidence and boundary](operations/2026-10-11-notification-click-lifetime.md).
 
+## D-357 `[x]` Delayed active-chat UPDATE replaces newer held history
+
+**Surface:** `hooks/useMessages.ts`, active Realtime UPDATE callback.
+**Observed2026-10-15:** it snapshots the whole timeline before hidden-ID awaits,
+then republishes that snapshot. Actual compiled regressions lose an inserted
+row, revert another row's edit/tombstone, and overwrite a newer same-row edit.
+Four original RED and two owner controls; minimal latest-projection/target
+admission repair passes26/26 after the final warm change, independent review
+and shared web/main `dc5a7c70` rollout. Native bundled clients remain separate.
+Adjacent refresh/INSERT enrichment leads remain separate. This does not prove
+the cause of the tester's warm-open delay or a device scroll symptom.
+[Scope and intake](operations/2026-10-15-tester-feedback.md).
+
+## D-358 `[x]` A late signing response receives a fresh apparent lifetime
+
+**Surface:** `lib/media/signedMediaUrlStore.ts`, `flush`.
+**Observed2026-10-15:** validity begins after the signing await, so an already
+expired returned URL is exposed as fresh. Compiled RED with normal renewal and
+retired-account controls. Conservative request-start clock/cooldown repair passes
+combined media78/78 and independent review; shared web/main `dc5a7c70` accepted.
+Old usable signatures survive transient failure. No permission/configured TTL
+change or installed-APK claim. [Scope](operations/2026-10-15-tester-feedback.md).
+
+## D-359 `[x]` Different avatar revisions in one second share a cache key
+
+**Surface:** `lib/mediaCacheControl.ts`, `withVersionToken`, consumed by
+`useMediaVariants`. Stripping a timestamp to14 digits discards its fractions.
+Compiled same-second RED/whole-second control2026-10-15; precision-preserving
+timestamp token repair, literal fraction/zone/fragment controls and independent
+review pass. Shared web/main `dc5a7c70` accepted, without hashing media on reads.
+[Scope](operations/2026-10-15-tester-feedback.md).
+
+## D-360 `[ ]` A removed voice message remains the retained playing item
+
+**Surface:** `ChatMediaPlayback` / `ChatWindow` playlist registration.
+**Observed2026-10-15:** a deleted row disappears from the projected playlist but
+the current audio item is retained and keeps playing. Actual compiled RED;
+leave-chat and explicit-close controls pass. Fix requires an authoritative
+message tombstone or access retirement, not treating absence from a partial
+playlist as deletion. The existing intentional across-chat playback must remain.
+[Scope](operations/2026-10-15-tester-feedback.md).
+
+## D-361 `[x]` A verified warm history repeats a background hidden-ID query
+
+**Surface:** `hooks/useMessages.ts`, `fetchMessages` admission.
+**Observed2026-10-15:** the cached-reopen path reuses live hidden-ID evidence,
+but background full-history reconciliation always queries the same verified IDs
+again. Actual compiled RED plus required-new-ID control. Complete fetched/held/
+reply-ID reuse now passes28/28 with synchronous trusted publication and explicit
+lost/rejoining/unhide/current-hide/concurrent-addition/owner controls; independent
+review and shared web/main `dc5a7c70` accepted. Cached rows were retained during
+the reproduced wait, so
+this is not an established cause of Nikita's visible opening delay.
+[Scope and evidence](operations/2026-10-15-tester-feedback.md).
+
+## D-362 `[ ]` Fetch deadlines retire at headers while a JSON body still waits
+
+**Surface:** `lib/supabase/deadlineFetch.ts:89-97`, installed by
+`lib/supabase/client.ts`; `cutStrandedReads` at111.
+**Observed2026-10-15:** `settle()` clears the timer, outer-abort forwarding and
+waiting registration as soon as a Response reaches the wrapper. A stalled SDK
+body can therefore remain pending after deadline, network-change cut or later
+caller abort. One actual compiled wrapper/requestDeadline/native Response and
+ReadableStream audit observes all three gaps, with five calibrated complete/
+pre-header/cancellation controls. No real HTTP, Auth or VPN behavior is measured.
+
+Next P1 scope is finite PostgREST body completion, preserving the original
+deadline and error ownership without globally buffering Storage or changing Auth
+retry/logout semantics. Do not treat a timed-out write as uncommitted or retry it.
+Not repaired by web `dc5a7c70`. [Boundary](operations/2026-10-15-tester-feedback.md).
+
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 
 **Severity:** high recovery-equivalence risk, not a current production outage;

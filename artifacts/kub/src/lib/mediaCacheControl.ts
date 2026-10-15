@@ -119,8 +119,18 @@ export function withVersionToken(
 ): string | null {
   if (!url) return null;
   if (!version) return url;
-  // A stable, short token: the timestamp's own characters, minus punctuation.
-  const token = version.replace(/[^0-9]/g, "").slice(0, 14);
-  if (!token) return url;
-  return url.includes("?") ? `${url}&v=${token}` : `${url}?v=${token}`;
+  const stamp = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(version);
+  if (!stamp) return url;
+  const base = `${stamp[1]}T${stamp[2]}`;
+  const local = new Date(`${base}Z`);
+  // Date parsing can normalize invalid calendar dates; refuse those revisions.
+  if (!Number.isFinite(local.getTime()) || local.toISOString().slice(0, 19) !== base) return url;
+  const utc = new Date(`${base}${stamp[4]}`).toISOString();
+  if (!/^\d{4}-/.test(utc)) return url;
+  // Normalize the zone/zero padding without losing PostgreSQL's microseconds.
+  const token = utc.slice(0, 19).replace(/[^0-9]/g, "") + (stamp[3] ?? "").replace(/0+$/, "");
+  const hashAt = url.indexOf("#");
+  const address = hashAt < 0 ? url : url.slice(0, hashAt);
+  const fragment = hashAt < 0 ? "" : url.slice(hashAt);
+  return `${address}${address.includes("?") ? "&" : "?"}v=${token}${fragment}`;
 }

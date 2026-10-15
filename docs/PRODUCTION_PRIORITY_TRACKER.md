@@ -1,8 +1,19 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-12.
+Status: active production-hardening tracker, updated 2026-10-15.
 
-**Current actual checkpoint,2026-10-12 01:48 UTC:** web/runtime c2e1397e accepted;
+**Active priority, 2026-10-15 11:51 UTC:** the owner's new instruction puts Nikita's
+active-test reports first. One selected read-only DB intake returned19 rows
+(13 text,5 images,1 video, no new voice). Item87 now has warm chat-switch/open
+latency reports; VPN-associated opening failure and lock-screen preview lack
+are reported, not diagnosed. Cache already exists. Main/runtime `dc5a7c70` is
+accepted: four narrow reviewed repairs below, source26/26,28/28,78/78,
+main typecheck/build,29 own-tree aliases, healthy image, actual old/new consumer,
+public/container JS+SW, rollback assets and anonymous smoke pass. No new APK.
+Native-preview diagnostics are deferred, not a reason to replay old attempts.
+[Intake, privacy boundaries and cache direction](operations/2026-10-15-tester-feedback.md).
+
+**Accepted checkpoint,2026-10-12 01:48 UTC:** web/runtime c2e1397e accepted;
 chat-mute owner/epoch/read/write/cache and retained action/effect repairs pass
 29/29, adjacent82/82, independent review, typecheck/build,47 aliases, compiled
 consumer old/new and healthy public/container parity plus anonymous smoke.
@@ -4568,6 +4579,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     No measured production latency or proof of this unidentified tester cause.
     Android17 unchanged; this item remains open.
     [Cause and deployed boundary](operations/2026-10-12-hidden-history-batches.md).
+    New intake2026-10-15 prioritizes warm chat switching/opening and a reported
+    VPN-associated failure. Establish request counts, retained rendering and
+    bounded network recovery. Do not replace the existing cache or bypass access
+    checks based on the tester's cache hypothesis. Five images/one video were
+    privately acquired; full semantic intake remains incomplete.
+    [New evidence boundary](operations/2026-10-15-tester-feedback.md).
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
     Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
@@ -4691,6 +4708,50 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Android candidate18 predates this fix; do not claim bundled Android parity
     or explain D-349/natural OS delivery from these consumer tests.
     [Cause and acceptance boundary](operations/2026-10-11-notification-click-lifetime.md).
+
+96. `[x]` Active-chat delayed UPDATE must not overwrite the latest projection,
+    **D-357**. Compiled four RED cases lose a concurrent insert, another-row edit,
+    another-row tombstone or same-row newer edit. Minimal source repair reads
+    the latest held list after the final await and conservatively admits its
+    target; original ownership controls remain valid. Final26/26, independent
+    review and main/runtime `dc5a7c70` are accepted for shared web;
+    no claim of reproducing the tester's latency, VPN or physical scroll issue.
+
+97. `[x]` Signed-media response delay must consume, not extend, URL lifetime,
+    **D-358**. Conservative issue clock and retry cooldown repair accepted;
+    preserve a still-valid old URL on a transient delayed offer. No TTL/provider
+    policy change or new persistence layer. Combined media78/78, independent
+    review and main/runtime `dc5a7c70` accepted; native bundles unchanged.
+
+98. `[x]` Avatar revision cache keys must preserve timestamp fractions,
+    **D-359**. Same-second revisions collided; fraction/zone/fragment literal
+    controls and independent review pass. Shared web/main `dc5a7c70` accepted.
+    Do not rehash every file on chat reopening; no blanket native acceptance.
+
+99. `[ ]` Authoritative deletion/access retirement must stop retained media
+    playback, **D-360**. A compiled deleted-voice case remains RED. Preserve
+    intentional playback after leaving a chat; absence from a partial or paginated
+    playlist is not proof of deletion. Inspect every actual producer before wiring
+    the existing close-current operation.
+
+100. `[x]` Reconciliation must reuse continuously verified hidden-ID admission,
+     **D-361**. One redundant background request is reproduced with cached rows
+     still visible. Complete fetched/held/reply-ID checking and synchronous
+     trusted reuse pass28/28; lost/rejoining/unhide/new IDs retain actual queries.
+     Independent review and shared web/main `dc5a7c70` accepted. This does not
+     close item87's reported delay or prove actual device/live-channel timing.
+
+101. `[ ]` Bound finite response-body completion, **D-362**, next P1 network-
+     recovery slice for item87. The existing global fetch deadline works before
+     headers but unregisters the request when headers arrive. Actual compiled
+     wrapper/native-stream audit reproduces json/text hangs past deadline,
+     network cut and caller abort; five calibrated controls pass. One bounded
+     private run, no HTTP. Inspect the real PostgREST parser boundary before a
+     repair; preserve original start time, caller-error ownership, Response and
+     streaming semantics, Auth retry/session behavior and long Storage transfers.
+     No global buffering, arbitrary size cap, write retry or VPN/network change.
+     This is a concrete source defect, not proof of Nikita's VPN cause. The
+     `dc5a7c70` release does NOT include its repair.
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

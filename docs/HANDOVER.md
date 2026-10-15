@@ -1,6 +1,28 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-12 01:48 UTC:** coordinator; narrow main/runtime
+**Current resume, 2026-10-15 11:51 UTC:** coordinator; tester-priority web rollout accepted.
+One selected read-only Nikita intake returned 19 new rows (13 text/5 images/1
+video, no voice). Warm chat-switch/open latency, VPN-associated opening failure
+and lock-screen preview reports take priority; causes/client builds remain
+unverified and semantic media intake is incomplete. Existing cached history is
+not absent. Main/runtime `dc5a7c70` contains reviewed D-357 active UPDATE,
+D-358 signed URL lifetime, D-359 fractional avatar revisions and D-361 trusted
+warm-read reuse. Source 26/26,28/28,78/78; main typecheck/build; 29 own-tree aliases;
+actual old/new consumer 0/1, healthy image, JS/SW public-container parity, retained
+old image/entry and anonymous home/login 0 errors/0 mutations pass.
+Next: D-362 bounded body-read completion (three actual compiled gap cases),
+then authoritative deleted-player retirement (D-360) and measured request/recovery
+work for item87. Reported latency/VPN cause
+is not established. No SQL/native release/rich-preview promotion. Preserve unowned
+sidebar/search files and private main Android version overlay. Do not replay
+the deferred native-preview parser attempts or treat them as product progress.
+[Current intake, direction and source boundary](operations/2026-10-15-tester-feedback.md).
+
+## Historical Checkpoints
+
+The dated records below are chronology, not competing current resume instructions.
+
+**Accepted checkpoint, 2026-10-12 01:48 UTC:** coordinator; narrow main/runtime
 `c2e1397e` accepted. Account/epoch-owned chat-mute reads, confirmed rollback,
 per-chat write ordering, pending-cache guards and retained callback/effect
 admission are deployed. Final29/29, adjacent82/82, independent review, main
@@ -22,10 +44,6 @@ age renewal, SQL, native publication or rich/person/display promotion.
 Preserve unowned sidebar/search paths and private main version overlay.
 [Accepted chat-mute repair and rollout](operations/2026-10-12-chat-mute-ownership.md).
 [Artifact, actual attempts, cleanup and formatter boundary](operations/2026-10-12-android-fresh20.md).
-
-## Historical Checkpoints
-
-The dated records below are chronology, not competing current resume instructions.
 
 **Current resume, 2026-10-12:** coordinator; narrow main/runtime `0176253a`
 accepted at 22:00:43 UTC. Voice duplicate-pending-pointer guard is deployed:

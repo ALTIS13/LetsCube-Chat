@@ -416,7 +416,9 @@ export function useMessages(
         let existing = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
         const checkedIds = new Set(getMessageAndReplyIds([...fetched, ...existing]));
         const hiddenReadAt = Date.now();
-        const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent);
+        const fetchedHiddenIds = hiddenMessagesLive.canSkip(chatId, [...checkedIds])
+          ? new Set<string>()
+          : await fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent);
         if (!isCurrent()) return;
         if (!fetchedHiddenIds) {
           refuseHistory("Не удалось проверить скрытые сообщения.");
@@ -1069,6 +1071,7 @@ export function useMessages(
         { event: "UPDATE", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
         async (payload: { new: { id: string; chat_id: string; deleted_at: string | null } }) => {
           if (!isCurrent() || payload.new.chat_id !== chatIdRef.current) return;
+          const heldWhenAsked = useAppStore.getState().messages[chatId]?.find((message) => message.id === payload.new.id);
           // Re-fetch the row (pulls in sender + reactions + cleared content
           // for soft-deletes).  We patch in place so soft-deletes keep their
           // slot in the stream and render as a "сообщение удалено" placeholder
@@ -1080,7 +1083,6 @@ export function useMessages(
             .single();
           if (!isCurrent()) return;
           if (data) {
-            const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as unknown as MessageWithSender;
             const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), isCurrent);
             if (!isCurrent() || !fetchedHiddenIds) return;
@@ -1088,6 +1090,17 @@ export function useMessages(
             const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
             if (effectiveHiddenIds.has(nextMessage.id)) return;
             if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
+            const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
+            const held = current.find((message) => message.id === nextMessage.id);
+            if (!held) return;
+            const heldRevision = Date.parse(held.edited_at ?? "");
+            const replyRevision = Date.parse(nextMessage.edited_at ?? "");
+            const replyIsNewer = Number.isFinite(replyRevision) &&
+              (!Number.isFinite(heldRevision) || replyRevision > heldRevision);
+            const heldIsNewer = Number.isFinite(heldRevision) &&
+              (!Number.isFinite(replyRevision) || heldRevision > replyRevision);
+            // Tied (including sub-ms) or unknown revisions cannot order a changed row.
+            if (!nextMessage.deleted_at && (held.deleted_at || heldIsNewer || (held !== heldWhenAsked && !replyIsNewer))) return;
             const visibleMessage = sanitizeHiddenReply(nextMessage, effectiveHiddenIds);
             setMessages(payload.new.chat_id, current.map((m) => m.id === visibleMessage.id ? visibleMessage : m));
             updateChatLastMessage(payload.new.chat_id, visibleMessage);

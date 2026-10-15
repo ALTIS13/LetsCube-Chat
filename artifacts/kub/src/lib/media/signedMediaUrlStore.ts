@@ -103,7 +103,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
   const ttlSeconds = Math.max(1, options.ttlSeconds ?? SIGNED_URL_TTL_SECONDS);
   const batchSize = Math.max(1, options.batchSize ?? SIGN_BATCH_SIZE);
   const cacheLimit = Math.max(1, options.cacheLimit ?? SIGN_CACHE_LIMIT);
-  const failureCooldownMs = Math.max(0, options.failureCooldownMs ?? SIGN_FAILURE_COOLDOWN_MS);
+  const failureCooldownMs = Math.max(1, options.failureCooldownMs ?? SIGN_FAILURE_COOLDOWN_MS);
 
   const known = new Map<string, CacheEntry>();
   const pending = new Map<string, MediaObjectRef>();
@@ -121,7 +121,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
     let delay = 60_000;
     for (const entry of known.values()) {
       const boundaries = entry.lifetime
-        ? [entry.lifetime.renewAtMs, entry.lifetime.expiresAtMs - SIGNED_URL_MIN_REMAINING_MS]
+        ? [entry.retryAtMs, entry.lifetime.renewAtMs, entry.lifetime.expiresAtMs - SIGNED_URL_MIN_REMAINING_MS]
         : [entry.retryAtMs];
       for (const boundary of boundaries) {
         if (boundary > nowMs) delay = Math.min(delay, boundary - nowMs);
@@ -182,7 +182,8 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
     if (inFlight.has(key) || pending.has(key)) return false;
     const entry = known.get(key);
     if (!entry) return true;
-    if (!entry.lifetime) return nowMs >= entry.retryAtMs;
+    if (nowMs < entry.retryAtMs) return false;
+    if (!entry.lifetime) return true;
     return shouldRenewSignedUrl(entry.lifetime, nowMs);
   }
 
@@ -227,11 +228,14 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
     const batch = takeBatch();
     if (!batch) return;
 
+    // The service issues the token during this request, not when its reply is read.
+    const issuedAtMs = now();
     let changed = false;
     try {
       const results = await sign(batch.bucket, batch.paths, ttlSeconds);
       if (flushGeneration !== generation) return;
-      const issuedAtMs = now();
+      const receivedAtMs = now();
+      const lifetime = signedUrlLifetime(issuedAtMs, ttlSeconds);
       const byPath = new Map<string, SignedPathResult>();
       for (const result of results) byPath.set(result.path, result);
 
@@ -239,12 +243,22 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
         const key = batch.keys[i];
         const result = byPath.get(batch.paths[i]);
         const url = result && !result.error ? result.signedUrl : null;
-        if (url) {
+        if (url && isSignedUrlUsable(lifetime, receivedAtMs)) {
           known.set(key, {
             url,
-            lifetime: signedUrlLifetime(issuedAtMs, ttlSeconds),
+            lifetime,
             retryAtMs: 0,
-            touchedAtMs: issuedAtMs,
+            touchedAtMs: receivedAtMs,
+          });
+        } else if (url) {
+          // A delayed offer is not a revocation, nor a fresh download address.
+          // Keep any buffered signature, but back off before asking again.
+          const previous = known.get(key);
+          known.set(key, {
+            url: previous?.url ?? null,
+            lifetime: previous?.lifetime ?? null,
+            retryAtMs: receivedAtMs + failureCooldownMs,
+            touchedAtMs: receivedAtMs,
           });
         } else {
           // Refused, or not there. The wire does not distinguish the two, so
@@ -252,8 +266,8 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
           known.set(key, {
             url: null,
             lifetime: null,
-            retryAtMs: issuedAtMs + failureCooldownMs,
-            touchedAtMs: issuedAtMs,
+            retryAtMs: receivedAtMs + failureCooldownMs,
+            touchedAtMs: receivedAtMs,
           });
         }
         changed = true;
