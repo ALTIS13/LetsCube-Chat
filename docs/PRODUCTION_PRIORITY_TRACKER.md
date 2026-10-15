@@ -2,16 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-15.
 
-**Active priority, 2026-10-15 11:51 UTC:** the owner's new instruction puts Nikita's
+**Active priority, 2026-10-15 13:45 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
 (13 text,5 images,1 video, no new voice). Item87 now has warm chat-switch/open
 latency reports; VPN-associated opening failure and lock-screen preview lack
-are reported, not diagnosed. Cache already exists. Main/runtime `dc5a7c70` is
-accepted: four narrow reviewed repairs below, source26/26,28/28,78/78,
-main typecheck/build,29 own-tree aliases, healthy image, actual old/new consumer,
-public/container JS+SW, rollback assets and anonymous smoke pass. No new APK.
+are reported, not diagnosed. Cache already exists. Prior dc5a7c70 repairs stay
+accepted; new main/runtime c9f86afb closes scoped D-360/D-362. Final source48,
+browser13, player63, unchanged hook26/28, independent review, main typecheck/build,
+68 own-tree aliases, healthy image, actual old/new consumer, public/container
+JS+SW, rollback assets and anonymous smoke pass. Next: one fixture-only per-open
+request/admission/retained-text/media trace, not a new caching framework. No APK.
 Native-preview diagnostics are deferred, not a reason to replay old attempts.
 [Intake, privacy boundaries and cache direction](operations/2026-10-15-tester-feedback.md).
+[Current acceptance and next measured stage](operations/2026-10-15-network-body-and-playback.md).
 
 **Accepted checkpoint,2026-10-12 01:48 UTC:** web/runtime c2e1397e accepted;
 chat-mute owner/epoch/read/write/cache and retained action/effect repairs pass

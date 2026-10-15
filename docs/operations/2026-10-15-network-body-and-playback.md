@@ -11,6 +11,7 @@ overlay remain outside this change.
 | --- | --- | --- |
 | D-362 finite PostgREST body ownership | Shared web accepted | Six original transport REDs; final affected transport/SDK selection48/48, five compiled omissions. Chromium/WebKit real-loopback13/13. Independent review and actual c9f86afb runtime accepted; compatibility limits below remain explicit. |
 | D-360 authoritative playback retirement | Shared web accepted | Two P2 omissions reproduced and repaired before publication. Parent final63/63 includes14 compiled omissions; unchanged hook26/28 evidence is reused. Independent final delta and actual c9f86afb runtime accepted. |
+| Item87 warm-open trace | Test-only preparation, not accepted | Cold boot/live/49-row/image controls reached in one stratum; strict empty-scene fixture contracts remain incomplete. No warm timing or new product defect. |
 | Main integration and production acceptance | Accepted13:45:09UTC | Eleven owned files only; main typecheck/build,68 own-tree imports, actual healthy image, old/new body consumer, public/container JS+SW parity, retained rollback image/entry and anonymous smoke pass. |
 
 No DB/schema, package identity, native signing, APK release or privacy-setting
@@ -241,3 +242,38 @@ to login: zero page errors, zero mutation attempts, no personal session or
 screenshots/traces/video. No SQL, installed PWA/Windows/device acceptance or
 Android release is claimed. Auth body handling remains outside this repair;
 the tester's specific latency/VPN cause and semantic media intake remain open.
+
+## Measurement Preparation, Not Product Evidence
+
+The new test-only warm-open probe is WIP, outside the accepted release. Its
+initial cold bootstrap failed before history/privacy/media calibration. A changed
+bounded observer identified the rejected local static dependency as `package.json`,
+imported by `monitoring.ts`; an exact same-origin GET/script exception was added
+without opening arbitrary origins. No warm timing follows from that failure.
+
+Independent source review also found two fixture contracts to repair before the
+next run: Vite's development HMR/fallback sockets must be distinguished from
+unknown sockets while remaining closed, and the history classifier must match
+the actual PAGE_SIZE+1 request (101), not100. The retained frame after the
+background gate is not first-paint latency. The visibility oracle separately
+passed10 literal Chromium controls, including offscreen/transparent/clipped
+ancestors. These are oracle controls, not four accepted application strata.
+
+Next acceptance is still the one fully calibrated fixture trace, with QA0,
+fake-only configuration, no captures and literal privacy/channel controls.
+Do not repeat an unchanged bootstrap failure or relabel this as a product fix.
+
+Subsequent changed-input calibration repairs the fixture's exact owned-dev-socket
+binding and101-row classifier. Pure controls pass15 socket/18 request/4 metric
+cases; the earlier10 visibility controls are reused. One1440/light run reaches
+two chats, returned hide ping, actual live/cache predicates,49 rows/48 text,
+overflow and image readiness. It then correctly FAILS isolation:68 unknown HTTP
+calls were aborted, unknown sockets0, closed owned dev sockets2. Warm/B privacy
+and the other three strata are not reached. A null warm metric is not zero delay.
+
+The missing operations are empty-scene bans/locations/voice/bot/mute/topic/role/
+category reads and two startup RPCs. Their actual consumers/return shapes are
+being checked before explicit fake responses; no generic unknown-route allowance
+or privacy bypass is accepted. The sidebar's brand-mark GET/image is separately
+grounded in its actual component/factory and an existing public SVG. All of this
+is new fixture work, outside the shipped product and unchanged accepted suites.

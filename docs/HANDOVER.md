@@ -8,6 +8,10 @@ actual healthy image, old/new body consumer0/1, JS/SW public/container parity,
 retained previous image/entry and fresh anonymous smoke pass. Next: item87's
 test-only warm-open trace (Rawls, new e2e file only): separate retained text,
 privacy admission, history and media phases in four viewport/theme strata.
+Probe is not accepted: static bootstrap/HMR/101-row classification are repaired;
+one cold stratum reaches49 rows, image and live trust, but strict fixture isolation
+still rejects68 calls to unmodelled empty-scene operations. Hume audits their
+actual contracts; Rawls owns explicit mock models. No warm/matrix data yet.
 No latency/VPN cause or semantic media acceptance is established; no SQL/native
 release. Preserve unowned sidebar/search files and main Android overlay.
 [Current ledger](operations/2026-10-15-network-body-and-playback.md).
