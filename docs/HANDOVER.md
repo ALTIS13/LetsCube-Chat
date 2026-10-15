@@ -1,6 +1,20 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-15:** coordinator; tester-priority chat synchronization
+**Current resume, 2026-10-15:** coordinator; D-362 finite PostgREST body ownership
+and D-360 authoritative playback retirement are in the narrow web candidate.
+Transport/SDK48/48, real-loopback Chromium/WebKit13/13 and final player63/63 pass;
+unchanged affected hook26/28 evidence is reused. The first player candidate was
+rejected by independent review and repaired. Final delta review and main
+typecheck/build pass; actual
+image/content/parity/rollback acceptance are separate gates. No SQL or native
+release. Preserve unowned sidebar/search files and private Android overlay.
+Next: finish candidate review/publication acceptance, then measured item87
+warm-chat/recovery work; the tester's VPN/latency cause remains unverified.
+[Candidate scope and evidence](operations/2026-10-15-network-body-and-playback.md).
+
+## Historical Checkpoints
+
+**Earlier candidate,2026-10-15:** coordinator; tester-priority chat synchronization
 and media-cache release. The selected read-only Nikita intake returned19 new
 rows; slow chat switching/opening, VPN-associated failure and missing lock-screen
 text are reported, not diagnosed. Existing cached history is present. This tree

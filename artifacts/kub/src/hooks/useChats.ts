@@ -635,7 +635,12 @@ export function useChats() {
         { event: "INSERT", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { new: MembershipRowLike }) => {
           if (!isCurrent()) return;
-          if (payload.new?.chat_id) clearedAtCache.evictChat(payload.new.chat_id);
+          if (payload.new?.user_id && payload.new.user_id !== userId) return;
+          if (payload.new?.chat_id) {
+            clearedAtCache.evictChat(payload.new.chat_id);
+            dispatchChatsRefresh({ reason: "media-retired", chatId: payload.new.chat_id,
+              ownerUserId: userId, accountEpoch, retireChat: "access-restored" });
+          }
           scheduleRefetch();
         },
       )
@@ -662,7 +667,12 @@ export function useChats() {
         { event: "DELETE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { old: Partial<MembershipRowLike> }) => {
           if (!isCurrent()) return;
-          if (payload.old?.chat_id) clearedAtCache.evictChat(payload.old.chat_id);
+          if (payload.old?.user_id && payload.old.user_id !== userId) return;
+          if (payload.old?.chat_id) {
+            clearedAtCache.evictChat(payload.old.chat_id);
+            dispatchChatsRefresh({ reason: "media-retired", chatId: payload.old.chat_id,
+              ownerUserId: userId, accountEpoch, retireChat: "access" });
+          }
           scheduleRefetch();
         },
       )
