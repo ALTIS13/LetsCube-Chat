@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -166,6 +167,7 @@ function MediaPlaybackEngine({
   const progressFrameRef = useRef<number | null>(null);
   const lastProgressSyncRef = useRef(0);
   const activeElementRef = useRef<HTMLMediaElement | null>(null);
+  const pendingPositionRef = useRef<AbortController | null>(null);
   const suppressedErrorItemIdRef = useRef<string | null>(null);
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
@@ -214,6 +216,11 @@ function MediaPlaybackEngine({
       window.cancelAnimationFrame(progressFrameRef.current);
       progressFrameRef.current = null;
     }
+  }, []);
+
+  const cancelPendingPosition = useCallback(() => {
+    pendingPositionRef.current?.abort();
+    pendingPositionRef.current = null;
   }, []);
 
   const syncFromElement = useCallback((element: HTMLMediaElement) => {
@@ -273,13 +280,14 @@ function MediaPlaybackEngine({
     activeElementRef.current = activeElement;
   }, [activeElement]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     return () => {
+      cancelPendingPosition();
       if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
       stopProgressLoop();
       activeElementRef.current?.pause();
     };
-  }, [stopProgressLoop]);
+  }, [cancelPendingPosition, stopProgressLoop]);
 
   useEffect(() => {
     if (!activeElement) return;
@@ -358,6 +366,34 @@ function MediaPlaybackEngine({
       !state.messages[item.chatId]?.some((message) => message.id === item.id && message.deleted_at);
   }, [ownerEpoch, ownerUserId]);
 
+  const requestPosition = useCallback((
+    element: HTMLMediaElement, item: ChatMediaPlaybackItem, time: number,
+    waitForMetadata = false, tolerance = 0,
+  ) => {
+    cancelPendingPosition();
+    const intent = new AbortController();
+    pendingPositionRef.current = intent;
+    const source = element.src;
+    const applyPosition = () => {
+      if (intent.signal.aborted) return;
+      pendingPositionRef.current = null;
+      const current = currentItemRef.current;
+      if (!current || current.id !== item.id || current.chatId !== item.chatId ||
+          activeElementRef.current !== element || element.src !== source || !canAdmitItem(current)) return;
+      if (Math.abs(finiteTime(element.currentTime) - time) > tolerance) {
+        try {
+          element.currentTime = time;
+        } catch {
+          // The resource may not support seeking; keep its native position.
+        }
+      }
+    };
+    // Pre-metadata currentTime persists natively across load()/source changes.
+    // Keep both user seeks and handoff positions outside the native element.
+    if (!waitForMetadata && element.readyState >= HTMLMediaElement.HAVE_METADATA) applyPosition();
+    else element.addEventListener("loadedmetadata", applyPosition, { once: true, signal: intent.signal });
+  }, [cancelPendingPosition, canAdmitItem]);
+
   const activate = useCallback((item: ChatMediaPlaybackItem, element: HTMLMediaElement) => {
     if (!canAdmitItem(item)) {
       const current = currentItemRef.current;
@@ -369,6 +405,11 @@ function MediaPlaybackEngine({
         element.load();
       }
       return;
+    }
+    const previousItem = currentItemRef.current;
+    if (activeElementRef.current !== element || previousItem?.id !== item.id ||
+        previousItem.chatId !== item.chatId || previousItem.url !== item.url) {
+      cancelPendingPosition();
     }
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
@@ -388,7 +429,7 @@ function MediaPlaybackEngine({
     if (element instanceof HTMLAudioElement) {
       void applyAudioOutputDevice(element, settings.selectedOutputDeviceId);
     }
-  }, [canAdmitItem, playbackRate, settings.selectedOutputDeviceId, volume]);
+  }, [cancelPendingPosition, canAdmitItem, playbackRate, settings.selectedOutputDeviceId, volume]);
 
   const play = useCallback((item: ChatMediaPlaybackItem, element?: HTMLMediaElement | null) => {
     if (!canAdmitItem(item)) return;
@@ -436,11 +477,12 @@ function MediaPlaybackEngine({
   }, [activeElement, currentItem?.id, mediaElementForItem, play]);
 
   const seek = useCallback((time: number) => {
-    if (!activeElement || !Number.isFinite(time)) return;
+    const item = currentItemRef.current;
+    if (!activeElement || !item || !canAdmitItem(item) || !Number.isFinite(time)) return;
     const nextTime = Math.max(0, duration > 0 ? Math.min(time, duration) : time);
-    activeElement.currentTime = nextTime;
+    requestPosition(activeElement, item, nextTime);
     setCurrentTime(nextTime);
-  }, [activeElement, duration]);
+  }, [activeElement, canAdmitItem, duration, requestPosition]);
 
   const setRate = useCallback((rate: number) => {
     const nextRate = normalizePlaybackRate(rate);
@@ -465,6 +507,7 @@ function MediaPlaybackEngine({
   }, [canNext, play, playlist, playlistIndex]);
 
   const close = useCallback(() => {
+    cancelPendingPosition();
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
@@ -487,7 +530,7 @@ function MediaPlaybackEngine({
     setCurrentTime(0);
     setDuration(0);
     setError(null);
-  }, [stopProgressLoop]);
+  }, [cancelPendingPosition, stopProgressLoop]);
 
   const registerChat = useCallback((openChatId: string, items: ChatMediaPlaybackItem[]) => {
     if (accessRevokedChatsRef.current.has(openChatId)) return;
@@ -517,26 +560,14 @@ function MediaPlaybackEngine({
     const at = finiteTime(element.currentTime);
     const source = element.currentSrc || element.src || item.url;
     element.pause();
-    if (own.src !== source) own.src = source;
-    try {
-      own.currentTime = at;
-    } catch {
-      // Before metadata some engines refuse; the listener below puts it back.
-    }
-    own.addEventListener("loadedmetadata", () => {
-      if (Math.abs(finiteTime(own.currentTime) - at) > 0.5) {
-        try {
-          own.currentTime = at;
-        } catch {
-          // Leaves it at the start, which is the old behaviour.
-        }
-      }
-    }, { once: true });
+    const sourceChanged = own.src !== source;
+    if (sourceChanged) own.src = source;
+    activeElementRef.current = own;
+    setActiveElement(own);
+    requestPosition(own, item, at, sourceChanged, 0.5);
     own.playbackRate = element.playbackRate;
     own.volume = element.volume;
     void applyAudioOutputDevice(own, settings.selectedOutputDeviceId);
-    activeElementRef.current = own;
-    setActiveElement(own);
     if (!wasPlaying) {
       setIsPlaying(false);
       return;
@@ -546,7 +577,7 @@ function MediaPlaybackEngine({
       setIsPlaying(false);
       reportError(error, { category: "media_playback_failed", mediaKind: item.kind, staged: false });
     });
-  }, [appLevel, settings.selectedOutputDeviceId]);
+  }, [appLevel, requestPosition, settings.selectedOutputDeviceId]);
 
   const isActiveElement = useCallback(
     (element: HTMLMediaElement | null) => Boolean(element) && activeElementRef.current === element,
