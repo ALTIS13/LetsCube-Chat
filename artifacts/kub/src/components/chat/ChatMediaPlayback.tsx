@@ -167,7 +167,13 @@ function MediaPlaybackEngine({
   const progressFrameRef = useRef<number | null>(null);
   const lastProgressSyncRef = useRef(0);
   const activeElementRef = useRef<HTMLMediaElement | null>(null);
-  const pendingPositionRef = useRef<AbortController | null>(null);
+  const pendingPositionRef = useRef<{
+    controller: AbortController;
+    item: ChatMediaPlaybackItem;
+    element: HTMLMediaElement;
+    source: string;
+    time: number;
+  } | null>(null);
   const suppressedErrorItemIdRef = useRef<string | null>(null);
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
@@ -219,7 +225,7 @@ function MediaPlaybackEngine({
   }, []);
 
   const cancelPendingPosition = useCallback(() => {
-    pendingPositionRef.current?.abort();
+    pendingPositionRef.current?.controller.abort();
     pendingPositionRef.current = null;
   }, []);
 
@@ -372,8 +378,8 @@ function MediaPlaybackEngine({
   ) => {
     cancelPendingPosition();
     const intent = new AbortController();
-    pendingPositionRef.current = intent;
     const source = element.src;
+    pendingPositionRef.current = { controller: intent, item, element, source, time };
     const applyPosition = () => {
       if (intent.signal.aborted) return;
       pendingPositionRef.current = null;
@@ -557,7 +563,10 @@ function MediaPlaybackEngine({
     // Read before anything else: removing a media element from the document
     // pauses it, and this runs while it is still in place.
     const wasPlaying = !element.paused && !element.ended;
-    const at = finiteTime(element.currentTime);
+    const pending = pendingPositionRef.current;
+    const at = pending && !pending.controller.signal.aborted && pending.element === element &&
+      pending.item.id === item.id && pending.item.chatId === item.chatId && pending.source === element.src
+      ? pending.time : finiteTime(element.currentTime);
     const source = element.currentSrc || element.src || item.url;
     element.pause();
     const sourceChanged = own.src !== source;
