@@ -8,6 +8,7 @@ export class ClearedAtCache {
   private answers = new Map<string, { value: string | null; at: number }>();
   private pending = new Map<string, Promise<string | null | undefined>>();
   private generation = 0;
+  private connectionGeneration = 0;
   /**
    * Since when this client's own membership rows have been heard live, or null
    * while they are not (tracker item 58).
@@ -38,6 +39,11 @@ export class ClearedAtCache {
 
   /** The own-membership channel joined (true), or left, failed or was found dead (false). */
   setLive(live: boolean) {
+    if (live && this.liveSince !== null) return;
+    this.generation += 1;
+    this.connectionGeneration += 1;
+    // Retire loaders across loss/rejoin, but preserve completed young answers.
+    this.pending.clear();
     this.liveSince = live ? this.now() : null;
   }
 
@@ -74,11 +80,13 @@ export class ClearedAtCache {
 
     const startedAt = this.now();
     const generation = this.generation;
-    let request: Promise<string | null | undefined>;
+    const connectionGeneration = this.connectionGeneration;
+    let request!: Promise<string | null | undefined>;
     request = (async () => {
       const result = await load();
+      if (connectionGeneration !== this.connectionGeneration) return undefined;
       if (generation !== this.generation) {
-        this.pending.delete(key);
+        if (this.pending.get(key) === request) this.pending.delete(key);
         return this.getOrLoad(chatId, userId, load);
       }
       const newer = this.answers.get(key);

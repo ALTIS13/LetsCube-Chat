@@ -416,10 +416,11 @@ export function useMessages(
         let existing = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
         const checkedIds = new Set(getMessageAndReplyIds([...fetched, ...existing]));
         const hiddenReadAt = Date.now();
+        const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
         const fetchedHiddenIds = hiddenMessagesLive.canSkip(chatId, [...checkedIds])
           ? new Set<string>()
           : await fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent);
-        if (!isCurrent()) return;
+        if (!isCurrent() || !privacyReadIsCurrent()) return;
         if (!fetchedHiddenIds) {
           refuseHistory("Не удалось проверить скрытые сообщения.");
           return;
@@ -431,7 +432,7 @@ export function useMessages(
           const addedIds = getMessageAndReplyIds(existing).filter((id) => !checkedIds.has(id));
           if (!addedIds.length) continue;
           const addedHiddenIds = await fetchHiddenMessageIdSet(supabase, addedIds, isCurrent);
-          if (!isCurrent()) return;
+          if (!isCurrent() || !privacyReadIsCurrent()) return;
           if (!addedHiddenIds) {
             refuseHistory("Не удалось проверить скрытые сообщения.");
             return;
@@ -536,12 +537,13 @@ export function useMessages(
       // was live (`lib/hiddenMessagesLive.ts`): a hide made since was heard.
       const heldIds = getMessageAndReplyIds(cached);
       const hiddenReadAt = Date.now();
+      const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
       const heard = hiddenMessagesLive.canSkip(chatId, heldIds);
       const [mark, hidden] = await Promise.all([
         loadClearedAt(supabase, chatId, userId),
         heard ? Promise.resolve(new Set<string>()) : fetchHiddenMessageIdSet(supabase, heldIds, () => active && sameAccount()),
       ]);
-      if (!active || !sameAccount()) return;
+      if (!active || !sameAccount() || !privacyReadIsCurrent()) return;
       if (mark === undefined) {
         setHistoryError("Не удалось проверить историю чата.");
         return;
@@ -637,8 +639,9 @@ export function useMessages(
     const localClearedAt = clearedAtRef.current;
     if (localClearedAt && new Date(nextMessage.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
 
+    const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
     const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), sameAccount);
-    if (!sameAccount() || chatIdRef.current !== activeChatId || !fetchedHiddenIds) return;
+    if (!sameAccount() || chatIdRef.current !== activeChatId || !privacyReadIsCurrent() || !fetchedHiddenIds) return;
     rememberHiddenMessageIds(fetchedHiddenIds);
     const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
     if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -712,8 +715,9 @@ export function useMessages(
 
       const olderIds = getMessageAndReplyIds(fetched);
       const hiddenReadAt = Date.now();
+      const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
       const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds, sameAccount);
-      if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
+      if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration || !privacyReadIsCurrent()) return { loaded: 0 };
       if (!fetchedHiddenIds) throw new Error("hidden_message_ids_unavailable");
       rememberHiddenMessageIds(fetchedHiddenIds);
       hiddenMessagesLive.markVerified(activeChatId, olderIds, hiddenReadAt);
@@ -763,8 +767,9 @@ export function useMessages(
       .maybeSingle();
     if (!sameAccount() || chatIdRef.current !== activeChatId || !data) return { ok: false, reason: "not-found" };
     const message = data as unknown as MessageWithSender;
+    const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id, message.reply_to_id].filter(Boolean) as string[], sameAccount);
-    if (!sameAccount() || chatIdRef.current !== activeChatId || !hiddenIds) return { ok: false, reason: "unavailable" };
+    if (!sameAccount() || chatIdRef.current !== activeChatId || !privacyReadIsCurrent() || !hiddenIds) return { ok: false, reason: "unavailable" };
     if (hiddenIds.has(message.id)) {
       rememberHiddenMessageIds(hiddenIds);
       return { ok: false, reason: "hidden" };
@@ -923,8 +928,9 @@ export function useMessages(
       return;
     }
     const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
+    const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
     const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(pinnedRows), sameAccount);
-    if (!sameAccount() || chatIdRef.current !== chatId) return;
+    if (!sameAccount() || chatIdRef.current !== chatId || !privacyReadIsCurrent()) return;
     if (!pinnedHiddenIds) {
       setPinnedRead((current) => listReadRefused(current, { subject: fetchKey, message: "Не удалось проверить скрытые сообщения." }));
       return;
@@ -1061,8 +1067,9 @@ export function useMessages(
             .maybeSingle();
           if (!isCurrent() || !data) return;
           const nextMessage = data as unknown as MessageWithSender;
+          const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
           const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), isCurrent);
-          if (!isCurrent() || !fetchedHiddenIds) return;
+          if (!isCurrent() || !privacyReadIsCurrent() || !fetchedHiddenIds) return;
           if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
           const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
           if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -1090,8 +1097,9 @@ export function useMessages(
           if (!isCurrent()) return;
           if (data) {
             const nextMessage = data as unknown as MessageWithSender;
+            const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
             const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]), isCurrent);
-            if (!isCurrent() || !fetchedHiddenIds) return;
+            if (!isCurrent() || !privacyReadIsCurrent() || !fetchedHiddenIds) return;
             if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
             const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
             if (effectiveHiddenIds.has(nextMessage.id)) return;
@@ -2001,6 +2009,7 @@ async function fetchHiddenMessageIdSet(
   isCurrent: () => boolean,
 ): Promise<Set<string> | null> {
   if (!isCurrent()) return null;
+  const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
   const ids = Array.from(new Set(messageIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const hidden = new Set<string>();
@@ -2012,6 +2021,7 @@ async function fetchHiddenMessageIdSet(
       .select("message_id")
       .in("message_id", batch)));
     if (!isCurrent()) return null;
+    if (!privacyReadIsCurrent()) return null;
     for (const { data, error } of results) {
       if (error) {
         console.error("Hidden message ids fetch error:", error);

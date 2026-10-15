@@ -34,9 +34,10 @@ function source(relative: string) {
     profile: ["store/app.store.ts", [["if ((state.currentUser?.id ?? null) !== (user?.id ?? null))", "if (true)"]]],
     history: ["hooks/useMessages.ts", [["const isCurrent = () => sameAccount() && chatIdRef.current === chatId", "const isCurrent = () => chatIdRef.current === chatId"]]],
     byId: ["hooks/useMessages.ts", [["!sameAccount() || chatIdRef.current !== activeChatId ||", ""]]],
-    pinned: ["hooks/useMessages.ts", [["if (!sameAccount() || chatIdRef.current !== chatId) return;", ""]]],
+    pinned: ["hooks/useMessages.ts", [["if (!sameAccount() || chatIdRef.current !== chatId) return;", ""],
+      ["if (!sameAccount() || chatIdRef.current !== chatId || !privacyReadIsCurrent()) return;", "if (!privacyReadIsCurrent()) return;"]]],
     realtime: ["hooks/useMessages.ts", [["if (!isCurrent() || !data) return;", "if (!data) return;"],
-      ["if (!isCurrent() || !fetchedHiddenIds) return;", "if (!fetchedHiddenIds) return;"]]],
+      ["if (!isCurrent() || !privacyReadIsCurrent() || !fetchedHiddenIds) return;", "if (!privacyReadIsCurrent() || !fetchedHiddenIds) return;"]]],
     send: ["hooks/useMessages.ts", [["if (!sameAccount()) return null;", ""]]],
     owner: ["hooks/useMessages.ts", [["if (input.ownerUserId !== undefined && input.ownerUserId !== user?.id) return null;", ""]]],
     display: ["hooks/useMessages.ts", [["verifiedAccountEpochRef.current === accountEpoch &&", ""]]],
@@ -105,7 +106,7 @@ function modules(stubs: Record<string, any>) {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText;
     const timer = (run: () => void, ms: number) => { const handle = setTimeout(run, ms); handle.unref(); return handle; };
-    runInThisContext(`(function(require,module,exports,setTimeout){${compiled}\n})`)(require, module, module.exports, timer);
+    runInThisContext(`(function(require,module,exports,setTimeout){${compiled.replaceAll("import.meta.env", "({DEV:false})")}\n})`)(require, module, module.exports, timer);
     return module.exports;
   };
   return load;
@@ -150,6 +151,7 @@ function harness(options: Options = {}) {
   store.getState().setCurrentUser({ id: A, full_name: "Synthetic A" });
   const currentUserRef = { current: store.getState().currentUser, accountEpoch: store.getState().accountEpoch };
   const refs = { chatIdRef: { current: CHAT }, topicIdRef: { current: undefined },
+    hookLifetimeRef: { current: Symbol("fixture-hook-lifetime") },
     generalTopicIdsRef: { current: [] }, clearedAtRef: { current: null }, hiddenMessageIdsRef: { current: new Set() },
     historyRequestGenerationRef: { current: 0 }, verifiedChatIdRef: { current: CHAT },
     verifiedAccountEpochRef: { current: null },
@@ -159,7 +161,7 @@ function harness(options: Options = {}) {
   const env: Record<string, any> = { useAppStore: store, currentUserRef, ...refs, chatId: CHAT, userId: A,
     topicId: undefined, generalTopicIds: [], supabase: client, EMPTY_MESSAGES: [], MESSAGE_PAGE_SIZE: 100,
     MESSAGE_SELECT_WITH_JOINS: "*", loadClearedAt: async () => null, fetchHiddenMessageIdSet: async () => new Set(),
-    clearedAtCache: { hasFresh: () => true, evictChat: noop }, hiddenMessagesLive: { markVerified: noop },
+    clearedAtCache: { hasFresh: () => true, evictChat: noop }, hiddenMessagesLive: { captureRead: () => () => true, canSkip: () => false, markVerified: noop },
     fetchedMessageScopes: new Set(), shouldMarkDeliveredForPrivateChat: () => false,
     bumpFetch: noop, reportError: noop, scheduleMarkChatRead: noop, scheduleMarkChatDelivered: noop,
     document: { visibilityState: "hidden" }, console: { error: noop },

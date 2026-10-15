@@ -38,6 +38,7 @@ export function readHideEvent(payload: unknown): HideEvent | null {
 export class HiddenMessagesLive {
   private liveSince: number | null = null;
   private awaitingPing = false;
+  private readGeneration = 0;
   private verified = new Map<string, { since: number; ids: Set<string> }>();
   private listeners = new Set<(event: HideEvent) => void>();
   private readonly now: () => number;
@@ -48,6 +49,8 @@ export class HiddenMessagesLive {
 
   /** The channel joined. It is live once its own ping comes back through it. */
   joined(): void {
+    this.readGeneration += 1;
+    this.verified.clear();
     this.liveSince = null;
     this.awaitingPing = true;
   }
@@ -61,12 +64,20 @@ export class HiddenMessagesLive {
 
   /** Left, refused, timed out, offline or found dead: nothing is trusted until the next ping. */
   lost(): void {
+    this.readGeneration += 1;
+    this.verified.clear();
     this.liveSince = null;
     this.awaitingPing = false;
   }
 
   isLive(): boolean {
     return this.liveSince !== null;
+  }
+
+  /** A response from before a channel gap cannot authorize a later publication. */
+  captureRead(): () => boolean {
+    const generation = this.readGeneration;
+    return () => generation === this.readGeneration;
   }
 
   /**
