@@ -25816,22 +25816,27 @@ boundary and BYOB/custom-metadata compatibility limits remain explicitly outside
 this repair. This does not establish the tester's VPN cause.
 [Acceptance and upstream comparison](operations/2026-10-15-network-body-and-playback.md).
 
-## D-365 `[ ]` A retired detach metadata callback may seek a different audio item
+## D-365 `[x]` Pending media position survives its message or is lost on handoff
 
-**Status:** P2 source candidate, 2026-10-15; runtime NOT REPRODUCED, not fixed.
-**Surface:** `components/chat/ChatMediaPlayback.tsx`, detach loadedmetadata
-callback around526, close around473 and global play reuse around892.
-**Source observation:** detach captures A's position in a one-shot metadata
-listener without current item/source/operation validation. Retirement clears the
-transport but does not remove that listener. When the same global audio later
-loads C, the old callback may seek C to A's position. This is not evidence of
-hidden/deleted media restarting and does not reopen accepted D-360 retirement.
-**Next RED:** actually detach playing A at17s while metadata is pending, retire
-A through authoritative hide/delete, then start C and reuse global transport.
-Deliver metadata C and assert no stale seek. Positive control: current detach
-still restores its own17s. Existing deleted-media detached coverage uses leaveChat
-only, so it does not establish this boundary. Do not patch or close from source
-review alone. [Stage and evidence](operations/2026-10-15-current-client-android.md).
+**Status:** P2 reproduced and repaired; shared-web59f1fe8b rollout accepted
+2026-10-15 at20:42UTC. Single healthy exact image, old/new consumer, public/
+container JS+SW parity, rollback image/entry and anonymous smoke pass.
+**Surface:** `components/chat/ChatMediaPlayback.tsx`, shared positional intent,
+detach, explicit seek and synchronous unmount cancellation.
+**Observed cause:** the old detach listener retained A's position independently
+of the current message/transport. Real native audio additionally retains a seek
+written before metadata across load()/source changes; listener cancellation alone
+does not solve it. The same mechanism affected explicit user seeks. Final review
+found the inverse transition also lost a pending inline seek when leaving chat.
+**Repair:** one cancellable message/chat/source/element-owned pending position is
+used by detach and seek, never written natively before metadata, preserved on
+pause and actual same-message handoff, retired on close/account/resource changes.
+Actual mounted suite90/90 includes real WAV metadata and literal mutation controls;
+adjacent59/59, typecheck and actual4e6fd0ace2bbe363/11.52s build accepted. The one
+independent-review P2 has a real native RED-to-GREEN fix pass. No hidden/deleted
+audio restart is inferred and D-360 stays accepted. Android Stable21 predates
+this repair; installed-platform acceptance is not claimed from the source.
+[Cause, review and verification](operations/2026-10-15-media-position-lifetime.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

@@ -2,13 +2,13 @@
 
 ## Resume
 
-Owner: coordinator. Stage: D-365 reproduced and repaired locally over main
-`5828284e`; independent review's one P2 is fixed with native RED-to-GREEN,
-and final rollout remains pending. Preserve the
+Owner: coordinator. Stage: D-365 shared-web rollout accepted at20:42UTC,
+main/runtime59f1fe8b over5828284e. Independent review's one P2 is fixed with
+native RED-to-GREEN. Preserve the
 unowned root sidebar/search changes and the main-based private Android version
 overlay. Android Stable is already 0.1.20/build21; this change is not in that APK.
-Next: finish affected renewal validation, review, actual build, then narrow web
-promotion with before/after consumer and rollback proof. Item87 latency/VPN
+Next: measured item87/current-client work and a later native bundle/QA stage;
+do not repeat accepted playback/source tests without changed inputs. Item87 latency/VPN
 attribution and the remaining private media intake are not closed by this repair.
 
 ## Observed Cause
@@ -93,3 +93,27 @@ coordinator RED-to-GREEN fix pass. No second review or unchanged suite replay.
 All media are generated fixtures; requests remain isolated, with
 KUB_QA_ALLOW_MUTATIONS=0. No personal captures, DB changes, global network changes,
 installed client replacement or new native publication were performed.
+
+## Actual Web Rollout
+
+Only05d4cd7e and59f1fe8b reached main; the complete outgoing range was read
+separately and all14 aliases in the changed source file resolve against its own
+tree. Final source/test bytes were preserved on the coordinator branch too;
+unowned sidebar/search and the private Android version overlay retain their hashes.
+
+Before-state: healthy5828284e image8894bbe3 and public entryindex-i73qlLi6.
+After-state: single healthy73ba210d01bb, exact59f1fe8b imageb1de690d;
+previous replica retired and Coolify finished20:41:50UTC. The compiled old/new
+consumer changes1/0 ->0/1, calibrated against actual old production and the final
+local build. Public/container parity:
+
+- `/assets/index-CSPydajk.js` SHA256
+  `0d3b631d099dc6471586aff05112c10512f904db30db19b71bc8f4a2e1035767`.
+- `/sw.js` SHA256
+  `484649c3b78993e374f94cdb1c4e7745a829024494fe058886e9ed9187fcc356`.
+
+Previous entry remains byte-identical and old image8894bbe3 remains available
+for rollback. Fresh anonymous Chromium home/login smoke20:41:59UTC observes the
+new entry, zero page errors/zero mutations, no personal session or captures.
+This proves the shared-web source release, not new physical Windows/iOS/Android
+behavior, FCM21, authenticated upgrade or a new APK. Stable21 predates D-365.

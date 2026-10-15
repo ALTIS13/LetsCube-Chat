@@ -1,24 +1,21 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15 19:56 UTC:** coordinator; Android0.1.20/build21 is
-published Stable, mandatory=false. Exact APK87f1de4f/source0dfb98a1, full public
-redownload and Android verifier pass at19:55:04 UTC; catalogue10696731. Stable17
-has a byte-identical backup and the new artifact is immutable. Signed21 guest/
-plugins/lifecycle and actual old20 ->21 CE/DE sentinel/UID/inode preservation pass;
-owned AVD cleanup and independent review accepted. Physical Realme current-main
-lifecycle/recovery/audio evidence is reused; primary20/data/users are unchanged.
-Publication readers106/106,12 omissions, frozen review and actual local freshness
-check accepted before separate stage/publish/verify. No intent is replayable.
-Next: D-365 source-candidate RED: a delayed detach(A) loadedmetadata listener may
-seek another audio item C after A retires. First reproduce with actual detach and
-current-detach positive control; then fence/cancel the stale callback. No runtime
-reproduction or repair yet; do not reopen D-360 or claim hidden playback resumes.
-Item87 tester/VPN cause/full media semantics and native-preview limits remain open.
-Authenticated-session preservation, FCM21 and broad OEM acceptance are not proved.
-No production SQL, web deploy, physical release replacement or rich-preview
-promotion. Preserve all unowned paths and accepted evidence. Original artifact
-expiry23:10:50 UTC was not renewed; it is not a public-download expiry.
-[Actual evidence, failures and next action](operations/2026-10-15-current-client-android.md).
+**Current resume, 2026-10-15 20:42 UTC:** coordinator; D-365 actual native and
+controlled RED-to-GREEN is repaired using one cancellable message/resource-owned
+pending position for detach and explicit seek. Final90/90, adjacent59/59, final
+typecheck/build4e6fd0ace2bbe363/11.52s and independent-review P2 fix pass accepted.
+Only05d4cd7e/59f1fe8b reached main;14 own-tree aliases resolve. Single healthy
+59f1fe8b runtime accepted: old/new compiled consumer1/0 ->0/1, public/container
+JS+SW parity, rollback image/entry and anonymous zero-error/zero-mutation smoke.
+Next: measured item87/current-client work, not replaying
+accepted player/source checks. Preserve unowned sidebar/search files and private
+Android overlay. Android0.1.20/build21 is already Stable,mandatory=false, but
+predates D-365; no native replacement or SQL was performed. FCM21/authenticated
+upgrade/OEM and tester/VPN cause remain unproved. Existing5-image/1-video intake
+now has safer UI classification, not full semantic closure or a new defect.
+[Position cause, review and current gate](operations/2026-10-15-media-position-lifetime.md).
+[Intake limits](operations/2026-10-15-intake-followup.md).
+[Android publication and exact scope](operations/2026-10-15-current-client-android.md).
 
 **Accepted artifact checkpoint, 2026-10-15 17:19 UTC:** coordinator; current-source private
 Android 0.1.20/build21 artifact accepted from 0dfb98a1 over shared-web 5828284e.

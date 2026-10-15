@@ -188,6 +188,13 @@ Image semantic drafts still fail schema/coverage admission and remain unaccepted
 One immutable main-source 390/dark unread-opening case now passes, separately from
 the earlier warm4/recovery1. It confirms that the unread wait intentionally
 preserves the first-unread anchor; removing the spinner blindly would violate
-the chat-entry contract. Current Android 0.1.20/build21 is artifact-verified only,
-not installed/published. Device/VPN timing and full media semantics remain open.
+the chat-entry contract. At that earlier checkpoint Android0.1.20/build21 was
+artifact-only; its later signed guest/custody checks and actual Stable publication
+are recorded in the linked current-client report, not inferred from the browser.
+Device/VPN timing and full media semantics remain open.
 [Actual results, artifact and limits](2026-10-15-current-client-android.md).
+
+The later privacy-safe classification of existing OCR records identifies paired
+rejection/confirmation-task surfaces, not a new loading defect or a complete
+semantic review. No fresh DB/media acquisition was made in that follow-up.
+[UI-only evidence and unresolved groups](2026-10-15-intake-followup.md).
