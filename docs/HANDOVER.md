@@ -1,6 +1,24 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15 16:32 UTC:** coordinator; shared-web main/runtime
+**Current resume, 2026-10-15 17:19 UTC:** coordinator; current-source private
+Android 0.1.20/build21 artifact accepted from 0dfb98a1 over shared-web 5828284e.
+Actual build/SW/Vite/Gradle markers, APK identity/signature/security, four Firebase
+value matches, all 35 eligible packaged-file hashes and AAB signature pass.
+Original parity refusal is retained; a narrow new inspection explains the one
+web-only AAPT omission without rebuilding. Build tooling RED-to-GREEN 28/28 and
+source review pass. One frozen main-blob-pinned 390/dark unread case passes:
+24 unread, expected waits, 73 unique rows, correct first-unread anchor, no unknown
+HTTP/WS/page errors or personal data. Earlier 165/30/warm4/recovery1 evidence is
+reused. Private video six-frame/OCR and one offline audio pass complete; no speech
+recognized, full image/video semantics and tester device/VPN cause remain open.
+Next: affected Realme QA using an isolated owned shell without replacing the
+release install, then readiness-gated publication. Realme remains 20; Stable 17.
+No DB/deploy/native install/rich-preview promotion. Candidate's original build
+completion 17:10:50 UTC, six-hour deadline 23:10:50 UTC; never renew by inspection.
+Preserve unowned sidebar/search paths and main Android overlay.
+[Actual artifact, measurement, limits and next action](operations/2026-10-15-current-client-android.md).
+
+**Accepted checkpoint, 2026-10-15 16:32 UTC:** coordinator; shared-web main/runtime
 5828284e accepted for D-363 stale hidden-answer admission and D-364 pending
 clear-mark/membership-seed retirement across loss/rejoin. Affected165/165,
 cache30/30, independent review, final main typecheck/build,29 own-tree aliases,

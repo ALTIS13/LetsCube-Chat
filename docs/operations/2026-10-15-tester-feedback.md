@@ -175,3 +175,19 @@ behavior, non-idempotent write safety and long Storage transfers. No speculative
 Response proxy, blanket buffering, arbitrary size cap or network alteration was
 implemented. The live `dc5a7c70` release remains the four accepted repairs above;
 this finding is not an established cause of Nikita's particular VPN symptom.
+
+## Later Intake And Current-Client Boundary
+
+The already acquired video received one local six-frame extraction/OCR pass:
+12.616667 seconds, 720x1568, six completed OCR calls, no known static error-label
+match. One separate offline medium/int8/VAD pass on its audio produced zero
+speech segments. This does not establish what the video demonstrates or close
+its semantics. No raw pixels/text/audio were printed, uploaded or downloaded again.
+Image semantic drafts still fail schema/coverage admission and remain unaccepted.
+
+One immutable main-source 390/dark unread-opening case now passes, separately from
+the earlier warm4/recovery1. It confirms that the unread wait intentionally
+preserves the first-unread anchor; removing the spinner blindly would violate
+the chat-entry contract. Current Android 0.1.20/build21 is artifact-verified only,
+not installed/published. Device/VPN timing and full media semantics remain open.
+[Actual results, artifact and limits](2026-10-15-current-client-android.md).

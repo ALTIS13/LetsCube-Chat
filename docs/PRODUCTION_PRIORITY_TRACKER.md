@@ -2,7 +2,7 @@
 
 Status: active production-hardening tracker, updated 2026-10-15.
 
-**Active priority, 2026-10-15 16:32 UTC:** the owner's instruction puts Nikita's
+**Active priority, 2026-10-15 17:19 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
 (13 text,5 images,1 video, no new voice). Item87 now has warm chat-switch/open
 latency reports; VPN-associated opening failure and lock-screen preview lack
@@ -12,12 +12,17 @@ D-363/D-364 cross-gap privacy reads: affected165/165, cache30/30, review,
 typecheck/build,29 own-tree aliases, healthy image, old/new consumer, public/
 container JS+SW, rollback and anonymous smoke pass. Recovery fixture1/1 verifies
 actual cut/rejoin/privacy/duplicate-free restoration. Warm4 evidence is reused.
-Next: incomplete semantic media intake and current-client opening measurements,
-then a current-source Android candidate with affected QA. No APK in this slice.
+One frozen main-blob-pinned compiled 390/dark unread case now passes: 24 unread,
+expected history/privacy waits, 73 unique rows and exact first-unread anchor.
+Private current-source Android 0.1.20/build21 artifact, actual completion markers,
+APK security/Firebase value matches and packaged-byte parity are accepted;
+affected Realme QA and publication remain next. Full media semantics and the
+tester device/VPN latency cause remain open. No installed APK was changed.
 Native-preview diagnostics are deferred, not a reason to replay old attempts.
 [Intake, privacy boundaries and cache direction](operations/2026-10-15-tester-feedback.md).
 [Current acceptance and next measured stage](operations/2026-10-15-network-body-and-playback.md).
 [Cross-gap repairs and actual rollout](operations/2026-10-15-network-revival-measurement.md).
+[Current-client result and private Android artifact](operations/2026-10-15-current-client-android.md).
 
 **Accepted checkpoint,2026-10-12 01:48 UTC:** web/runtime c2e1397e accepted;
 chat-mute owner/epoch/read/write/cache and retained action/effect repairs pass
@@ -4607,6 +4612,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     establish the reported device/VPN cause or update an installed APK. Semantic
     media intake and current-client measurements remain next; this item stays open.
     [Recovery and delivered boundary](operations/2026-10-15-network-revival-measurement.md).
+    Follow-up compiled current-main 390/dark unread case passes 1/1: actual closed
+    timeline/unread 24, first-unread divider/message in view after authoritative
+    history/privacy waits, 73 unique rows, no document reload/unknown HTTP/WS/page
+    error. Frozen graph matches 684 literal main-tree blob pins and SDK 2.105.1;
+    no unowned sidebar input, real backend, captures or native bridge. Single
+    synthetic timing samples separate artificial provider holds; this is not
+    a device benchmark or a diagnosed VPN cause. Private Android21 artifact is
+    verified separately; Realme QA/publication and full media semantics remain.
+    [Current-client and artifact boundary](operations/2026-10-15-current-client-android.md).
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
     Actual source failures repaired: final 43/43 including 17 mutants, gestures 23/23,
@@ -7753,8 +7767,11 @@ Candidate work:
 ## Native And Desktop Packaging
 
 Status: `[~]` active. Android `0.1.16/17` is signed and published in Stable
-(public catalogue HTTP200,2026-10-11 18:20 UTC,nonmandatory). Candidate19 has
-artifact acceptance only; source/device search gates above remain open.
+(public catalogue verified 2026-10-15 16:53 UTC, available/nonmandatory). Current
+private candidate 0.1.20/build21 has artifact acceptance; Realme remains 0.1.19/20.
+Affected current-source Realme QA/publication remain open, separately from old
+deferred native-preview/search gates. No installed upgrade is implied.
+[Current artifact](operations/2026-10-15-current-client-android.md).
 Authenticated signed-FCM, physical official-GMS and broader device/long-session
 gates remain open. Windows Tauri has its separate release and updater gates.
 
