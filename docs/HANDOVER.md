@@ -1,6 +1,18 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-15 11:51 UTC:** coordinator; tester-priority web rollout accepted.
+**Current resume, 2026-10-15 13:45 UTC:** coordinator; shared-web main/runtime
+c9f86afb accepted for D-362 (transport/SDK48, real-loopback browser13) and D-360
+(final63, unchanged hook26/28 reused). Two independent player P2s were repaired
+before publication. Final review, main typecheck/build,68 own-tree aliases,
+actual healthy image, old/new body consumer0/1, JS/SW public/container parity,
+retained previous image/entry and fresh anonymous smoke pass. Next: item87's
+test-only warm-open trace (Rawls, new e2e file only): separate retained text,
+privacy admission, history and media phases in four viewport/theme strata.
+No latency/VPN cause or semantic media acceptance is established; no SQL/native
+release. Preserve unowned sidebar/search files and main Android overlay.
+[Current ledger](operations/2026-10-15-network-body-and-playback.md).
+
+**Accepted checkpoint, 2026-10-15 11:51 UTC:** coordinator; tester-priority web rollout accepted.
 One selected read-only Nikita intake returned 19 new rows (13 text/5 images/1
 video, no voice). Warm chat-switch/open latency, VPN-associated opening failure
 and lock-screen preview reports take priority; causes/client builds remain

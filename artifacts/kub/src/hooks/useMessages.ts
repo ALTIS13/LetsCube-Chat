@@ -461,6 +461,12 @@ export function useMessages(
           return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
         }), effectiveHiddenIds);
         setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+        const retiredGoneIds = existing.filter((message) => goneIds.has(message.id) &&
+          messageBelongsToTopic(message, topicId, generalTopicIds)).map((message) => message.id);
+        if (retiredGoneIds.length && isCurrent()) {
+          dispatchChatsRefresh({ reason: "media-retired", chatId, ownerUserId: user.id,
+            accountEpoch, retiredMessageIds: retiredGoneIds, retirement: "gone" });
+        }
         hasMoreOlderRef.current = nextHasMoreOlder;
         setHasMoreOlder(nextHasMoreOlder);
         setOlderError(null);
@@ -1491,8 +1497,10 @@ export function useMessages(
 
   const hideMessagesForMe = useCallback(async (messageIds: string[]) => {
     if (!chatId) return { ok: false, error: "Чат не выбран.", failed: messageIds.length };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
-    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие.", failed: messageIds.length };
+    const actingUserId = currentUserRef.current?.id;
+    const actingEpoch = currentUserRef.accountEpoch;
+    const sameAccount = captureMessageAccount(actingUserId, actingEpoch, hookLifetimeRef);
+    if (!actingUserId || !sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие.", failed: messageIds.length };
     const uniqueIds = Array.from(new Set(messageIds)).filter(Boolean);
     if (!uniqueIds.length) return { ok: true, error: null, failed: 0 };
     const failed: string[] = [];
@@ -1513,7 +1521,8 @@ export function useMessages(
       if (chat?.last_message && hiddenIds.includes(chat.last_message.id)) {
         updateChat({ ...chat, last_message: undefined });
       }
-      dispatchChatsRefresh({ reason: "message-hidden", chatId });
+      if (sameAccount()) dispatchChatsRefresh({ reason: "media-retired", chatId,
+        ownerUserId: actingUserId, accountEpoch: actingEpoch, retiredMessageIds: hiddenIds, retirement: "hidden" });
     }
     if (failed.length) {
       return { ok: false, error: `Не удалось скрыть ${failed.length} из ${uniqueIds.length} сообщений.`, failed: failed.length };
@@ -1808,8 +1817,10 @@ export function useMessages(
 
   const clearChatForMe = useCallback(async () => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
-    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
+    const actingUserId = currentUserRef.current?.id;
+    const actingEpoch = currentUserRef.accountEpoch;
+    const sameAccount = captureMessageAccount(actingUserId, actingEpoch, hookLifetimeRef);
+    if (!actingUserId || !sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     const { error } = await supabase.rpc("clear_chat_for_me", { p_chat_id: chatId });
     if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     if (error) {
@@ -1820,6 +1831,8 @@ export function useMessages(
     clearedAtCache.evictChat(chatId);
     if (chatIdRef.current === chatId) historyRequestGenerationRef.current += 1;
     setMessages(chatId, []);
+    if (sameAccount()) dispatchChatsRefresh({ reason: "media-retired", chatId,
+      ownerUserId: actingUserId, accountEpoch: actingEpoch, retireChat: "clear" });
     if (chatIdRef.current !== chatId) return { ok: true, error: null };
     verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
     setVerifiedChatId(chatId);

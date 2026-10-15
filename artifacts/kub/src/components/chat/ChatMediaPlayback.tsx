@@ -20,6 +20,9 @@ import { replacePlaybackItemUrl } from "@/lib/mediaQuality";
 import { coarsePointer } from "@/lib/pointer";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
+import { useAppStore } from "@/store/app.store";
+import { hiddenMessagesLive } from "@/lib/hiddenMessagesLive";
+import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { nextToggleSpeed, playerMoment, speedLabel } from "@/lib/chatTopCard";
 import {
   AUDIO_SETTINGS_KEY,
@@ -68,7 +71,7 @@ interface ChatMediaPlaybackContextValue {
   next: () => void;
   previous: () => void;
   close: () => void;
-  closeIfCurrent: (itemId: string) => void;
+  closeIfCurrent: (itemId: string, chatId?: string) => void;
   replaceCurrentItemUrl: (itemId: string, nextUrl: string, options?: { suppressCurrentError?: boolean }) => void;
   canNext: boolean;
   canPrevious: boolean;
@@ -167,12 +170,20 @@ function MediaPlaybackEngine({
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
   const currentItemRef = useRef<ChatMediaPlaybackItem | null>(null);
+  const retiredItemsRef = useRef(new Set<string>());
+  const permanentRetiredItemsRef = useRef(new Set<string>());
+  const hiddenRetiredItemsRef = useRef(new Set<string>());
+  const accessRetiredItemsRef = useRef(new Set<string>());
+  const accessRevokedChatsRef = useRef(new Set<string>());
+  const ownerUserId = useAppStore.getState().currentUser?.id;
+  const ownerEpoch = useAppStore.getState().accountEpoch;
   // The application's player learns the open chat and each chat's media from
   // the chats themselves; a chat's own player was given them.
   const [registered, setRegistered] = useState<{
     openChatId: string | null;
     playlists: Record<string, ChatMediaPlaybackItem[]>;
   }>({ openChatId: null, playlists: {} });
+  const registeredRef = useRef(registered);
   const chatId = appLevel ? registered.openChatId : chatIdProp;
   const playlist = appLevel
     ? (currentItem ? registered.playlists[currentItem.chatId] ?? EMPTY_PLAYLIST : EMPTY_PLAYLIST)
@@ -339,13 +350,34 @@ function MediaPlaybackEngine({
     return item.kind === "voice" || item.kind === "audio" ? audioRef.current : videoRef.current;
   }, []);
 
+  const canAdmitItem = useCallback((item: ChatMediaPlaybackItem) => {
+    const state = useAppStore.getState();
+    return state.currentUser?.id === ownerUserId && state.accountEpoch === ownerEpoch &&
+      !accessRevokedChatsRef.current.has(item.chatId) &&
+      !retiredItemsRef.current.has(`${item.chatId}:${item.id}`) &&
+      !state.messages[item.chatId]?.some((message) => message.id === item.id && message.deleted_at);
+  }, [ownerEpoch, ownerUserId]);
+
   const activate = useCallback((item: ChatMediaPlaybackItem, element: HTMLMediaElement) => {
+    if (!canAdmitItem(item)) {
+      const current = currentItemRef.current;
+      const sharedWithOther = activeElementRef.current === element && current &&
+        (current.id !== item.id || current.chatId !== item.chatId);
+      if (!sharedWithOther) {
+        element.pause();
+        element.removeAttribute("src");
+        element.load();
+      }
+      return;
+    }
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
     setError(null);
     setVisible(true);
+    currentItemRef.current = item;
+    activeElementRef.current = element;
     setCurrentItem(item);
     setActiveElement((previous) => {
       if (previous && previous !== element) previous.pause();
@@ -356,9 +388,10 @@ function MediaPlaybackEngine({
     if (element instanceof HTMLAudioElement) {
       void applyAudioOutputDevice(element, settings.selectedOutputDeviceId);
     }
-  }, [playbackRate, settings.selectedOutputDeviceId, volume]);
+  }, [canAdmitItem, playbackRate, settings.selectedOutputDeviceId, volume]);
 
   const play = useCallback((item: ChatMediaPlaybackItem, element?: HTMLMediaElement | null) => {
+    if (!canAdmitItem(item)) return;
     const media = element ?? mediaElementForItem(item);
     if (!media || !item.url) return;
     activate(item, media);
@@ -370,6 +403,7 @@ function MediaPlaybackEngine({
     media.volume = volume;
     setIsPlaying(true);
     void media.play().catch((error) => {
+      if (currentItemRef.current !== item || activeElementRef.current !== media) return;
       setIsPlaying(false);
       setError("Не удалось воспроизвести медиа.");
       reportError(error, {
@@ -379,7 +413,7 @@ function MediaPlaybackEngine({
       });
       setVisible(true);
     });
-  }, [activate, mediaElementForItem, playbackRate, volume]);
+  }, [activate, canAdmitItem, mediaElementForItem, playbackRate, volume]);
 
   const pause = useCallback(() => {
     activeElement?.pause();
@@ -436,7 +470,16 @@ function MediaPlaybackEngine({
       hideTimerRef.current = null;
     }
     stopProgressLoop();
-    activeElement?.pause();
+    const elements = new Set([activeElementRef.current, audioRef.current, videoRef.current]);
+    currentItemRef.current = null;
+    activeElementRef.current = null;
+    suppressedErrorItemIdRef.current = null;
+    for (const element of elements) {
+      if (!element) continue;
+      element.pause();
+      element.removeAttribute("src");
+      element.load();
+    }
     setVisible(false);
     setCurrentItem(null);
     setActiveElement(null);
@@ -444,14 +487,21 @@ function MediaPlaybackEngine({
     setCurrentTime(0);
     setDuration(0);
     setError(null);
-  }, [activeElement, stopProgressLoop]);
+  }, [stopProgressLoop]);
 
   const registerChat = useCallback((openChatId: string, items: ChatMediaPlaybackItem[]) => {
-    setRegistered((previous) => ({ openChatId, playlists: { ...previous.playlists, [openChatId]: items } }));
+    if (accessRevokedChatsRef.current.has(openChatId)) return;
+    const next = { openChatId, playlists: { ...registeredRef.current.playlists,
+      [openChatId]: items.filter((item) => !retiredItemsRef.current.has(`${openChatId}:${item.id}`)) } };
+    registeredRef.current = next;
+    setRegistered(next);
   }, []);
 
   const leaveChat = useCallback((leftChatId: string) => {
-    setRegistered((previous) => (previous.openChatId === leftChatId ? { ...previous, openChatId: null } : previous));
+    if (registeredRef.current.openChatId !== leftChatId) return;
+    const next = { ...registeredRef.current, openChatId: null };
+    registeredRef.current = next;
+    setRegistered(next);
   }, []);
 
   const detach = useCallback((itemId: string, element: HTMLMediaElement) => {
@@ -492,6 +542,7 @@ function MediaPlaybackEngine({
       return;
     }
     void own.play().catch((error) => {
+      if (currentItemRef.current !== item || activeElementRef.current !== own) return;
       setIsPlaying(false);
       reportError(error, { category: "media_playback_failed", mediaKind: item.kind, staged: false });
     });
@@ -502,9 +553,108 @@ function MediaPlaybackEngine({
     [],
   );
 
-  const closeIfCurrent = useCallback((itemId: string) => {
-    if (currentItem?.id === itemId) close();
-  }, [close, currentItem?.id]);
+  const closeIfCurrent = useCallback((itemId: string, expectedChatId?: string, permanent = false) => {
+    const item = currentItemRef.current;
+    const targetChatId = expectedChatId ?? item?.chatId;
+    if (!targetChatId) return;
+    const key = `${targetChatId}:${itemId}`;
+    if (retiredItemsRef.current.has(key)) {
+      if (permanent) permanentRetiredItemsRef.current.add(key);
+      return;
+    }
+    const retained = (item?.id === itemId && item.chatId === targetChatId) ||
+      registeredRef.current.playlists[targetChatId]?.some((entry) => entry.id === itemId);
+    if (!retained) return;
+    retiredItemsRef.current.add(key);
+    if (permanent) permanentRetiredItemsRef.current.add(key);
+    const next = { ...registeredRef.current, playlists: { ...registeredRef.current.playlists,
+      [targetChatId]: (registeredRef.current.playlists[targetChatId] ?? []).filter((entry) => entry.id !== itemId) } };
+    registeredRef.current = next;
+    setRegistered(next);
+    if (item?.id === itemId && item.chatId === targetChatId) close();
+  }, [close]);
+
+  useEffect(() => {
+    const unsubscribeStore = useAppStore.subscribe((state, previous) => {
+      if (state.currentUser?.id !== previous.currentUser?.id || state.accountEpoch !== previous.accountEpoch) {
+        close();
+        retiredItemsRef.current.clear();
+        permanentRetiredItemsRef.current.clear();
+        hiddenRetiredItemsRef.current.clear();
+        accessRetiredItemsRef.current.clear();
+        accessRevokedChatsRef.current.clear();
+        registeredRef.current = { openChatId: null, playlists: {} };
+        setRegistered(registeredRef.current);
+        return;
+      }
+      const retained = Object.entries(registeredRef.current.playlists).flatMap(([heldChatId, items]) =>
+        items.map((item) => ({ chatId: heldChatId, id: item.id })));
+      if (currentItemRef.current) retained.push(currentItemRef.current);
+      for (const key of retiredItemsRef.current) {
+        const split = key.indexOf(":");
+        retained.push({ chatId: key.slice(0, split), id: key.slice(split + 1) });
+      }
+      for (const item of retained) {
+        const rows = state.messages[item.chatId];
+        if (rows === previous.messages[item.chatId]) continue;
+        if (rows?.find((message) => message.id === item.id)?.deleted_at) {
+          closeIfCurrent(item.id, item.chatId, true);
+        }
+      }
+    });
+    const unsubscribeHides = hiddenMessagesLive.subscribe((event) => {
+      const key = `${event.chatId}:${event.messageId}`;
+      if (event.hidden) {
+        closeIfCurrent(event.messageId, event.chatId);
+        if (retiredItemsRef.current.has(key)) hiddenRetiredItemsRef.current.add(key);
+      } else {
+        hiddenRetiredItemsRef.current.delete(key);
+        if (!permanentRetiredItemsRef.current.has(key) && !accessRetiredItemsRef.current.has(key)) retiredItemsRef.current.delete(key);
+      }
+    });
+    const handleRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
+      if (detail?.reason === "media-retired") {
+        const state = useAppStore.getState();
+        if (state.currentUser?.id !== detail.ownerUserId || state.accountEpoch !== detail.accountEpoch) return;
+        if (detail.retireChat === "access-restored") {
+          accessRevokedChatsRef.current.delete(detail.chatId);
+          for (const key of accessRetiredItemsRef.current) {
+            if (!key.startsWith(`${detail.chatId}:`)) continue;
+            accessRetiredItemsRef.current.delete(key);
+            if (!permanentRetiredItemsRef.current.has(key) && !hiddenRetiredItemsRef.current.has(key)) retiredItemsRef.current.delete(key);
+          }
+          return;
+        }
+        if (detail.retireChat === "access") accessRevokedChatsRef.current.add(detail.chatId);
+        const ids = detail.retireChat
+          ? [...(registeredRef.current.playlists[detail.chatId] ?? []).map((entry) => entry.id),
+            ...(currentItemRef.current?.chatId === detail.chatId ? [currentItemRef.current.id] : []),
+            ...[...retiredItemsRef.current].filter((key) => key.startsWith(`${detail.chatId}:`))
+              .map((key) => key.slice(detail.chatId.length + 1))]
+          : detail.retiredMessageIds;
+        for (const id of new Set(ids)) {
+          const key = `${detail.chatId}:${id}`;
+          closeIfCurrent(id, detail.chatId, detail.retireChat === "clear" || detail.retirement === "gone");
+          if (!retiredItemsRef.current.has(key)) continue;
+          if (detail.retireChat === "access") accessRetiredItemsRef.current.add(key);
+          if (detail.retirement === "hidden") hiddenRetiredItemsRef.current.add(key);
+        }
+        return;
+      }
+      if (detail?.reason === "message-hidden" && detail.chatId && detail.messageId) {
+        closeIfCurrent(detail.messageId, detail.chatId);
+        const key = `${detail.chatId}:${detail.messageId}`;
+        if (retiredItemsRef.current.has(key)) hiddenRetiredItemsRef.current.add(key);
+      }
+    };
+    window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
+    return () => {
+      unsubscribeStore();
+      unsubscribeHides();
+      window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
+    };
+  }, [close, closeIfCurrent]);
 
   const replaceCurrentItemUrl = useCallback((
     itemId: string,

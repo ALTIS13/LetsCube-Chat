@@ -25740,7 +25740,7 @@ timestamp token repair, literal fraction/zone/fragment controls and independent
 review pass. Shared web/main `dc5a7c70` accepted, without hashing media on reads.
 [Scope](operations/2026-10-15-tester-feedback.md).
 
-## D-360 `[ ]` A removed voice message remains the retained playing item
+## D-360 `[x]` A removed voice message remains the retained playing item
 
 **Surface:** `ChatMediaPlayback` / `ChatWindow` playlist registration.
 **Observed2026-10-15:** a deleted row disappears from the projected playlist but
@@ -25748,6 +25748,13 @@ the current audio item is retained and keeps playing. Actual compiled RED;
 leave-chat and explicit-close controls pass. Fix requires an authoritative
 message tombstone or access retirement, not treating absence from a partial
 playlist as deletion. The existing intentional across-chat playback must remain.
+**Accepted2026-10-15:** known authoritative producers are connected with UID/epoch
+fences, exact retained-item retirement and separate access-regrant ownership.
+Two independent P2 omissions were reproduced and repaired before publication;
+final63/63 including14 adverse variants, unchanged hook26/28, independent review,
+main typecheck/build and actual shared-web c9f86afb image/content/parity/rollback
+smoke pass. No universal missed-Realtime delivery or real-decoder/device claim.
+[Acceptance](operations/2026-10-15-network-body-and-playback.md).
 [Scope](operations/2026-10-15-tester-feedback.md).
 
 ## D-361 `[x]` A verified warm history repeats a background hidden-ID query
@@ -25763,7 +25770,7 @@ the reproduced wait, so
 this is not an established cause of Nikita's visible opening delay.
 [Scope and evidence](operations/2026-10-15-tester-feedback.md).
 
-## D-362 `[ ]` Fetch deadlines retire at headers while a JSON body still waits
+## D-362 `[x]` Fetch deadlines retire at headers while a JSON body still waits
 
 **Surface:** `lib/supabase/deadlineFetch.ts:89-97`, installed by
 `lib/supabase/client.ts`; `cutStrandedReads` at111.
@@ -25774,10 +25781,14 @@ caller abort. One actual compiled wrapper/requestDeadline/native Response and
 ReadableStream audit observes all three gaps, with five calibrated complete/
 pre-header/cancellation controls. No real HTTP, Auth or VPN behavior is measured.
 
-Next P1 scope is finite PostgREST body completion, preserving the original
-deadline and error ownership without globally buffering Storage or changing Auth
-retry/logout semantics. Do not treat a timed-out write as uncommitted or retry it.
-Not repaired by web `dc5a7c70`. [Boundary](operations/2026-10-15-tester-feedback.md).
+**Accepted2026-10-15:** finite PostgREST Responses retain the original deadline,
+caller/network ownership through body completion. Real SDK48/48, native loopback
+Chromium/WebKit13/13, independent review, main typecheck/build and actual
+shared-web c9f86afb image/content/parity/rollback smoke pass. No global Storage
+buffering, Auth retry/logout change or write retry. Auth's pre-existing body
+boundary and BYOB/custom-metadata compatibility limits remain explicitly outside
+this repair. This does not establish the tester's VPN cause.
+[Acceptance and upstream comparison](operations/2026-10-15-network-body-and-playback.md).
 
 ## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
 

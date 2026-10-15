@@ -4728,11 +4728,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     controls and independent review pass. Shared web/main `dc5a7c70` accepted.
     Do not rehash every file on chat reopening; no blanket native acceptance.
 
-99. `[ ]` Authoritative deletion/access retirement must stop retained media
-    playback, **D-360**. A compiled deleted-voice case remains RED. Preserve
-    intentional playback after leaving a chat; absence from a partial or paginated
-    playlist is not proof of deletion. Inspect every actual producer before wiring
-    the existing close-current operation.
+99. `[x]` Authoritative deletion/access retirement must stop retained media
+    playback, **D-360**. Known tombstone/hide/bulk/clear/gone/access producers now
+    feed owner-fenced retirement. Two independent P2 omissions were reproduced
+    and repaired; final player63/63, unchanged hook26/28, final review and main
+    typecheck/build pass. Preserve intentional across-chat playback; partial or
+    paginated absence is not deletion. Actual shared-web main/runtime c9f86afb
+    accepted13:45:09UTC with healthy image/content/parity/rollback smoke.
+    No universal missed-Realtime or
+    physical audio acceptance. [Ledger](operations/2026-10-15-network-body-and-playback.md).
 
 100. `[x]` Reconciliation must reuse continuously verified hidden-ID admission,
      **D-361**. One redundant background request is reproduced with cached rows
@@ -4741,17 +4745,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
      Independent review and shared web/main `dc5a7c70` accepted. This does not
      close item87's reported delay or prove actual device/live-channel timing.
 
-101. `[ ]` Bound finite response-body completion, **D-362**, next P1 network-
-     recovery slice for item87. The existing global fetch deadline works before
-     headers but unregisters the request when headers arrive. Actual compiled
-     wrapper/native-stream audit reproduces json/text hangs past deadline,
-     network cut and caller abort; five calibrated controls pass. One bounded
-     private run, no HTTP. Inspect the real PostgREST parser boundary before a
-     repair; preserve original start time, caller-error ownership, Response and
-     streaming semantics, Auth retry/session behavior and long Storage transfers.
-     No global buffering, arbitrary size cap, write retry or VPN/network change.
-     This is a concrete source defect, not proof of Nikita's VPN cause. The
-     `dc5a7c70` release does NOT include its repair.
+101. `[x]` Bound finite PostgREST response-body completion, **D-362**, a concrete
+     network-recovery source defect for item87, not proof of Nikita's VPN cause.
+     Original deadline/caller/network ownership now extends through body EOF,
+     error/cancel. Real SDK48/48 and Chromium/WebKit loopback13/13, independent
+     review and main typecheck/build pass. Actual shared-web main/runtime
+     c9f86afb accepted13:45:09UTC; healthy image, old/new consumer, JS/SW parity,
+     retained rollback and anonymous smoke pass. Auth/long Storage keep their original behavior;
+     the Auth body-stall boundary remains separate. No blanket buffering, new
+     transport dependency, write retry or network change.
+     [Scope, upstream comparison and acceptance](operations/2026-10-15-network-body-and-playback.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
