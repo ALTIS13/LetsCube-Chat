@@ -5,6 +5,7 @@ import { startMediaVariantsWorker } from "./workers/mediaVariantsWorker";
 import { startPushDispatcher } from "./workers/pushDispatcher";
 import { shouldStartLegacyPushDispatcher } from "./workers/pushDispatcherConfig";
 import { startRegistrationCleanupWorker } from "./workers/registrationCleanupWorker";
+import { startNotificationFeedMaintenanceWorker } from "./workers/notificationFeedMaintenanceWorker";
 import { startVoiceReconciler } from "./workers/voiceReconciler";
 
 const rawPort = process.env["PORT"];
@@ -35,6 +36,7 @@ app.listen(port, (err) => {
     startPushDispatcher();
   }
   startRegistrationCleanupWorker();
+  startNotificationFeedMaintenanceWorker();
   startMediaVariantsWorker();
   // D-103: the files of messages deleted for everyone.
   startMediaPurgeWorker();
