@@ -1,19 +1,20 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-16:** coordinator; the owner explicitly prioritizes
-readable notifications (item76/D-335). The missing authenticated Android content
-transport, strict recipient projection parser and cancellable in-memory consumer
-are source-accepted:251/251 affected compiled checks, actual isolated SDK Java
-compile31s/83 executed tasks, independent frozen review with no actionable finding.
-Whole-app lint remains red on7 pre-existing/local findings, none in changed Java;
-the linked report names them. Do not report a globally green Android lint gate.
-No new library, SQL, provider payload or preference change. Protocol0, generic
-presenter and rich gates remain unchanged; these classes have no production caller.
-Next is the accepted native credential/choice lifecycle and final receiver/card
-integration, then isolated OS proof, not another unchanged source test or old
-screen/ARM replay. Runtime80e4069e and Android0.1.20/build21 are not changed by this
-slice. Preserve the unrelated sidebar/search paths and private Android overlay.
-[Current lookup, verification and remaining gates](operations/2026-10-16-readable-notification-lookup.md).
+**Current resume, 2026-10-16:** coordinator; item76/D-335 readable notifications
+remain first. Fresh Realme QA host and actual SDK21s/Javac/signature/DEX test passed
+preparation. Rendered QA Auth/native ARM/device binding reached Settings, then
+returned `NMPUC_SETTINGS_FAILED`. Independent server postcheck confirms one new
+device revoked/disabled and no new session; exact three-package cleanup, primary20/
+test data and temporary power-setting restoration pass. Real SDK metadata is13
+fields, custody identity12: retain original receipts and do not reuse the incorrect
+frozen `sdkInputs()` wrapper. A real rounded-button test blocker and safe UI reason
+loss are source-fixed, RED-to-GREEN38/38 and independent review accepted. Next:
+updated AndroidTest SDK/artifact and real Settings choice cycle, then credential/
+current-card receiver/presenter integration. No repaired actual Settings or readable
+OS card claim. Reuse accepted lookup251/251/SDK evidence, not old ARM/screen or
+unchanged transport tests. Protocol0/generic/richfalse, runtime80e4069e and Stable
+Android21 remain; no release/provider/migration change. Preserve foreign sidebar/
+search files and private Android overlay. [Current evidence and next action](operations/2026-10-16-native-preview-choice-realme.md).
 
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned

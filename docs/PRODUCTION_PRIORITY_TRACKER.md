@@ -6,9 +6,14 @@ Status: active production-hardening tracker, updated 2026-10-16.
 The missing Android content RPC transport/parser/current-owner consumer is now
 source-accepted:251/251 compiled affected checks, actual SDK Java compile and
 independent frozen review. No runtime caller or display gate was enabled; this
-does not close D-335 or release readable cards. Next: native credential/choice
-lifecycle, receiver/presenter and exact-card/OS acceptance. Do not replay the old
-screen/ARM attempts. [Current slice](operations/2026-10-16-readable-notification-lookup.md).
+does not close D-335 or release readable cards. One actual isolated Realme attempt
+reaches Settings after ARM/rendered Auth/SDK binding, then returns
+`NMPUC_SETTINGS_FAILED`; independent server retirement and exact cleanup pass.
+Test-only rounded-button hit and fixed UI-reason repairs pass38/38, not yet an
+updated installed choice pass. Next: changed AndroidTest/device choice cycle,
+credential/receiver/presenter and OS acceptance. Keep SDK13-field/identity12
+calibration; do not replay old screen/ARM attempts.
+[Current actual evidence](operations/2026-10-16-native-preview-choice-realme.md).
 
 **Active priority, 2026-10-15 19:56 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
@@ -4199,6 +4204,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     provider payloads are unchanged. Native credential/choice and current-card
     publication plus real OS/privacy acceptance remain required; D-335 stays open.
     [Current source and next connection](operations/2026-10-16-readable-notification-lookup.md).
+
+    **2026-10-16 actual Realme continuation:** fresh isolated QA host, SDK21s/
+    signature/Javac/DEX accepted; ARM/rendered login/native device verification
+    reach Settings but the real choice cycle fails there. Independent server
+    retirement, exact three-package removal and primary20/test preservation pass.
+    Correct SDK13-field/identity12 calibration retains immutable original records.
+    A real rounded-button hit-test blocker and safe diagnostic reason loss are
+    source-fixed38/38 and reviewed, not yet an installed updated-test pass. No
+    rich preview/release promotion. [Checkpoint](operations/2026-10-16-native-preview-choice-realme.md).
 
     **2026-10-05 adjacent repair:** D-344/D-345 fence shared activation ownership,
     Windows emitted click order and old-account card retirement, including true

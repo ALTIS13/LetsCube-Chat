@@ -133,6 +133,19 @@ function green(text, assertions) {
 }
 test('actual requestOnce identifies ARM boundaries and performs at most one native request', () => green(source, armCases));
 test('actual phase and outer catch preserve first fixed ARM code and only whitelist suppression', () => green(source, catchCases));
+const inputCases=`
+for(String p:new String[]{"SETTINGS","INITIAL_NONE","SAVE_SENDER","SAVE_MESSAGE","SAVE_NONE"}) {
+  for(String code:new String[]{"NMPUC_TAP_TARGET_UNAVAILABLE","NMPUC_GEOMETRY_CALLBACK_UNKNOWN","NMPUC_HIT_TEST_CHANGED","NMPUC_DEADLINE_EXHAUSTED"}) {
+    AssertionError first=phase(p,new AssertionError(code));
+    equal(first.getMessage(),code,"TEST_INPUT_REASON_PRESERVED");
+    equal(report(p,first,null).getMessage(),code,"TEST_INPUT_OUTER_PRESERVED");
+  }
+  equal(phase(p,new AssertionError(HOSTILE)).getMessage(),"NMPUC_"+p+"_FAILED","TEST_INPUT_PRIVATE_FALLBACK");
+  equal(phase(p,new AssertionError("NMPUC_TAP_TARGET_UNAVAILABLE_SUFFIX")).getMessage(),"NMPUC_"+p+"_FAILED","TEST_INPUT_PRIVATE_FALLBACK");
+  equal(phase(p,new IllegalStateException("NMPUC_TAP_TARGET_UNAVAILABLE")).getMessage(),"NMPUC_"+p+"_FAILED","TEST_INPUT_EXCEPTION_FALLBACK");
+}
+equal(phase("ARM",new AssertionError("NMPUC_TAP_TARGET_UNAVAILABLE")).getMessage(),"NMPUC_ARM_FAILED","TEST_INPUT_PHASE_BOUNDARY");`;
+test('actual UI phase and outer catch retain only fixed input reasons, never private error text',()=>green(source,inputCases));
 
 const omit = code => [code, ''];
 const mutants = [

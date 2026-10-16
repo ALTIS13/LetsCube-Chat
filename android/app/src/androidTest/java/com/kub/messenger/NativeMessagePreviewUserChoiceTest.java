@@ -75,8 +75,9 @@ public class NativeMessagePreviewUserChoiceTest {
         + "||r.right-r.left<4||r.bottom-r.top<4)return null;"
         + "const x=mode==='scroll'?r.right-Math.min(16,(r.right-r.left)/4):(r.left+r.right)/2;const y=(r.top+r.bottom)/2;"
         + "const hit=(x,y)=>{const h=document.elementFromPoint(x,y);return !!h&&(h===e||e.contains(h));};"
+        + "const inset=Math.min(2,(r.right-r.left)/8,(r.bottom-r.top)/8);"
         + "const points=mode==='scroll'?Array.from({length:7},(_,i)=>[x,r.top+(r.bottom-r.top)*(0.75-0.5*i/6)])"
-        + ":[[x,y],[r.left+1,r.top+1],[r.right-1,r.top+1],[r.left+1,r.bottom-1],[r.right-1,r.bottom-1]];"
+        + ":[[x,y],[x-inset,y],[x+inset,y],[x,y-inset],[x,y+inset]];"
         + "if(!points.every(p=>hit(p[0],p[1])))return null;return [x,y,...a,innerWidth,innerHeight];";
 
     static final String SAVED_PROBE =
@@ -218,7 +219,14 @@ public class NativeMessagePreviewUserChoiceTest {
         }
         static AssertionError phaseFailure(String phase, Throwable failure) {
             String code = failure instanceof AssertionError ? failure.getMessage() : null;
+            if (inputFailure(phase, code)) return new AssertionError(code);
             return new AssertionError("ARM".equals(phase) && allowed(code) ? code : fallback(phase));
+        }
+        private static boolean inputFailure(String phase, String code) {
+            return phase != null && phase.matches("SETTINGS|INITIAL_NONE|SAVE_(SENDER|MESSAGE|NONE)")
+                && code != null && code.matches("NMPUC_(DEADLINE_EXHAUSTED|GEOMETRY_CALLBACK_UNKNOWN|SETTINGS_CONTROL_UNAVAILABLE"
+                    + "|TARGET_NOT_VISIBLE|SCROLL_TARGET_UNAVAILABLE|TAP_TARGET_UNAVAILABLE|RADIO_ALREADY_CHECKED"
+                    + "|HIT_TEST_CHANGED|NATIVE_MAPPING_CHANGED|INITIAL_OWNER_CHOICE_MISMATCH|CHECKED_HOOK_AND_NATIVE_UNCONFIRMED)");
         }
         private static boolean cleanupCode(String code) {
             return code != null && code.matches("NMPUC_(FINAL_NONE_UNCONFIRMED_FAILED|NATIVE_RETIREMENT_UNKNOWN|CLEANUP_RESUME_UNKNOWN"
@@ -227,6 +235,7 @@ public class NativeMessagePreviewUserChoiceTest {
         static AssertionError report(String phase, AssertionError failure) {
             String code = failure.getMessage();
             AssertionError report = new AssertionError(("ARM".equals(phase) && allowed(code)) || cleanupCode(code)
+                || inputFailure(phase, code)
                 || fallback(phase).equals(code) ? code : fallback(phase));
             for (Throwable suppressed : failure.getSuppressed()) {
                 if (suppressed instanceof AssertionError && cleanupCode(suppressed.getMessage())) append(report, suppressed.getMessage());

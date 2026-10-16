@@ -24889,6 +24889,16 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**2026-10-16 actual Realme continuation:** fresh isolated host, actual SDK21s/
+Javac/signature/DEX pass. Rendered QA Auth/native ARM/SDK binding reach Settings,
+then `NMPUC_SETTINGS_FAILED`; the choice cycle is not accepted. Independent server
+retirement, exact three-package cleanup, primary20/test data and original power
+setting pass. A rounded-button hit-test blocker is reproduced in real Chromium
+and repaired, with safe UI-reason diagnostics; affected38/38 and independent review
+pass, updated SDK/device run still required. SDK metadata13/identity12 is calibrated
+against actual records, not earlier fictional positive fixtures. Keep OPEN and all
+display gates closed. [Actual evidence and next action](operations/2026-10-16-native-preview-choice-realme.md).
+
 **Owner priority, 2026-10-16 / source continuation:** now the first requested
 priority. The missing Android recipient content RPC boundary is implemented and
 source-accepted: fixed-origin HTTP, strict exact-tuple/choice/text/expiry parser
