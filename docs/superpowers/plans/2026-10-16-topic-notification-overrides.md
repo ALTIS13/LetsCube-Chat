@@ -10,6 +10,24 @@
 
 **Spec:** Item77 in [the tracker](../../PRODUCTION_PRIORITY_TRACKER.md), [sanitized intake](../../operations/2026-10-03-tester-feedback.md), and the owner's explicit contract in this assignment. Planning source: `a07c5ae643fc321697094284ef3a06c9e1e28851`, main-based worktree `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`. D366 publication is separately accepted. This document does not close item77.
 
+## Execution Status, 2026-10-17
+
+Accepted source is not production/device acceptance. Reuse the linked evidence;
+do not restart completed RED/GREEN work. Checkboxes below describe the original
+full requirements; cross-task requirements remain open until their consumers pass.
+
+| Task | Current checkpoint |
+| --- | --- |
+| 1 | Source verified, d7869991. |
+| 2 | CAS/RLS source and actual PG17 concurrency verified,84294a19; Task3 delivery coupling and canonical migration remain open. |
+| 3 | Terminal suppression and structural lock repair source accepted,30d8dd80; final integrated PG17 suite170/170 includes the changed source and native/album binding. Full-schema/runtime remains open. |
+| 4 | Native/album bindingbdb346f4 plus prior maintained single/legacy/preparation reviewed; affected dispatcher220/220 and integrated PG17 suite170/170, zero skips. Actual provider/OS release gates remain open. |
+| 5 | State8016c799 and reviewed presentation4fc8e3af verified,155/155 and181/181; source requires the additive SQL, not a standalone release. |
+| 6 | Fresh full-schema backup verified. Restore refused at created/stopped clone before first start; private launcher lifecycle/recovery repair in progress. [Versioned-feed compatibility design](../specs/2026-10-17-topic-alert-compatible-feed.md) selected, not implemented. No production apply/acceptance. |
+| 7 | Not started; no reachable production toggle or native release for item77. |
+
+Detailed failures, evidence and limitations: [execution record](../../operations/2026-10-16-topic-notification-overrides.md).
+
 ## Global Constraints
 
 - Scope is account + chat + canonical text topic, not Android OS channels, voice channels or a new conversation type.

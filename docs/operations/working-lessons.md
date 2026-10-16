@@ -161,6 +161,14 @@ a test count, `built in Ns`, `sw.js build <id>` — never by its exit code.
   loaded. Prove a face by rendered **width** with and without it in the stack.
   (Inter is self-hosted since 2026-09-20 — `/fonts/inter/`, 174 KB — so the
   specific trap is gone, but the instrument lesson stands.)
+- **Docker tmpfs is neither `Mounts` inventory nor persistent storage.** On
+  2026-10-17 the owned created clone reported `Mounts=[]`; a retained receipt
+  from the earlier running PG17 fixture also reported `[]`. Validate exact
+  `HostConfig.Tmpfs` declarations and, when running, actual filesystems rather
+  than inventing realized mount entries in a test. Docker stop/start discards
+  tmpfs: a restore that needs a PostgreSQL restart must keep its supervisor/
+  container alive. The defective restore tail was found before it ran; retain
+  the fresh backup and original failure proof instead of replaying allocation.
 
 ---
 

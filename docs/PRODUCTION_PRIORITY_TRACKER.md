@@ -3941,15 +3941,19 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     trusted enqueue/predelivery/album/preview, sound/Windows and compatible
     rollback. No implementation/migration acceptance is implied by the plan.
     [Plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
-    Execution2026-10-16: CAS/RLS draft + actual PG17 concurrency33/33;
-    preference-state ownership155/155. Actual producer baseline reproduces
-    pending-single and incomplete-album replay; terminal enforcement, bound
-    dispatch, client presentation and fullstack/rollout remain in progress.
+    Execution2026-10-17: CAS/RLS draft + actual PG17 concurrency33/33;
+    preference-state ownership155/155; reviewed client presentation181/181 and
+    final integrated dispatch220/220 and isolated PG17 suite170/170, zero skips.
+    Source checkpoints30d8dd80/bdb346f4 close the structural lock/INSERT/history
+    and native/album target-binding source defects after independent review.
+    Exact synthetic fixture cleanup passed. Fresh verified full-schema backup
+    exists; private clone lifecycle/recovery repair, full-schema/PostgREST,
+    versioned-feed old-client compatibility and fullstack/rollout stay open.
     No production migration/UI/native release or feature completion inferred.
     [Evidence and current checkpoint](operations/2026-10-16-topic-notification-overrides.md).
     Same voice note: silence a busy parent chat while explicitly enabling one
-    relevant channel/topic; other users keep their own choices. Current scoped
-    source has chat-level mute and category preferences, not a topic/channel
+    relevant channel/topic; other users keep their own choices. Shipped clients
+    have chat-level mute and category preferences, not a topic/channel
     override contract. Read the exact reference client before choosing the UI
     and semantics; distinguish a server channel from a group topic. Derive
     inheritance/explicit enable/disable and their interactions with DND,

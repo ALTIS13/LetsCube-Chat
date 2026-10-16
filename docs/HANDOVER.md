@@ -2,12 +2,17 @@
 
 **Current resume,2026-10-17,item77:** coordinator; main-based worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, base05f72b25. Task2 CAS/RLS draft and PG17
-concurrency pass; Task5 state155/155 and reviewed presentation181/181/typecheck
-pass. Task3 is NOT accepted: native50/52 plus three structural review P2s.
-Leibniz owns SQL/fixture repairs; Hume owns album final-check preparation;
-coordinator integrates, Kuhn prepares full-schema/PostgREST reuse read-only.
-Next: close actual SQL/album failures, fullstack and safe migration,
+`codex/topic-alerts-20261016`, base05f72b25, sourcebdb346f4 (local only). Task3
+terminal/lock repair30d8dd80 and native/album bindingbdb346f4 passed independent
+review, full isolated PG17 suite170/170 and dispatcher220/220, zero skips.
+Task5 client181/181/typecheck/build549c202c7c1054a5 is unchanged. Exact synthetic
+container cleanup passed, including one orphan DB and zero open connections.
+Fresh verified full-schema backup exists; restore refused before first start:
+Docker pre-start tmpfs reporting and a destructive-to-tmpfs container restart
+need launcher repair. Kuhn owns that private launcher/test scope; coordinator
+integrates. Versioned-feed compatibility design is selected, not implemented.
+Next: bounded owned-clone recovery, full-schema/PostgREST and compatibility,
+safe migration,
 then reachable control and supported-client release. No production SQL/main
 push/native publication in this item; current Stable22/D366 stay unchanged.
 Root is divergent; preserve its foreign sidebar/search and version paths;

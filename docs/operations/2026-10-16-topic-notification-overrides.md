@@ -1,9 +1,10 @@
 # Topic Notification Overrides: Execution
 
 Owner: coordinator. Branch:codex/topic-alerts-20261016, base05f72b25 in the
-main-based android-current worktree. Stage:Task5 state/presentation source
-verified; Task3 candidate rejected pending structural repairs, Task4 integration
-continues. Item77 remains
+main-based android-current worktree. Stage:Task3 structural repair30d8dd80 and
+Task4 native/album bindingbdb346f4 source accepted after review and final170/170
+PG17 +220/220 dispatcher controls. Task6 fresh backup verified; full-schema
+clone lifecycle/recovery and compatible v2 transport remain open. Item77 remains
 OPEN, no reachable control or released feature. No production SQL/native release.
 [Fullstack plan](../superpowers/plans/2026-10-16-topic-notification-overrides.md).
 
@@ -169,7 +170,7 @@ is separate. A failed/unknown RPC never grants permission. The preference cache
 is display-only. These consumers REQUIRE the additive SQL; do not deploy this
 client checkpoint alone or relabel it as old-client/native acceptance.
 
-## Server Review Still Open
+## Initial Server Review, Superseded Below
 
 The Task3 native run was50 pass/2 fail/0 skip, NOT clean acceptance. All three
 bound/setter interleavings passed, including a real deadlock control; two marker
@@ -199,3 +200,149 @@ build passes. This is not album/native descriptor-binding acceptance.
 Album async preparation/final-check ordering remains in progress. Full-schema
 restore, authenticated PostgREST, actual provider/OS and old foreground/native
 compatibility remain Task6 gates. Current Stable22 and D366 are unchanged.
+
+## Dispatcher Preparation Checkpoint
+
+Commits:4fc8e3af client presentation,57965d69 bound single delivery draft/worker,
+1ad0ca3a maintained single Edge and album preparation. No main push/apply/release.
+The final client build completed in22.53s with sw.js build549c202c7c1054a5;
+existing sourcemap/chunk warnings are not treated as runtime or device proof.
+
+Album now has an explicit preflight -> async prepare -> final recheck -> fresh
+payload send boundary. OAuth/topic hashing occurs before the final check. A
+changed selected member uses the final payload, not the preflight copy; a changed
+chat, invalid payload, unknown/error/refused/claim-lost result cannot send. Only
+a prepared provider call can ACK sent/gone; an unprepared sent outcome is a
+release/invalid_prepare_outcome, not fabricated provider acceptance.
+
+Seven genuine album failures were reproduced before repair, including the
+coordinator's false-sent-ACK contract case. Agent final83/83 includes14 compiled
+omissions and focused no-emit/type-contract validation. Coordinator integrated
+actual single/legacy/album/voice paths:191/191, zero skips, in
+output/topic-alert-dispatch-reviewed.log. Two earlier single mutation controls
+hit duplicate anchors after album gained the same retirement logic; they now
+mutate only the actual single-delivery function, not both consumers. The prior
+162/164 setup result is not called a clean run.
+
+Album Web/FCM permanent failures retire only the descriptor/owner actually sent;
+that CAS is not a fresh delivery-binding RPC. Album/native target fingerprints
+remain unbound and are a release gate. A second lookup is not an atomic repair.
+Provider-accepted requests cannot be recalled. Source checks do not close the
+full-schema, PostgREST, real push/OS, old-client or supported-platform gates.
+
+Current callable tool inventory includes Figma, Mobbin, Mobile MCP cloud-device
+allocation/release, browser and bounded subagents. No Rive-specific callable
+tool was found in this inventory. No paid device or design generation was used
+for these backend checks. Visual/mobile minutes belong to the actual rendered/
+device acceptance stage, not a substitute for these server contracts.
+
+## Structural and Rehearsal Follow-Up
+
+Task3's first structural repair is still under review, not accepted: native
+full65/66 had one SSH metadata refusal in teardown before dropdb; a separate
+3/3 run covers that case plus a new read-reopen omission. There was no single
+clean67/67 run. The coordinator confirmed one orphan synthetic database and
+zero fixture connections in the exact-owned network-none container. A private
+cleanup guard now retries only one transport-only metadata read, never an owner
+drift or DROP; its literal bounds/identity/refusal controls pass3/3. Final exact
+container cleanup remains required after the last native run.
+
+Fresh independent review found two remaining lock edges: preference-row ->
+chat FK CASCADE, and UUID-ordered album notification locks versus the existing
+unordered mark-all-read RPC. Their structural repair/reproductions are assigned;
+do not promote the preceding native/source counts as their acceptance.
+
+Compatibility audit found no existing enforceable rollout boundary. Stable22's
+embedded hook ignores the new marker/RPC. Mandatory-update UI, foreground
+presence and native-preview protocol1 are not document-level alert capability.
+Two PWA documents may share a JWT while running different bundles. Task6 must
+exclude legacy direct feed consumers through a tested versioned transport while
+preserving the complete feed/read state for the new consumer; one session ACK
+must not reopen legacy access. Until this exists, override CAS stays unavailable.
+Already accepted provider/in-flight events are outside the pending guarantee.
+
+Native single dispatch also retains cached inactive terminalization and id-only
+retirement; token/app_version/session descriptor binding is not yet implemented.
+The next Task4 delta owns those native and album bound-RPC consumers together,
+with preparation before the final check and exact-descriptor retirement.
+
+Readonly preflight metadata,2026-10-17: exact PG17.6 and PostgREST14.12 images
+were checked without application rows. Database size was123063443 bytes, free
+backup volume62921773056 bytes and available memory5366521856 bytes. There are
+no custom tablespaces or pgrst role/database overrides. Actual exposed schemas
+are public,storage,graphql_public, not just public. Four absent environment
+settings are not assumed effective defaults. The first startup-shape probe
+refused before CLI execution; actual-process configuration evidence is pending.
+
+The new private full-schema launcher has23/23 offline controls and strict
+backup/restore/ACL/resource guards; no operational phase, backup or allocation
+has run. It does not implement the fullstack driver/seed/candidate test yet.
+CLI configuration behavior is checked against the official
+[PostgREST14 configuration](https://docs.postgrest.org/en/v14/references/configuration.html)
+and [CLI reference](https://docs.postgrest.org/en/v14/references/cli.html), not
+inferred from an unset environment variable or a successful HTTP root response.
+
+## Final Structural and Target-Binding Acceptance
+
+Source commits30d8dd80/bdb346f4 are local, not deployed. Reciprocal independent
+reviews found no remaining P1/P2 in the frozen Task3 and native/album slices.
+The suspected callee-pin drift was disproved by actual assembled function DDL;
+the existing literal pins already include NOWAIT. No pin was weakened.
+
+One complete coordinator run on isolated PostgreSQL17.6 passed170/170, zero
+failures/skips, exit0,701603ms. It includes all three files:
+`topic-notification-delivery-db.test.mjs`,
+`bound-native-album-delivery-db.test.mjs` and
+`bound-native-album-concurrency.test.mjs`. Log:
+`output/topic-alert-pg17-final-integrated.log`. SQL/fixture hashes before/after:
+
+| Input | SHA256 |
+| --- | --- |
+| Task3 SQL | e2d7c687152eceebe1954e1ec291d50f9af8d610d2bc2cd28fdaeb734edc5c7b |
+| Delivery fixture | 94715c00c00915b21fea9f2d77d69d22ab908cf4449e322215539478636e30d0 |
+| Delivery tests | e8a2bd3ecd14b602bb6128b6d1c56d934c19f5709f771f822a2d36938c27eb09 |
+| Native/album SQL | d9c2d8bc5831c025626db5b194240ec7ddcfb99ca4ae454630dd0fd142238bd4 |
+
+Actual read-all, source/pref FK cascades, descriptor deletion, partial album,
+terminal reclassification/read-reopen and loaded omission controls now pass.
+The affected real Edge/legacy/album/voice unit run passes220/220, zero skips,
+in `output/topic-alert-bound-dispatch-integrated.log`; updated adjacent fixtures
+also passed35/35 separately. Existing reviewed client181/typecheck/build evidence
+is reused because those sources did not change.
+
+Native descriptors bind ID/owner/platform/provider/token/app_version/session;
+typed NULL and UTF8 lengths agree between SQL and dispatcher. Final delivery
+cannot fall back to an unbound check. A mismatch releases only its exact lease;
+permanent failure retires only the descriptor actually sent. Album preparation
+precedes final bound authority and uses the current validated payload. Neither
+this nor target locks can recall an already-provider-accepted/in-flight request.
+
+After the last run, the exact owned synthetic container was removed. Read-only
+pre-cleanup inventory proved zero other databases/connections and one orphan
+fictional database; it was removed with that container. No images or unrelated
+containers were pruned. The private cleanup receipt is retained. Foreign root
+sidebar/search files and the private Android version overlay retain their four
+original hashes.
+
+## Full-Schema Operational Checkpoint
+
+Controlled metadata preflight passed; direct production process-environment
+parity is still not claimed. Launcher29/29 offline continuity controls passed.
+The actual fresh full-schema/custom archive/globals backup passed source-before/
+after, archive validation and checksums, and read-only resume recovered backup.
+Production application rows/schema were not changed or exposed.
+
+The first restore refused at clone-create before any container start. Exact
+read-only inspection found the owned CREATED/stopped clone with correct image,
+network-none/resources/caps/user and declared tmpfs, but Docker's pre-start
+Mounts was empty. Requiring realized mounts at that phase was a false refusal.
+Mount validation source has been repaired31/31, without restarting the clone.
+Review then found a separate real lifecycle defect: the old restore tail would
+stop/start the container, discarding tmpfs data. That tail was never reached.
+
+Kuhn owns a private-only supervisor/pg_ctl lifecycle and bounded CREATED-clone
+recovery repair. Retain the verified backup, original failure/CID and exact
+ownership; no blind restore/backup replay, shared state override or production
+service restart. Current r1 clone is stopped, not an accepted restored database.
+Full-schema authenticated HTTP, candidate/rollback, v2 transport/legacy fence,
+actual delivery/UI and platform rollout remain open. Stable22/D366 are unchanged.
