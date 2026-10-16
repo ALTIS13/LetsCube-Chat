@@ -3936,11 +3936,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     backup/HTTP rehearsal and capability/credential/epoch/current-card/OS acceptance
     remain; item76 stays OPEN. [Proposal and boundaries](operations/2026-10-07-native-message-preview-authorization.md).
 
-77. `[ ]` Account-owned notification preferences for individual channels/topics.
+77. `[~]` Account-owned notification preferences for individual channels/topics.
     Fullstack execution plan prepared2026-10-16: canonical topic, CAS/RLS,
     trusted enqueue/predelivery/album/preview, sound/Windows and compatible
     rollback. No implementation/migration acceptance is implied by the plan.
     [Plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
+    Execution2026-10-16: CAS/RLS draft + actual PG17 concurrency33/33;
+    preference-state ownership155/155. Actual producer baseline reproduces
+    pending-single and incomplete-album replay; terminal enforcement, bound
+    dispatch, client presentation and fullstack/rollout remain in progress.
+    No production migration/UI/native release or feature completion inferred.
+    [Evidence and current checkpoint](operations/2026-10-16-topic-notification-overrides.md).
     Same voice note: silence a busy parent chat while explicitly enabling one
     relevant channel/topic; other users keep their own choices. Current scoped
     source has chat-level mute and category preferences, not a topic/channel

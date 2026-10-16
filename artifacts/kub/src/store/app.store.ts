@@ -33,6 +33,7 @@ import {
 } from '@/lib/chatMute'
 import { mapPgError } from '@/lib/errors'
 import { appOutbox } from '@/lib/outbox/appOutbox'
+import type { TopicNotificationPreferenceView } from '@/lib/topicNotificationPreferences'
 
 type ChatMuteOwner = { userId: string | null; accountEpoch: number;
   chats: Map<string, { revision: number; draft: number; pending: number; confirmed: ChatMutePreference | null }> }
@@ -144,6 +145,8 @@ interface AppState {
   // one browser (D-167). `mutedChatIds` is derived from them at an instant,
   // because a timed mute stops being one with nothing happening.
   chatMutes: ChatMuteSnapshot
+  /** Account-epoch owned, display-only topic rows for currently mounted chats. */
+  topicNotificationPreferences: Record<string, TopicNotificationPreferenceView>
   mutedChatIds: string[]
   /** Point the snapshot at a person; a different one empties it. */
   syncChatMuteUser: (userId: string | null) => void
@@ -400,7 +403,7 @@ function retireAccountState(state: AppState) {
   // Stop outgoing ACK publication before synchronously publishing the new owner.
   appOutbox.stop();
   return { accountEpoch: state.accountEpoch + 1, chats: [], messages: {},
-    chatMutes: EMPTY_CHAT_MUTES, mutedChatIds: [],
+    chatMutes: EMPTY_CHAT_MUTES, mutedChatIds: [], topicNotificationPreferences: {},
     replyToMessage: null, editingMessage: null, forwardingMessages: null, pendingForward: null,
     messageSelection: null, messageDeleteRequest: null,
     // Only the initial owner may retain a pending first-boot deep link.
@@ -410,6 +413,7 @@ function retireAccountState(state: AppState) {
 export const useAppStore = create<AppState>((set, get) => ({
   currentUser: null,
   accountEpoch: 0,
+  topicNotificationPreferences: {},
   authSessionIdentity: null,
   setAuthSessionIdentity: (identity) => set((state) => {
     const previous = state.authSessionIdentity

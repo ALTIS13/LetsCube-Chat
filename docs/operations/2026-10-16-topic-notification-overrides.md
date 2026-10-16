@@ -87,6 +87,35 @@ suppression monotonic, including later parts/new subscriptions and rollback.
 
 ## Remaining Gates
 
+Preference-state source is implemented separately from delivery: real hook,
+store and Zustand with controlled lifecycle/SDK ports,155/155 focused checks
+including66 new cases and10 compiled omissions. Account/epoch/chat/mount guards,
+in-flight read invalidation, pending versus confirmation, no silent CAS retry,
+conflict restoration and reconnect refusal/reconciliation are covered. The
+store resets topic views at account retirement. Coordinator removed obsolete
+`as never` RPC casts because Task2 types already exist; final typecheck passes.
+No mounted production control or use of the view cache as alert permission.
+
+Client presentation/audio is coordinator-owned and still uncommitted/integration
+work. Actual hook RED cases now preserve feed/unread without forbidden sound/
+Windows cards, permit an enabled child under a muted parent and recheck after
+foreground/iconless-retry awaits. A confirmed read while permission waits must
+make zero native notify calls, not merely remove a briefly shown card. Duplicate
+INSERTs merge metadata without another sound; unknown UPDATE cannot consume
+INSERT admission. The guard cache is bounded to the existing30-row page.
+Audio authority now follows actual resume, with final live owner/DND/audio/chat
+and context-identity checks before oscillator scheduling. The initial double
+live-guard implementation consumed the existing send-sound cooldown twice;
+real positive controls caught it and the no-authorizer path remains single-call.
+Current sound/adjacent43/43 and targeted presentation9/9 pass; full affected
+integration remains a separate gate. No microphone/media was acquired.
+
+Read-only publication catalog: supabase_realtime is owned by postgres and is
+not all-tables; topics/notifications are present. New preferences require an
+explicit publication addition and actual cross-device/WS acceptance; SUBSCRIBED
+alone cannot prove it. The isolated PG17 fixture has replica wal_level, so its
+catalog proof is not logical replication or authenticated PostgREST acceptance.
+
 The legacy opt-in worker no longer selects raw pending rows and sends directly.
 Its actual source now uses maintained claims, a fresh literal-deliver recheck
 after the subscription await, and token-bound completion/retry. Unknown/error/

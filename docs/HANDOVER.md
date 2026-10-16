@@ -1,6 +1,19 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is
+**Current resume,2026-10-16,item77:** coordinator; main-based worktree
+`C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
+`codex/topic-alerts-20261016`, last checkpoint ba80d760. Task2 CAS/RLS draft
+and actual PG17 concurrency pass; Task3 real producer baseline reproduces
+single/partial-album replay. Preference-state slice155/155 and typecheck pass.
+Uncommitted work is owned/disjoint: coordinator presentation/audio/types;
+Leibniz Task3 delivery SQL/fixture; Hume bound Web/legacy dispatcher and tests.
+Next: integrate those server/client contracts, fullstack and safe migration,
+then reachable control and supported-client release. No production SQL/main
+push/native publication in this item; current Stable22/D366 stay unchanged.
+Root is divergent; preserve its foreign sidebar/search and version paths;
+A063 excluded. [Current source/evidence](operations/2026-10-16-topic-notification-overrides.md).
+
+**Accepted prior web release,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is
 deployed and accepted: single healthy exact image, old/new compiled markers,
 public/container JS+SW parity, retained rollback and anonymous smoke. Floating
 glass mode feedback preserves dock/history geometry and jump-control access;

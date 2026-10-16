@@ -1,5 +1,28 @@
 export type TopicNotificationMode = "inherit" | "enabled" | "disabled";
 
+export interface TopicNotificationPreferenceRow {
+  readonly scope_key: string;
+  readonly mode: TopicNotificationMode;
+  readonly revision: number;
+}
+
+/** Confirmed display state only. Neither this cache nor pending intent grants delivery. */
+export interface TopicNotificationPreferenceView {
+  readonly userId: string | null;
+  readonly accountEpoch: number;
+  readonly chatId: string | null;
+  readonly rows: readonly TopicNotificationPreferenceRow[];
+  readonly loading: boolean;
+  readonly unavailable: boolean;
+  readonly pending: { readonly topicId: string | null; readonly mode: TopicNotificationMode; readonly expectedRevision: number } | null;
+  readonly conflict: TopicNotificationPreferenceRow | null;
+  readonly error: { readonly code: "read_failed" | "write_failed" | "channel_unavailable"; readonly retryable: true } | null;
+}
+
+export type TopicNotificationWriteResult =
+  | { readonly status: "applied" | "conflict"; readonly row: TopicNotificationPreferenceRow }
+  | { readonly status: "busy" | "retired" | "unavailable" | "invalid" };
+
 /** An override can change only parent mute, not any independent restriction. */
 export function resolveTopicAlert(
   mode: unknown,
