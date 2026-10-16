@@ -74,6 +74,7 @@ publication must retain these product bytes; it is not another product repair.
 Item87 remains unmeasured for current-client latency: no new cache patch is
 justified without an episode tied to platform/build/action and history-vs-media
 delay. Do not repeat accepted warm-cache or recovery tests. Next bounded
-implementation planning: item77 account-synced topic notification overrides,
+implementation: item77 account-synced topic notification overrides under the
+[fullstack plan](../superpowers/plans/2026-10-16-topic-notification-overrides.md),
 including trusted server consumers, not a frontend-only toggle. Item18's broad
 microinteraction work and D-335 OEM/lock matrix remain open.

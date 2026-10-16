@@ -11,6 +11,7 @@ Native packages remain unchanged, Android Stable0.1.21/build22. Next: item77
 topic notification overrides with backend enforcement; item87 still requires a
 current-client latency episode. Preserve foreign sidebar/search/version paths;
 A063 excluded. [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
+[Next fullstack plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
 
 **Earlier release, 2026-10-16:** coordinator; Android0.1.21/build22 is published
 Stable,mandatory=false; product main/web75096aa3 is healthy with public/container

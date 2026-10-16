@@ -4337,6 +4337,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     unobserved. No production SQL or native rich-display acceptance.
 
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
+    Fullstack execution plan prepared2026-10-16: canonical topic, CAS/RLS,
+    trusted delivery gates, terminal suppression, synchronized client alerts
+    and compatible rollback. Plan only, not implementation acceptance.
+    [Plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
     Same voice note: silence a busy parent chat while explicitly enabling one
     relevant channel/topic; other users keep their own choices. Current scoped
     source has chat-level mute and category preferences, not a topic/channel
