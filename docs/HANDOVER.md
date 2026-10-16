@@ -1,20 +1,18 @@
 # LETSCUBE — handover
 
 **Current resume, 2026-10-16:** coordinator; item76/D-335 readable notifications
-remain first. Fresh Realme QA host and actual SDK21s/Javac/signature/DEX test passed
-preparation. Rendered QA Auth/native ARM/device binding reached Settings, then
-returned `NMPUC_SETTINGS_FAILED`. Independent server postcheck confirms one new
-device revoked/disabled and no new session; exact three-package cleanup, primary20/
-test data and temporary power-setting restoration pass. Real SDK metadata is13
-fields, custody identity12: retain original receipts and do not reuse the incorrect
-frozen `sdkInputs()` wrapper. A real rounded-button test blocker and safe UI reason
-loss are source-fixed, RED-to-GREEN38/38 and independent review accepted. Next:
-updated AndroidTest SDK/artifact and real Settings choice cycle, then credential/
-current-card receiver/presenter integration. No repaired actual Settings or readable
-OS card claim. Reuse accepted lookup251/251/SDK evidence, not old ARM/screen or
-unchanged transport tests. Protocol0/generic/richfalse, runtime80e4069e and Stable
-Android21 remain; no release/provider/migration change. Preserve foreign sidebar/
-search files and private Android overlay. [Current evidence and next action](operations/2026-10-16-native-preview-choice-realme.md).
+remain first. Updated actual SDK17s/Javac/signature/DEX test passes the real Realme
+Settings cycle none -> sender -> message -> none, native retirement and logout.
+Independent server retirement, exact three-package absence, primary20/test/users
+and original power restoration pass. This is automated PERSON_CHOICE_NOT_PROVEN,
+not readable OS-card acceptance. Current-card final publication ordering is
+source-accepted24/24, adjacent125/125 and reviewed; durable/cache divergence and
+read-retirement races refuse. Next: native card render updater, credential/choice
+lifecycle and actual receiver/presenter/OS acceptance. Do not replay passing
+Settings, lookup251/251 or unchanged transport checks. Keep SDK13/identity12 and
+original r1 records immutable. Protocol0/generic/richfalse remain; no release,
+provider, migration or deployment change. Preserve foreign sidebar/search and
+private Android overlay. [Current evidence and next action](operations/2026-10-16-native-preview-choice-and-card-publication.md).
 
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned

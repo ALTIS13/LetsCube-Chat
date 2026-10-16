@@ -6,14 +6,15 @@ Status: active production-hardening tracker, updated 2026-10-16.
 The missing Android content RPC transport/parser/current-owner consumer is now
 source-accepted:251/251 compiled affected checks, actual SDK Java compile and
 independent frozen review. No runtime caller or display gate was enabled; this
-does not close D-335 or release readable cards. One actual isolated Realme attempt
-reaches Settings after ARM/rendered Auth/SDK binding, then returns
-`NMPUC_SETTINGS_FAILED`; independent server retirement and exact cleanup pass.
-Test-only rounded-button hit and fixed UI-reason repairs pass38/38, not yet an
-updated installed choice pass. Next: changed AndroidTest/device choice cycle,
-credential/receiver/presenter and OS acceptance. Keep SDK13-field/identity12
-calibration; do not replay old screen/ARM attempts.
-[Current actual evidence](operations/2026-10-16-native-preview-choice-realme.md).
+does not close D-335 or release readable cards. Updated SDK17s/Javac/signature/DEX
+AndroidTest now passes actual isolated Realme Settings none -> sender -> message
+-> none and logout/native retirement; independent server retirement, exact cleanup
+and protected state/power restoration pass. Current-card final publication ordering
+is source-accepted24/24, adjacent125/125 and reviewed, not a connected native
+publisher. Next: native card render updater, credential/receiver/presenter and OS
+acceptance. Keep SDK13-field/identity12 calibration and original r1 receipts; do
+not replay passing Settings or unchanged transport tests.
+[Current actual evidence](operations/2026-10-16-native-preview-choice-and-card-publication.md).
 
 **Active priority, 2026-10-15 19:56 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
@@ -4205,7 +4206,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     publication plus real OS/privacy acceptance remain required; D-335 stays open.
     [Current source and next connection](operations/2026-10-16-readable-notification-lookup.md).
 
-    **2026-10-16 actual Realme continuation:** fresh isolated QA host, SDK21s/
+    **2026-10-16 updated Realme acceptance:** current repaired AndroidTest,
+    actual SDK17s/Javac/signature/DEX and fresh host metadata pass. One actual
+    pointer-driven Settings cycle none -> sender -> message -> none plus logout/
+    native retirement passes. Independent server retirement, exact three-package
+    absence, primary20/test/users and original power restoration pass. Automated
+    PERSON_CHOICE_NOT_PROVEN, not readable OS cards. Final current-card ordering
+    is source-accepted24/24, adjacent125/125 and reviewed, including fresh durable
+    state and read retirement before OS cancellation. Next: card render updater,
+    native credential lifecycle and receiver/OS proof; no rich/release promotion.
+    [Current checkpoint](operations/2026-10-16-native-preview-choice-and-card-publication.md).
+
+    **2026-10-16 earlier Realme continuation:** fresh isolated QA host, SDK21s/
     signature/Javac/DEX accepted; ARM/rendered login/native device verification
     reach Settings but the real choice cycle fails there. Independent server
     retirement, exact three-package removal and primary20/test preservation pass.

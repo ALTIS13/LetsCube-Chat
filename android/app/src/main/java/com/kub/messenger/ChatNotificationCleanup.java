@@ -80,6 +80,61 @@ final class ChatNotificationCleanup {
             && card.notificationId.equals(posted.notificationId) && card.messageId.equals(posted.messageId);
     }
 
+    // Presentation ordering only. The synchronous publisher must also hold its
+    // native credential/choice authority; this does not authenticate a preview.
+    static boolean updateCurrent(Owner expected, Card expectedCard, Cards cards, Runnable posting) {
+        if (expected == null || cards == null || posting == null || !tracked(expectedCard)) return false;
+        synchronized (CARDS) {
+            if (owner != expected || !matchesLatest(expectedCard, cards.intents())) return false;
+            List<Card> active = cards.active();
+            if (active == null) return false;
+            int matches = 0;
+            for (Card card : active) {
+                if (card == null || card.id != expectedCard.id || !expectedCard.tag.equals(card.tag)) continue;
+                if (!tracked(card) || card.generation != expectedCard.generation
+                    || !card.chatId.equals(expectedCard.chatId) || !card.notificationId.equals(expectedCard.notificationId)
+                    || !card.messageId.equals(expectedCard.messageId)) return false;
+                matches++;
+            }
+            synchronized (ChatNotificationCleanup.class) {
+                Posted current = latest(expectedCard.tag, cards.intents());
+                Posted durable = cards.intents().read(expectedCard.tag);
+                if (matches != 1 || owner != expected || !matchesLatest(expectedCard, cards.intents())
+                    || current == null || current.previewRetired || !matchesPosted(expectedCard, durable)) return false;
+                // Do not allocate another generation or hide an ambiguous posting failure.
+                posting.run();
+                return true;
+            }
+        }
+    }
+
+    private static boolean matchesPosted(Card card, Posted posted) {
+        return posted != null && card.generation == posted.generation
+            && card.notificationId.equals(posted.notificationId) && card.messageId.equals(posted.messageId);
+    }
+
+    private static boolean tracked(Card card) {
+        return card != null && card.id == 0 && card.protocol == 1 && !card.summary && card.generation > 0
+            && isUuid(card.chatId) && ("message:chat:" + card.chatId).equals(card.tag)
+            && isUuid(card.notificationId) && isUuid(card.messageId);
+    }
+
+    private static void retirePreview(Owner expected, String tag, List<Read> reads, IntentStore intents) {
+        synchronized (ChatNotificationCleanup.class) {
+            if (owner != expected) return;
+            Posted current = latest(tag, intents);
+            if (current == null) return;
+            for (Read read : reads) {
+                if (read.notificationId.equals(current.notificationId) && read.messageId.equals(current.messageId)) {
+                    // OS cancellation/observation may lag or fail. In-flight content
+                    // must already be retired without changing cleanup's pending intent.
+                    current.previewRetired = true;
+                    return;
+                }
+            }
+        }
+    }
+
     static int removeRead(Owner expected, String chatId, List<Read> confirmed, Cards cards) {
         return reconcileRead(expected, chatId, confirmed, cards).removed;
     }
@@ -92,6 +147,7 @@ final class ChatNotificationCleanup {
         synchronized (CARDS) {
             if (expected == null || owner != expected) return Result.SETTLED;
             String tag = "message:chat:" + chatId;
+            retirePreview(expected, tag, confirmed, cards.intents());
             for (Card card : cards.active()) {
                 if (card == null || card.id != 0 || !tag.equals(card.tag)) continue;
                 if (card.protocol != 1 || card.summary || !chatId.equals(card.chatId) || !isUuid(card.notificationId) || !isUuid(card.messageId)) {
@@ -135,6 +191,7 @@ final class ChatNotificationCleanup {
     static final class Posted {
         final String notificationId, messageId;
         final long generation;
+        boolean previewRetired;
         Posted(String notificationId, String messageId, long generation) {
             this.notificationId = notificationId; this.messageId = messageId; this.generation = generation;
         }

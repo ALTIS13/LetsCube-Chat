@@ -24889,6 +24889,17 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**2026-10-16 updated actual acceptance:** repaired AndroidTest built SDK17s with
+fresh Javac, QA signature and actual DEX. One isolated Realme pointer-driven
+Settings cycle none -> sender -> message -> none, native retirement and logout
+passes. Independent server retirement, exact three-package absence, original
+primary20/test/users and power setting pass. Current-card publication ordering is
+source-accepted24/24, adjacent125/125 and reviewed; stale/read/retired and
+durable-cache divergence refuse. Not a connected renderer or native credential
+authority. Next: card render updater, native lifecycle/receiver and OS privacy/
+routing/read proof. No rich display or release enabled; D-335 stays OPEN.
+[Current acceptance and limits](operations/2026-10-16-native-preview-choice-and-card-publication.md).
+
 **2026-10-16 actual Realme continuation:** fresh isolated host, actual SDK21s/
 Javac/signature/DEX pass. Rendered QA Auth/native ARM/SDK binding reach Settings,
 then `NMPUC_SETTINGS_FAILED`; the choice cycle is not accepted. Independent server
