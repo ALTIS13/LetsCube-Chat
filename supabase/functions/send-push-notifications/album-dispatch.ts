@@ -11,12 +11,14 @@ type AlbumRecheck = {
   payload: AlbumPayload | null;
 };
 type AlbumSendResult = { outcome: "sent" | "retry" | "gone" | "release"; error?: string | null };
+type AlbumPreparedSend = { send: (payload: AlbumPayload) => Promise<AlbumSendResult> };
+type AlbumPrepareFailure = { outcome: "retry" | "release"; error?: string | null };
 
 export type AlbumPushDependencies = {
   uuid: () => string;
   claim: (limit: number, token: string) => Promise<unknown>;
   recheck: (id: string, token: string) => Promise<unknown>;
-  send: (claim: AlbumClaim, payload: AlbumPayload) => Promise<AlbumSendResult>;
+  prepare: (claim: AlbumClaim, payload: AlbumPayload) => Promise<AlbumPreparedSend | AlbumPrepareFailure>;
   ack: (id: string, token: string, outcome: AlbumSendResult["outcome"], error: string | null) => Promise<boolean>;
 };
 
@@ -125,14 +127,40 @@ export async function drainAlbumPush(deps: AlbumPushDependencies, requestedLimit
       continue;
     }
 
-    let outcome: AlbumSendResult;
+    let prepared: AlbumPreparedSend | AlbumPrepareFailure;
     try {
-      outcome = await deps.send(row, eligible.payload);
-      if (!outcome || !["sent", "retry", "gone", "release"].includes(outcome.outcome)) {
-        outcome = { outcome: "release", error: "invalid_send_outcome" };
-      }
+      prepared = await deps.prepare(row, eligible.payload);
     } catch {
-      outcome = { outcome: "retry", error: "provider_error" };
+      prepared = { outcome: "retry", error: "prepare_error" };
+    }
+    let outcome: AlbumSendResult;
+    if (record(prepared) && "send" in prepared && typeof prepared.send === "function") {
+      let fresh: AlbumRecheck | null;
+      try { fresh = recheck(await deps.recheck(row.id, token)); }
+      catch { fresh = null; }
+      if (!fresh || (fresh.status === "deliver" && (!fresh.payload ||
+        !neutralExactMessage(fresh.payload) || fresh.payload.chatId !== eligible.payload.chatId))) {
+        summary.failed += 1;
+        try {
+          if (!await deps.ack(row.id, token, "release", fresh ? "invalid_payload" : "invalid_recheck")) summary.uncertain += 1;
+        } catch { summary.uncertain += 1; }
+        continue;
+      }
+      if (fresh.status !== "deliver") {
+        if (fresh.status === "foreground") summary.deferred += 1;
+        else if (fresh.status !== "claim_lost") summary.pruned += 1;
+        continue;
+      }
+      try { outcome = await prepared.send(fresh.payload!); }
+      catch { outcome = { outcome: "retry", error: "provider_error" }; }
+    } else if (record(prepared) && "outcome" in prepared &&
+      (prepared.outcome === "retry" || prepared.outcome === "release")) {
+      outcome = prepared;
+    } else {
+      outcome = { outcome: "release", error: "invalid_prepare_outcome" };
+    }
+    if (!outcome || !["sent", "retry", "gone", "release"].includes(outcome.outcome)) {
+      outcome = { outcome: "release", error: "invalid_send_outcome" };
     }
     let acknowledged = false;
     try {

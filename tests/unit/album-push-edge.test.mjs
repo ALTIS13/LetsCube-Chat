@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { registerHooks } from "node:module";
+import { registerHooks, stripTypeScriptTypes } from "node:module";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 let handler;
@@ -10,6 +11,15 @@ let webCalls = [];
 let fcmCalls = [];
 let provider = "web";
 let claimToken;
+let currentFixture;
+let webDescriptors = [];
+let events = [];
+function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
+function request() {
+  return new Request("https://fixture.invalid/functions/v1/send-push-notifications", {
+    method: "POST", headers: { "x-kub-push-token": "fixture-dispatch" }, body: "{}",
+  });
+}
 const rowId = "20000000-0000-4000-8000-000000000001";
 const subscriptionId = "30000000-0000-4000-8000-000000000001";
 const deviceId = "30000000-0000-4000-8000-000000000002";
@@ -25,8 +35,11 @@ const { privateKey } = generateKeyPairSync("rsa", {
 globalThis.Deno = { env: { get: (key) => env[key] }, serve: (callback) => { handler = callback; } };
 globalThis.__albumWebpush = {
   setVapidDetails() {},
-  async sendNotification(_subscription, payload) {
+  async sendNotification(subscription, payload) {
+    events.push("provider"); webDescriptors.push(subscription);
     webCalls.push(JSON.parse(payload));
+    currentFixture.options.onProvider?.(currentFixture);
+    if (currentFixture.options.webError) throw currentFixture.options.webError;
   },
 };
 const hook = registerHooks({
@@ -46,11 +59,23 @@ test.after(() => {
   delete globalThis.__albumWebpush;
 });
 
-function configure(nextProvider) {
+function configure(nextProvider, options = {}) {
   provider = nextProvider;
   requests = [];
   webCalls = [];
   fcmCalls = [];
+  webDescriptors = []; events = [];
+  const entered = deferred(), release = deferred();
+  const f = { entered, release, status: "deliver", liveActive: options.liveActive ?? true, rechecks: 0, acks: [], options, writes: [],
+    subscription: { id: subscriptionId, user_id: "70000000-0000-4000-8000-000000000001",
+      endpoint: "https://push.invalid/test", p256dh: "fixture-key", auth: "fixture-auth", is_active: true,
+      ...options.subscription },
+    device: { id: deviceId, user_id: "70000000-0000-4000-8000-000000000001",
+      token: "fixture-registration", provider: "fcm", enabled: true, revoked_at: null, app_version: "0.1.8",
+      ...options.device },
+    payload: { kind: "message", title: "LETSCUBE", body: "Новое сообщение", chatId, messageId, notificationId,
+      url: `/?chat=${chatId}&message=${messageId}`, tag: `message:chat:${chatId}` } };
+  currentFixture = f;
   env = {
     KUB_PUSH_DISPATCH_TOKEN: "fixture-dispatch",
     SUPABASE_URL: "https://fixture.invalid",
@@ -64,7 +89,7 @@ function configure(nextProvider) {
   };
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(String(input));
-    requests.push({ path: url.pathname, init });
+    requests.push({ path: url.pathname, url, init });
     if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([]);
     if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
     if (url.pathname === "/rest/v1/rpc/album_push_claim") {
@@ -74,36 +99,245 @@ function configure(nextProvider) {
         device_id: provider === "fcm" ? deviceId : null, attempt_count: 0,
       }]);
     }
-    if (url.pathname === "/rest/v1/push_subscriptions") {
-      return Response.json([{ id: subscriptionId, endpoint: "https://push.invalid/test", p256dh: "fixture-key", auth: "fixture-auth", is_active: true }]);
-    }
-    if (url.pathname === "/rest/v1/user_push_devices") {
-      return Response.json([{ id: deviceId, token: "fixture-registration", provider: "fcm", enabled: true, revoked_at: null, app_version: "0.1.8" }]);
+    if (["/rest/v1/push_subscriptions", "/rest/v1/user_push_devices"].includes(url.pathname)) {
+      const target = url.pathname.endsWith("/push_subscriptions") ? f.subscription : f.device;
+      if (init.method === "PATCH") {
+        f.writes.push({ url, patch: JSON.parse(init.body) });
+        const matches = [...url.searchParams].every(([key, value]) => value === "is.null"
+          ? target[key] == null : value.startsWith("eq.") && String(target[key]) === value.slice(3));
+        if (matches) Object.assign(target, JSON.parse(init.body));
+        return Response.json(matches ? [{ id: target.id }] : []);
+      }
+      if (options.lookupError) return new Response("unavailable", { status: 503 });
+      const columns = url.searchParams.get("select").split(",");
+      return Response.json(options.missing ? [] : [Object.fromEntries(Object.entries(target).filter(([key]) => columns.includes(key)))]);
     }
     if (url.pathname === "/rest/v1/rpc/album_push_recheck") {
       assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: claimToken });
       assert.equal(webCalls.length + fcmCalls.length, 0);
-      return Response.json([{ status: "deliver", payload: {
-        kind: "message", title: "LETSCUBE", body: "Новое сообщение",
-        chatId, messageId, notificationId,
-        url: `/?chat=${chatId}&message=${messageId}`, tag: `message:chat:${chatId}`,
-      } }]);
+      f.rechecks += 1;
+      events.push("recheck");
+      if (f.rechecks === 2 && options.finalError) return new Response("unavailable", { status: 503 });
+      if (f.rechecks === 2 && options.finalThrow) throw Error("Fixture private content");
+      if (f.rechecks === 2 && options.finalMalformed) return Response.json({ status: "deliver" });
+      const status = f.liveActive ? f.status : "target_inactive";
+      return Response.json([{ status, payload: status === "deliver" ? f.payload : null }]);
     }
     if (url.pathname === "/rest/v1/rpc/album_push_ack") {
-      assert.deepEqual(JSON.parse(init.body), {
-        p_outbox_id: rowId, p_claim_token: claimToken,
-        p_outcome: "sent", p_error: null,
-      });
-      assert.equal(webCalls.length + fcmCalls.length, 1);
+      const args = JSON.parse(init.body); f.acks.push(args);
+      assert.equal(args.p_outbox_id, rowId); assert.equal(args.p_claim_token, claimToken);
       return Response.json(true);
     }
-    if (url.hostname === "oauth2.googleapis.com") return Response.json({ access_token: "fixture-oauth" });
+    if (url.hostname === "oauth2.googleapis.com") {
+      events.push("oauth");
+      entered.resolve(); if (options.holdOAuth) await release.promise;
+      return Response.json({ access_token: "fixture-oauth" });
+    }
     if (url.hostname === "fcm.googleapis.com") {
+      events.push("provider");
       fcmCalls.push(JSON.parse(init.body));
+      options.onProvider?.(f);
+      if (options.fcmError) return Response.json({ error: { status: "NOT_FOUND", details: [
+        { "@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError", errorCode: "UNREGISTERED" },
+      ] } }, { status: 404 });
       return Response.json({ name: "fixture-accepted" });
     }
     throw new Error(`unexpected fixture request to ${url.pathname}`);
   };
+  return f;
+}
+
+async function heldPrepare(channel, change, assertion) {
+  const f = configure(channel, { holdOAuth: channel === "fcm" });
+  const original = crypto.subtle.digest;
+  if (channel === "web") crypto.subtle.digest = async function (...args) {
+    events.push("digest");
+    f.entered.resolve(); await f.release.promise; return original.apply(this, args);
+  };
+  try {
+    const pending = handler(request());
+    await f.entered.promise; change(f); f.release.resolve();
+    const result = await (await pending).json(); assertion(result, f);
+  } finally { f.release.resolve(); crypto.subtle.digest = original; }
+}
+for (const channel of ["web", "fcm"]) {
+  test(`held ${channel} prepare followed by denial never reaches provider`, () => heldPrepare(channel,
+    f => { f.status = "not_eligible"; }, () => {
+      assert.equal(webCalls.length + fcmCalls.length, 0, "revoked while preparing must not reach provider");
+    }));
+  test(`held ${channel} prepare sends the newly eligible member, not preflight route`, () => heldPrepare(channel,
+    f => { const next = "50000000-0000-4000-8000-000000000099";
+      f.payload = { ...f.payload, messageId: next, notificationId: "60000000-0000-4000-8000-000000000099",
+        url: `/?chat=${chatId}&message=${next}` }; }, () => {
+      const sent = channel === "web" ? webCalls[0] : fcmCalls[0];
+      assert.equal(JSON.stringify(sent).includes("50000000-0000-4000-8000-000000000099"), true, "provider must use final eligible member");
+    }));
+}
+
+async function allowed(channel, options = {}) {
+  const f = configure(channel, options); const result = await (await handler(request())).json();
+  assert.equal(webCalls.length + fcmCalls.length, 1, "fresh album deliver must reach provider once");
+  assert.equal(result.album.sent, 1); assert.equal(f.rechecks, 2);
+  assert.deepEqual(f.acks, [{ p_outbox_id: rowId, p_claim_token: claimToken, p_outcome: "sent", p_error: null }]);
+  return f;
+}
+for (const channel of ["web", "fcm"]) {
+  test(`held ${channel} positive performs final RPC after prepare and before provider`, () => heldPrepare(channel,
+    () => {}, (result, f) => {
+      assert.deepEqual(events, ["recheck", channel === "web" ? "digest" : "oauth", "recheck", "provider"]);
+      assert.equal(result.album.sent, 1); assert.equal(f.acks.length, 1);
+    }));
+  for (const status of ["read", "target_inactive", "foreground", "claim_lost", "unexpected"]) {
+    test(`held ${channel} final ${status} cannot send`, () => heldPrepare(channel,
+      f => { f.status = status; }, (result, f) => {
+        assert.equal(webCalls.length + fcmCalls.length, 0, "final refused authority must not send");
+        assert.equal(f.rechecks, 2);
+        if (status === "unexpected") {
+          assert.equal(result.album.failed, 1);
+          assert.deepEqual(f.acks, [{ p_outbox_id: rowId, p_claim_token: claimToken, p_outcome: "release", p_error: "invalid_recheck" }]);
+        } else assert.equal(f.acks.length, 0, "trusted RPC owns denial settlement");
+      }));
+  }
+  for (const flag of ["finalError", "finalThrow", "finalMalformed"]) {
+    test(`${channel} ${flag} refuses final authority without provider`, async () => {
+      const f = configure(channel, { [flag]: true }); const result = await (await handler(request())).json();
+      assert.equal(webCalls.length + fcmCalls.length, 0); assert.equal(result.album.failed, 1);
+      assert.deepEqual(f.acks, [{ p_outbox_id: rowId, p_claim_token: claimToken, p_outcome: "release", p_error: "invalid_recheck" }]);
+    });
+  }
+  test(`current inactive ${channel} RPC state still refuses cached active descriptor`, async () => {
+    const f = configure(channel, { liveActive: false }); await handler(request());
+    assert.equal(webCalls.length + fcmCalls.length, 0); assert.equal(f.rechecks, 1); assert.equal(f.acks.length, 0);
+  });
+  for (const options of [{ missing: true }, { lookupError: true }]) {
+    test(`${channel} unavailable cached descriptor releases instead of permanent suppression: ${JSON.stringify(options)}`, async () => {
+      const f = configure(channel, options); await handler(request());
+      assert.equal(webCalls.length + fcmCalls.length, 0); assert.equal(f.acks.length, 1);
+      assert.equal(f.acks[0].p_outcome, "release");
+    });
+  }
+}
+
+async function lateFailure(channel, field = "user_id") {
+  const options = { webError: { statusCode: 410 }, fcmError: true, onProvider: f => {
+    const target = channel === "web" ? f.subscription : f.device;
+    target[field] = field === "user_id" ? "70000000-0000-4000-8000-000000000099" : "fictional-replacement";
+  } };
+  const f = configure(channel, options); const result = await (await handler(request())).json();
+  const target = channel === "web" ? f.subscription : f.device;
+  assert.equal(channel === "web" ? target.is_active : target.enabled, true, "late permanent failure must preserve replacement descriptor");
+  assert.equal(webCalls.length + fcmCalls.length, 1); assert.equal(result.album.pruned, 1);
+  assert.equal(f.acks.length, 1); assert.equal(f.acks[0].p_outcome, "gone");
+  assert.equal(f.writes.length, 1);
+}
+for (const [channel, fields] of [["web", ["user_id", "endpoint", "p256dh", "auth"]], ["fcm", ["user_id", "token", "provider", "app_version"]]]) {
+  for (const field of fields) test(`album ${channel} late permanent error cannot retire changed ${field}`, () => lateFailure(channel, field));
+  test(`album ${channel} unchanged permanent failure retires exact sent descriptor`, async () => {
+    const f = configure(channel, { webError: { statusCode: 410 }, fcmError: true }); await handler(request());
+    assert.equal(channel === "web" ? f.subscription.is_active : f.device.enabled, false);
+    const params = Object.fromEntries(f.writes[0].url.searchParams);
+    assert.deepEqual(Object.keys(params).sort(), channel === "web"
+      ? ["auth", "endpoint", "id", "p256dh", "user_id"] : ["app_version", "id", "provider", "token", "user_id"]);
+    assert.equal(params.user_id, "eq.70000000-0000-4000-8000-000000000001");
+  });
+}
+test("native album retirement retains null app-version CAS", async () => {
+  const f = configure("fcm", { fcmError: true, device: { app_version: null } }); await handler(request());
+  assert.equal(f.writes[0].url.searchParams.get("app_version"), "is.null");
+  assert.equal(f.device.enabled, false);
+});
+
+const indexUrl = new URL("../../supabase/functions/send-push-notifications/index.ts", import.meta.url);
+const albumUrl = new URL("../../supabase/functions/send-push-notifications/album-dispatch.ts", import.meta.url);
+const indexSource = readFileSync(indexUrl, "utf8").replaceAll("\r\n", "\n");
+const albumSource = readFileSync(albumUrl, "utf8").replaceAll("\r\n", "\n");
+const encoded = text => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(text)).toString("base64")}`;
+let mutationSequence = 0;
+function replaceOnce(text, needle, replacement) {
+  assert.equal(text.split(needle).length - 1, 1, "one actual mutation anchor");
+  return text.replace(needle, replacement);
+}
+function albumBlock(transform) {
+  const a = indexSource.indexOf("async function dispatchAlbumPush("), b = indexSource.indexOf("async function dispatchVoice(", a);
+  return indexSource.slice(0, a) + transform(indexSource.slice(a, b)) + indexSource.slice(b);
+}
+async function mutated({ index = indexSource, album = albumSource }, scenario) {
+  let js = stripTypeScriptTypes(index);
+  js = js.replace('"npm:web-push@3.6.7"', '"data:text/javascript,export default globalThis.__albumWebpush"');
+  js = js.replace(/"(\.\/[^"\n]+\.ts)"/g, (_match, path) => JSON.stringify(path === "./album-dispatch.ts" ? encoded(album) : new URL(path, indexUrl).href));
+  const original = handler;
+  try { await import(`${encoded(js)}#album-${++mutationSequence}`); await scenario(); }
+  finally { handler = original; }
+}
+const noSend = channel => () => heldPrepare(channel, f => { f.status = "not_eligible"; }, () => {
+  assert.equal(webCalls.length + fcmCalls.length, 0, "revoked while preparing must not reach provider");
+});
+const freshMember = channel => () => heldPrepare(channel, f => {
+  const next = "50000000-0000-4000-8000-000000000099";
+  f.payload = { ...f.payload, messageId: next, url: `/?chat=${chatId}&message=${next}` };
+}, () => {
+  assert.equal(JSON.stringify(channel === "web" ? webCalls[0] : fcmCalls[0]).includes("50000000-0000-4000-8000-000000000099"), true, "provider must use final eligible member");
+});
+for (const channel of ["web", "fcm"]) {
+  for (const [label, input, scenario, message] of [
+    ["omit final RPC", () => ({ album: replaceOnce(albumSource, "fresh = recheck(await deps.recheck(row.id, token));", "fresh = eligible;") }),
+      noSend(channel), "revoked while preparing must not reach provider"],
+    ["send preflight payload", () => ({ album: replaceOnce(albumSource, "prepared.send(fresh.payload!)", "prepared.send(eligible.payload)") }),
+      freshMember(channel), "provider must use final eligible member"],
+    ["retirement by id only", () => ({ index: albumBlock(text => replaceOnce(text,
+      channel === "web" ? '["id", "user_id", "endpoint", "p256dh", "auth"] as const' : '["id", "user_id", "token", "provider"] as const', '["id"] as const')) }),
+      () => lateFailure(channel), "late permanent failure must preserve replacement descriptor"],
+  ]) test(`compiled album ${channel} mutant rejected: ${label}`, async () => {
+    await assert.rejects(mutated(input(), scenario), error => {
+      assert.equal(error.code, "ERR_ASSERTION", "setup errors cannot kill a mutant");
+      assert.equal(error.message.split("\n")[0], message); return true;
+    });
+  });
+}
+for (const [label, input, scenario, message] of [
+  ["Web digest after final RPC", () => ({ index: albumBlock(text => replaceOnce(text,
+    'const topic = await createWebPushTopic(tag);\n        return { send: async freshPayload => {',
+    'return { send: async freshPayload => {\n          const topic = await createWebPushTopic(tag);')) }),
+    noSend("web"), "revoked while preparing must not reach provider"],
+  ["OAuth await after final RPC", () => ({ index: albumBlock(text => replaceOnce(text,
+    'const accessToken = await fcmAccessToken;\n        return { send: async freshPayload => {',
+    'return { send: async freshPayload => {\n          const accessToken = await fcmAccessToken;')) }),
+    noSend("fcm"), "revoked while preparing must not reach provider"],
+  ["restore cached Web inactive veto", () => ({ index: albumBlock(text => replaceOnce(text, 'if (!descriptor)',
+    'if (!descriptor || subscriptions.get(row.subscription_id)?.is_active === false)')) }),
+    () => allowed("web", { subscription: { is_active: false } }), "fresh album deliver must reach provider once"],
+  ["restore cached native inactive veto", () => ({ index: albumBlock(text => replaceOnce(text, 'if (!device || device.provider',
+    'if (!device || !device.enabled || device.revoked_at || device.provider')) }),
+    () => allowed("fcm", { device: { enabled: false } }), "fresh album deliver must reach provider once"],
+  ["omit native owner projection", () => ({ index: albumBlock(text => replaceOnce(text,
+    '"id,user_id,token,provider,enabled,revoked_at,app_version"', '"id,token,provider,enabled,revoked_at,app_version"')) }),
+    () => allowed("fcm"), "fresh album deliver must reach provider once"],
+  ["omit final neutral payload guard", () => ({ album: replaceOnce(albumSource,
+    "!neutralExactMessage(fresh.payload) || ", "") }),
+    () => heldPrepare("web", f => { f.payload = { ...f.payload, title: "Fixture private content" }; }, () => {
+      assert.equal(webCalls.length + fcmCalls.length, 0, "invalid final payload must not reach provider");
+    }), "invalid final payload must not reach provider"],
+  ["omit prepared chat binding", () => ({ album: replaceOnce(albumSource,
+    " || fresh.payload.chatId !== eligible.payload.chatId", "") }),
+    () => heldPrepare("fcm", f => {
+      const next = "40000000-0000-4000-8000-000000000099";
+      f.payload = { ...f.payload, chatId: next, url: `/?chat=${next}&message=${messageId}`, tag: `message:chat:${next}` };
+    }, () => { assert.equal(webCalls.length + fcmCalls.length, 0, "cross-chat final payload must not reach provider"); }),
+    "cross-chat final payload must not reach provider"],
+]) test(`compiled album mutant rejected: ${label}`, async () => {
+  await assert.rejects(mutated(input(), scenario), error => {
+    assert.equal(error.code, "ERR_ASSERTION", "setup errors cannot kill a mutant");
+    assert.equal(error.message.split("\n")[0], message); return true;
+  });
+});
+
+for (const [channel, options] of [["web", { subscription: { is_active: false } }],
+  ["fcm", { device: { enabled: false, revoked_at: "2026-01-01T00:00:00Z" } }]]) {
+  test(`fresh album authority overrides cached inactive ${channel} state`, async () => {
+    configure(channel, options); const result = await (await handler(request())).json();
+    assert.equal(webCalls.length + fcmCalls.length, 1, "cached inactive must not override fresh album deliver");
+    assert.equal(result.album.sent, 1);
+  });
 }
 
 for (const channel of ["web", "fcm"]) {

@@ -44,6 +44,16 @@ function fcmCredentials() {
   Object.assign(env, { FCM_PROJECT_ID: "fixture-project", FCM_CLIENT_EMAIL: "fixture@example.invalid", FCM_PRIVATE_KEY: privateKey });
 }
 
+const webOutboxId = "20000000-0000-4000-8000-000000000002";
+const webSubscription = Object.freeze({
+  id: "30000000-0000-4000-8000-000000000002",
+  user_id: "40000000-0000-4000-8000-000000000002",
+  endpoint: "https://fixture.invalid/webpush",
+  p256dh: "fictional", auth: "fictional", is_active: true,
+});
+// Independent SHA-256 vector for the byte-length-framed descriptor, including its owner.
+const webSubscriptionFingerprint = "v1:961f35f86114a84ebc689f8ccf3fba37147f35bb1ae3b4a919fc66a7bde517cf";
+
 test("actual voice HTTP route rejects missing dispatch secret even when disabled (RED entry)", async () => {
   delete env.KUB_PUSH_DISPATCH_TOKEN;
   const response = await handler(request());
@@ -108,27 +118,37 @@ test("enabled generic drain isolates voice OAuth failure and returns aggregate-o
 
 test("generic web delivery and acknowledgement finish before an isolated voice failure", async () => {
   Object.assign(env, { VAPID_PUBLIC_KEY: "fixture-public", VAPID_PRIVATE_KEY: "fixture-private", VOICE_PUSH_DISPATCH_ENABLED: "1" });
-  fcmCredentials(); let acknowledged = false;
+  fcmCredentials(); let acknowledged = false; let rechecks = 0;
   network = async (url, init) => {
-    if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([{ id: "fictional-outbox",
-      subscription_id: "fictional-subscription", payload: { title: "Fixture", body: "Message", sender_kind: "user",
+    if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([{ id: webOutboxId,
+      subscription_id: webSubscription.id, payload: { title: "Fixture", body: "Message", sender_kind: "user",
         sender_id: "fixture-user" }, attempt_count: 0 }]);
     if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") {
       assert.equal(acknowledged, true, "native rows must be claimed after the Web Push drain");
       return Response.json([]);
     }
-    if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([{ id: "fictional-subscription",
-      endpoint: "https://fixture.invalid/webpush", p256dh: "fictional", auth: "fictional", is_active: true }]);
-    if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck") {
+    if (url.pathname === "/rest/v1/push_subscriptions") {
+      assert.equal(url.searchParams.get("select"), "id,user_id,endpoint,p256dh,auth,is_active");
+      assert.equal(url.searchParams.get("id"), `in.(${webSubscription.id})`);
+      return Response.json([webSubscription]);
+    }
+    if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck_bound") {
+      rechecks++;
+      assert.equal(init.method, "POST");
       assert.deepEqual(JSON.parse(init.body), {
-        p_outbox_id: "fictional-outbox",
+        p_outbox_id: webOutboxId,
         p_claim_token: JSON.parse(requests[0].body).p_claim_token,
+        p_subscription_id: webSubscription.id,
+        p_subscription_fingerprint: webSubscriptionFingerprint,
       });
       assert.equal(webSends.length, 0);
       return Response.json("deliver");
     }
     if (init.method === "PATCH") {
       assert.equal(url.pathname, "/rest/v1/notifications_push_outbox");
+      assert.equal(url.searchParams.get("id"), `eq.${webOutboxId}`);
+      assert.equal(url.searchParams.get("claim_token"), `eq.${JSON.parse(requests[0].body).p_claim_token}`);
+      assert.equal(rechecks, 1); assert.equal(webSends.length, 1); assert.equal(acknowledged, false);
       assert.ok(JSON.parse(init.body).sent_at); acknowledged = true;
       return new Response(null, { status: 204 });
     }
@@ -138,6 +158,9 @@ test("generic web delivery and acknowledgement finish before an isolated voice f
   };
   const response = await handler(request({ limit: 1 })); const body = await response.json();
   assert.equal(body.sent, 1); assert.equal(body.failed, 0); assert.equal(body.voice.status, "provider_auth_failed");
+  assert.equal(rechecks, 1); assert.equal(acknowledged, true); assert.equal(webSends.length, 1);
+  assert.deepEqual(webSends[0][0], { endpoint: webSubscription.endpoint,
+    keys: { p256dh: webSubscription.p256dh, auth: webSubscription.auth } });
   const webPayload = JSON.parse(webSends[0][1]);
   assert.equal(webPayload.senderKind, "");
   assert.equal(webPayload.title, "LETSCUBE");
@@ -153,22 +176,25 @@ for (const [status, expectedPruned, expectedFailed] of [
 ]) {
   test(`generic Web Push does not reach the provider after ${status}`, async () => {
     Object.assign(env, { VAPID_PUBLIC_KEY: "fixture-public", VAPID_PRIVATE_KEY: "fixture-private" });
-    network = async (url) => {
+    let rechecks = 0;
+    network = async (url, init) => {
       if (url.pathname === "/rest/v1/rpc/push_outbox_claim") return Response.json([{
-        id: "fictional-outbox",
-        subscription_id: "fictional-subscription",
+        id: webOutboxId,
+        subscription_id: webSubscription.id,
         payload: { title: "Fixture", body: "Message" },
         attempt_count: 0,
       }]);
       if (url.pathname === "/rest/v1/rpc/native_push_outbox_claim") return Response.json([]);
-      if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([{
-        id: "fictional-subscription",
-        endpoint: "https://fixture.invalid/webpush",
-        p256dh: "fictional",
-        auth: "fictional",
-        is_active: true,
-      }]);
-      if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck") {
+      if (url.pathname === "/rest/v1/push_subscriptions") return Response.json([webSubscription]);
+      if (url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck_bound") {
+        rechecks++;
+        assert.equal(init.method, "POST");
+        assert.deepEqual(JSON.parse(init.body), {
+          p_outbox_id: webOutboxId,
+          p_claim_token: JSON.parse(requests[0].body).p_claim_token,
+          p_subscription_id: webSubscription.id,
+          p_subscription_fingerprint: webSubscriptionFingerprint,
+        });
         return status === "rpc_error"
           ? new Response("unavailable", { status: 503 })
           : Response.json(status);
@@ -182,6 +208,7 @@ for (const [status, expectedPruned, expectedFailed] of [
     assert.equal(body.sent, 0);
     assert.equal(body.pruned, expectedPruned);
     assert.equal(body.failed, expectedFailed);
+    assert.equal(rechecks, 1, "the refusal must come from the bound recheck, not a malformed fixture");
     assert.equal(webSends.length, 0);
   });
 }

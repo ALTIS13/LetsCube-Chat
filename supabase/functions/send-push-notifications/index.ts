@@ -3,6 +3,7 @@ import webpush from "npm:web-push@3.6.7";
 import { drainAlbumPush, type AlbumPushDependencies, type AlbumPushSummary } from "./album-dispatch.ts";
 import { buildFcmMessage, isPermanentFcmTokenError } from "./fcm.ts";
 import { drainVoicePush, isVoiceRequestAuthorized, voiceSummary } from "./voice-dispatch.ts";
+import { snapshotWebPushDescriptor, webPushDescriptorFingerprint } from "./web-push-descriptor.ts";
 import {
   buildDeclarativeWebPushPayload,
   createWebPushTopic,
@@ -27,6 +28,7 @@ type OutboxRow = {
 
 type SubscriptionRow = {
   id: string;
+  user_id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
@@ -38,6 +40,7 @@ type WebPushDeliveryStatus =
   | "foreground"
   | "read"
   | "subscription_inactive"
+  | "subscription_changed"
   | "not_eligible"
   | "claim_lost";
 
@@ -163,7 +166,8 @@ async function dispatchAlbumPush(
   webPushAppOrigin: string | undefined,
 ): Promise<AlbumPushSummary> {
   const subscriptions = new Map<string, SubscriptionRow>();
-  const devices = new Map<string, PushDeviceRow>();
+  type AlbumDevice = PushDeviceRow & { user_id: string };
+  const devices = new Map<string, AlbumDevice>();
   let webLookupFailed = false;
   let deviceLookupFailed = false;
   let fcmAccessToken: Promise<string> | undefined;
@@ -182,7 +186,15 @@ async function dispatchAlbumPush(
       const subscriptionIds = [...new Set(rows.map((row) => row.subscription_id).filter((id): id is string => typeof id === "string"))];
       const deviceIds = [...new Set(rows.map((row) => row.device_id).filter((id): id is string => typeof id === "string"))];
       const web = await selectSubscriptions(supabaseUrl, secretKey, subscriptionIds);
-      const native = await selectPushDevices(supabaseUrl, secretKey, deviceIds);
+      // Album retirement needs the observed owner as well as the sent token.
+      let native: { ok: boolean; data: AlbumDevice[] } = { ok: true, data: [] };
+      if (deviceIds.length) {
+        const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
+        url.searchParams.set("select", "id,user_id,token,provider,enabled,revoked_at,app_version");
+        url.searchParams.set("id", `in.(${deviceIds.join(",")})`);
+        const response = await restFetch(url, secretKey);
+        native = { ok: response.ok, data: response.ok ? await response.json() as AlbumDevice[] : [] };
+      }
       webLookupFailed = !web.ok;
       deviceLookupFailed = !native.ok;
       if (web.ok) for (const item of web.data) subscriptions.set(item.id, item);
@@ -207,61 +219,78 @@ async function dispatchAlbumPush(
       });
       return response.ok && await response.json() === true;
     },
-    send: async (row, payload) => {
+    prepare: async (row, payload) => {
       if (row.subscription_id) {
         if (webLookupFailed) return { outcome: "release", error: "subscription_query_failed" };
-        const subscription = subscriptions.get(row.subscription_id);
-        if (!subscription || subscription.is_active === false) return { outcome: "gone", error: "subscription_missing" };
-        const safe = safePayload(payload);
-        try {
-          const topic = await createWebPushTopic(safe.tag);
-          await webpush.sendNotification(
-            { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
-            JSON.stringify(buildDeclarativeWebPushPayload(safe, webPushAppOrigin)),
-            { TTL: 60 * 60 * 24, urgency: getWebPushUrgency(safe.kind), ...(topic ? { topic } : {}) },
-          );
-          return { outcome: "sent" };
-        } catch (error) {
-          const status = typeof error === "object" && error ? (error as { statusCode?: number }).statusCode : undefined;
-          const reason = readWebPushErrorReason(error);
-          if (isPermanentWebPushSubscriptionError(status, reason)) {
-            await patchRow(supabaseUrl, secretKey, "push_subscriptions", subscription.id, {
-              is_active: false, updated_at: new Date().toISOString(),
-            });
-            return { outcome: "gone", error: `webpush:${status ?? "unknown"}` };
+        const descriptor = snapshotWebPushDescriptor(subscriptions.get(row.subscription_id));
+        if (!descriptor) return { outcome: "release", error: "subscription_missing" };
+        const tag = `message:chat:${payload.chatId}`;
+        const topic = await createWebPushTopic(tag);
+        return { send: async freshPayload => {
+          const safe = safePayload({ ...freshPayload, tag });
+          try {
+            await webpush.sendNotification(
+              { endpoint: descriptor.endpoint, keys: { p256dh: descriptor.p256dh, auth: descriptor.auth } },
+              JSON.stringify(buildDeclarativeWebPushPayload(safe, webPushAppOrigin)),
+              { TTL: 60 * 60 * 24, urgency: getWebPushUrgency(safe.kind), ...(topic ? { topic } : {}) },
+            );
+            return { outcome: "sent" };
+          } catch (error) {
+            const status = typeof error === "object" && error ? (error as { statusCode?: number }).statusCode : undefined;
+            const reason = readWebPushErrorReason(error);
+            if (isPermanentWebPushSubscriptionError(status, reason)) {
+              const retirement = new URL("/rest/v1/push_subscriptions", supabaseUrl);
+              for (const key of ["id", "user_id", "endpoint", "p256dh", "auth"] as const) {
+                retirement.searchParams.set(key, `eq.${descriptor[key]}`);
+              }
+              await restFetch(retirement, secretKey, { method: "PATCH",
+                body: JSON.stringify({ is_active: false, updated_at: new Date().toISOString() }) });
+              return { outcome: "gone", error: `webpush:${status ?? "unknown"}` };
+            }
+            return { outcome: "retry", error: `webpush:${status ?? "unknown"}` };
           }
-          return { outcome: "retry", error: `webpush:${status ?? "unknown"}` };
-        }
+        } };
       }
 
       if (deviceLookupFailed) return { outcome: "release", error: "device_query_failed" };
       const device = row.device_id ? devices.get(row.device_id) : undefined;
-      if (!device || !device.enabled || device.revoked_at || device.provider !== "fcm") {
-        return { outcome: "gone", error: "device_inactive" };
+      if (!device || device.provider !== "fcm" || typeof device.token !== "string" || !device.token ||
+        typeof device.user_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(device.user_id)) {
+        return { outcome: "release", error: "device_missing" };
       }
+      const descriptor = Object.freeze({ id: device.id, user_id: device.user_id, token: device.token,
+        provider: device.provider, app_version: device.app_version ?? null });
       const config = readFcmConfig();
       if (!config) return { outcome: "release", error: "fcm_credentials_pending" };
       try {
         fcmAccessToken ??= getGoogleAccessToken(config);
         const accessToken = await fcmAccessToken;
-        const response = await fetch(
-          `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`,
-          {
-            method: "POST",
-            signal: AbortSignal.timeout(15000),
-            headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-            body: JSON.stringify(buildFcmMessage(payload, device.token, device.app_version)),
-          },
-        );
-        if (response.ok) return { outcome: "sent" };
-        const body = await readJson(response);
-        if (isPermanentFcmTokenError(response.status, body)) {
-          await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
-            enabled: false, revoked_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-          });
-          return { outcome: "gone", error: `fcm:${response.status}` };
-        }
-        return { outcome: "retry", error: `fcm:${response.status}:${readFcmErrorStatus(body)}`.slice(0, 160) };
+        return { send: async freshPayload => {
+          try {
+            const response = await fetch(
+              `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`,
+              {
+                method: "POST",
+                signal: AbortSignal.timeout(15000),
+                headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+                body: JSON.stringify(buildFcmMessage(freshPayload, descriptor.token, descriptor.app_version)),
+              },
+            );
+            if (response.ok) return { outcome: "sent" };
+            const body = await readJson(response);
+            if (isPermanentFcmTokenError(response.status, body)) {
+              const retirement = new URL("/rest/v1/user_push_devices", supabaseUrl);
+              for (const key of ["id", "user_id", "token", "provider"] as const) {
+                retirement.searchParams.set(key, `eq.${descriptor[key]}`);
+              }
+              retirement.searchParams.set("app_version", descriptor.app_version === null ? "is.null" : `eq.${descriptor.app_version}`);
+              await restFetch(retirement, secretKey, { method: "PATCH",
+                body: JSON.stringify({ enabled: false, revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() }) });
+              return { outcome: "gone", error: `fcm:${response.status}` };
+            }
+            return { outcome: "retry", error: `fcm:${response.status}:${readFcmErrorStatus(body)}`.slice(0, 160) };
+          } catch { return { outcome: "retry", error: "fcm:network_error" }; }
+        } };
       } catch {
         fcmAccessToken = undefined;
         return { outcome: "retry", error: "fcm:network_error" };
@@ -360,7 +389,7 @@ async function claimOutbox(
 async function selectSubscriptions(supabaseUrl: string, secretKey: string, ids: string[]) {
   if (ids.length === 0) return { ok: true as const, data: [] as SubscriptionRow[] };
   const url = new URL("/rest/v1/push_subscriptions", supabaseUrl);
-  url.searchParams.set("select", "id,endpoint,p256dh,auth,is_active");
+  url.searchParams.set("select", "id,user_id,endpoint,p256dh,auth,is_active");
   url.searchParams.set("id", `in.(${ids.join(",")})`);
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: 500, body: await summarizeResponse(response) };
@@ -372,14 +401,18 @@ async function recheckWebPushDelivery(
   secretKey: string,
   outboxId: string,
   claimToken: string,
+  subscriptionId: string,
+  subscriptionFingerprint: string,
 ): Promise<{ ok: true; status: WebPushDeliveryStatus } | { ok: false }> {
-  const url = new URL("/rest/v1/rpc/push_outbox_delivery_recheck", supabaseUrl);
+  const url = new URL("/rest/v1/rpc/push_outbox_delivery_recheck_bound", supabaseUrl);
   const response = await restFetch(url, secretKey, {
     method: "POST",
     headers: { prefer: "return=representation" },
     body: JSON.stringify({
       p_outbox_id: outboxId,
       p_claim_token: claimToken,
+      p_subscription_id: subscriptionId,
+      p_subscription_fingerprint: subscriptionFingerprint,
     }),
   });
   if (!response.ok) return { ok: false };
@@ -387,7 +420,8 @@ async function recheckWebPushDelivery(
   const status = await response.json() as unknown;
   if (
     status !== "deliver" && status !== "foreground" && status !== "read" &&
-    status !== "subscription_inactive" && status !== "not_eligible" && status !== "claim_lost"
+    status !== "subscription_inactive" && status !== "not_eligible" && status !== "claim_lost" &&
+    status !== "subscription_changed"
   ) {
     return { ok: false };
   }
@@ -699,11 +733,17 @@ async function deliver(
   subscription: SubscriptionRow | undefined,
   webPushAppOrigin: string | undefined,
 ): Promise<"sent" | "failed" | "pruned" | "deferred"> {
+  const descriptor = snapshotWebPushDescriptor(subscription);
+  if (!descriptor || typeof row.subscription_id !== "string" || descriptor.id !== row.subscription_id.toLowerCase()) return "failed";
   let legacyPayload: SafeWebPushPayload;
   let topic: string | null;
+  let descriptorFingerprint: string;
+  let providerPayload: string;
   try {
     legacyPayload = safePayload(row.payload);
     topic = await createWebPushTopic(legacyPayload.tag);
+    descriptorFingerprint = await webPushDescriptorFingerprint(descriptor);
+    providerPayload = JSON.stringify(buildDeclarativeWebPushPayload(legacyPayload, webPushAppOrigin));
   } catch (error) {
     await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       attempt_count: row.attempt_count + 1,
@@ -713,11 +753,18 @@ async function deliver(
     });
     return "failed";
   }
+  const providerOptions = {
+    TTL: 60 * 60 * 24,
+    urgency: getWebPushUrgency(legacyPayload.kind),
+    ...(topic ? { topic } : {}),
+  };
   const eligibility = await recheckWebPushDelivery(
     supabaseUrl,
     secretKey,
     row.id,
     claimToken,
+    descriptor.id,
+    descriptorFingerprint,
   );
   if (!eligibility.ok) return "failed";
 
@@ -726,34 +773,19 @@ async function deliver(
   if (
     deliveryStatus === "read" || deliveryStatus === "subscription_inactive" ||
     deliveryStatus === "not_eligible" ||
-    deliveryStatus === "claim_lost"
+    deliveryStatus === "claim_lost" || deliveryStatus === "subscription_changed"
   ) {
-    return "pruned";
-  }
-
-  if (!subscription || subscription.is_active === false) {
-    await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
-      suppressed_at: new Date().toISOString(),
-      suppression_reason: "subscription_inactive",
-      claim_token: null,
-      claimed_until: null,
-      last_error: "subscription_missing",
-    });
     return "pruned";
   }
 
   try {
     await webpush.sendNotification(
       {
-        endpoint: subscription.endpoint,
-        keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+        endpoint: descriptor.endpoint,
+        keys: { p256dh: descriptor.p256dh, auth: descriptor.auth },
       },
-      JSON.stringify(buildDeclarativeWebPushPayload(legacyPayload, webPushAppOrigin)),
-      {
-        TTL: 60 * 60 * 24,
-        urgency: getWebPushUrgency(legacyPayload.kind),
-        ...(topic ? { topic } : {}),
-      },
+      providerPayload,
+      providerOptions,
     );
     await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: new Date().toISOString(),
@@ -766,9 +798,14 @@ async function deliver(
     const status = typeof error === "object" && error ? (error as { statusCode?: number }).statusCode : undefined;
     const reason = readWebPushErrorReason(error);
     if (isPermanentWebPushSubscriptionError(status, reason)) {
-      await patchRow(supabaseUrl, secretKey, "push_subscriptions", subscription.id, {
-        is_active: false,
-        updated_at: new Date().toISOString(),
+      // A failure for the sent descriptor cannot retire a later replacement.
+      const retirement = new URL("/rest/v1/push_subscriptions", supabaseUrl);
+      for (const key of ["id", "user_id", "endpoint", "p256dh", "auth"] as const) {
+        retirement.searchParams.set(key, `eq.${descriptor[key]}`);
+      }
+      await restFetch(retirement, secretKey, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: false, updated_at: new Date().toISOString() }),
       });
       await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
         suppressed_at: new Date().toISOString(),
