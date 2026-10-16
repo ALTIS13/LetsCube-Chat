@@ -1,8 +1,8 @@
 # Topic Notification Overrides: Execution
 
 Owner: coordinator. Branch:codex/topic-alerts-20261016, base05f72b25 in the
-main-based android-current worktree. Stage:Task1 policy/scope source complete;
-Task2 durable CAS/RLS and actual PostgreSQL17 concurrency next. Item77 remains
+main-based android-current worktree. Stage:Task2 CAS/RLS draft source accepted;
+Task3 terminal delivery suppression next. Item77 remains
 OPEN, no reachable control or released feature. No production SQL/native release.
 [Fullstack plan](../superpowers/plans/2026-10-16-topic-notification-overrides.md).
 
@@ -14,10 +14,46 @@ share one key; missing, archived, foreign, unread or differently owned topic
 snapshots cannot become general. Reader/account epoch is part of snapshot identity.
 The module provides display identity/policy, not delivery authority.
 
-Seven literal cases pass after observed missing-contract RED; seven compiled
+Eight literal cases pass after observed missing-contract RED; seven compiled
 rule mutants break their independent expected values. Existing parent mute's
 expiry/permanent precedence is retained as a real positive/negative control.
-No shipping consumer uses this new contract yet; this is not fullstack proof.
+General now also needs an owned snapshot: null and actual general both refuse
+an archived general row. No shipping consumer uses this contract yet.
+
+## Persistence Draft and PG17 Evidence
+
+The proposal adds own-access SELECT RLS and authenticated RPC-only writes,
+server-derived ownership and canonical scope, bounded monotonic revisions and
+explicit inherit rows. Concurrent first writers serialize on account/chat; stale
+CAS returns the current choice without retry. The actual captured producer gate
+retains independent restrictions; enabled bypasses only parent mute. Runtime is
+default-off; rollback retains rows and disabled enforcement while stopping the
+enabled bypass and new writes. This is a DRAFT, not a production migration.
+
+Final DB/concurrency run:33/33, including12 genuine PG17.6 cases and6 compiled
+security-omission controls. The isolated synthetic fixture uses the same immutable
+PG17 image, network none, no published ports, read-only root and tmpfs only;
+there are no production volumes. Two distinct backend PIDs prove advisory/row
+waits, stale CAS, rollback, repeatable-read refusal, session retirement during a
+wait, chat classification, membership removal/rejoin and topic archive/delete.
+PGlite covers actual captured visibility/DND/global/category policy, timed parent
+expiry, message-topic edits, general aliases, read filtering, direct-write refusal,
+revision exhaustion and rollback mode. It is not a full-schema restore.
+
+The native test driver initially lost role/JWT by opening a new connection for
+each statement. A literal context/role/error-recovery test went RED, then GREEN
+after a persistent control connection; earlier results are not treated as full
+acceptance. Additional real defects were reproduced before repair: stale session
+after a barrier wait, pre-wait chat eligibility, archived-general alias bypass,
+and archived/deleted/reclassified preferences being returned as available.
+Self-check omissions of private RLS, definer, search path and read-RPC ACL also
+went RED before stronger owner/config/ACL checks. Kub typecheck passes.
+
+Task2's parent/message-admission coupling is still dependent on Task3; canonical
+CLI-generated migration/mirror registration waits for the composed candidate.
+No SQL was applied to production, no client toggle is mounted and no main push
+or native release took place. Fullstack, old-client and native acceptance remain
+separate gates. Test logs live in ignored output/topic-alert-task2.log.
 
 ## Read-Only Preflight
 
@@ -34,7 +70,7 @@ real independent sessions. No full-dump restore or D-342 acceptance is inferred.
 
 ## Remaining Gates
 
-Tasks2-7 remain open: persisted own-account CAS; terminal suppression across all
+Task2 delivery coupling and Tasks3-7 remain open: terminal suppression across all
 dispatch paths; client ownership/sound/Windows without feed loss; actual
 fullstack/migration/rollback/native compatibility; then reachable UI and release.
 An old embedded/foreground client ignores new policy fields. A refused native

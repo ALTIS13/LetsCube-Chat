@@ -1132,6 +1132,35 @@ export interface Database {
           }
         ]
       }
+      topic_notification_preferences: {
+        Row: {
+          user_id: string
+          chat_id: string
+          scope_key: string
+          mode: 'inherit' | 'enabled' | 'disabled'
+          revision: number
+          updated_at: string
+        }
+        // Writes are RPC-only; identity, revision and time are server-owned.
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "topic_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "topic_notification_preferences_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       bans: {
         Row: {
           id: string
@@ -1477,6 +1506,19 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      topic_notification_preferences_read: {
+        Args: { p_chat_id: string }
+        Returns: Json
+      }
+      topic_notification_preference_set: {
+        Args: {
+          p_chat_id: string
+          p_topic_id: string | null
+          p_mode: 'inherit' | 'enabled' | 'disabled'
+          p_expected_revision: number
+        }
+        Returns: Json
+      }
       // Manually maintained until `supabase gen types typescript` is wired
       // into the project. Mirrors the SECURITY DEFINER RPC declared in
       // `.migration-backup/supabase/migrations/20260504_roles_admin.sql`.

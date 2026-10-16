@@ -39,11 +39,15 @@ export function canonicalTopicNotificationScope(
   snapshot: TopicNotificationTopicSnapshot | null,
 ): string | null {
   if (!scope.userId || !scope.chatId || !Number.isSafeInteger(scope.accountEpoch) || scope.accountEpoch < 0) return null;
-  if (scope.topicId === null) return "general";
-  if (!scope.topicId || !snapshot ||
+  if (!snapshot ||
     snapshot.userId !== scope.userId ||
     snapshot.accountEpoch !== scope.accountEpoch ||
     snapshot.chatId !== scope.chatId || !Array.isArray(snapshot.topics)) return null;
+  if (scope.topicId === null) {
+    return snapshot.topics.some(t => t.chat_id === scope.chatId && t.is_general === true && t.archived !== false)
+      ? null : "general";
+  }
+  if (!scope.topicId) return null;
   const topic = snapshot.topics.find(topic =>
     topic.id === scope.topicId && topic.chat_id === scope.chatId && topic.archived === false &&
     typeof topic.is_general === "boolean",

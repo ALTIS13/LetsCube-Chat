@@ -59,10 +59,20 @@ test("temporary parent mute expires for inherit while an explicit child disable 
 
 test("null and actual same-chat general topic share one preference key", async () => {
   const { canonicalTopicNotificationScope: canonical } = await subject();
-  assert.equal(canonical({ ...scope, topicId: null }, null), "general");
+  assert.equal(canonical({ ...scope, topicId: null }, snapshot), "general");
   assert.equal(canonical({ ...scope, topicId: "topic-general" }, snapshot), "general");
   assert.equal(canonical(scope, snapshot), "topic-a");
   assert.equal(canonical({ ...scope, topicId: "general" }, snapshot), null);
+});
+
+test("general aliases refuse an archived general and require an owned snapshot",async()=>{
+  const {canonicalTopicNotificationScope:canonical}=await subject();
+  const archivedGeneral={...snapshot,topics:topics.map(t=>({...t,archived:t.is_general||t.archived}))};
+  assert.equal(canonical({...scope,topicId:null},archivedGeneral),null);
+  assert.equal(canonical({...scope,topicId:"topic-general"},archivedGeneral),null);
+  assert.equal(canonical({...scope,topicId:null},null),null);
+  assert.equal(canonical({...scope,topicId:null},{...snapshot,accountEpoch:8}),null);
+  assert.equal(canonical({...scope,topicId:null},{...snapshot,topics:[]}),"general");
 });
 
 test("archived missing foreign or unread topics cannot silently select general", async () => {
