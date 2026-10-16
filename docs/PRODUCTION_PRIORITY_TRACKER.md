@@ -10,11 +10,13 @@ does not close D-335 or release readable cards. Updated SDK17s/Javac/signature/D
 AndroidTest now passes actual isolated Realme Settings none -> sender -> message
 -> none and logout/native retirement; independent server retirement, exact cleanup
 and protected state/power restoration pass. Current-card final publication ordering
-is source-accepted24/24, adjacent125/125 and reviewed, not a connected native
-publisher. Next: native card render updater, credential/receiver/presenter and OS
+is source-accepted26/26 and reviewed. Inactive native card renderer now passes
+combined292/292, actual SDK34s and independent review. Next: existing-vault load,
+credential consumption, ordinary Auth/choice lifecycle and connected receiver/OS
 acceptance. Keep SDK13-field/identity12 calibration and original r1 receipts; do
 not replay passing Settings or unchanged transport tests.
-[Current actual evidence](operations/2026-10-16-native-preview-choice-and-card-publication.md).
+[Current evidence](operations/2026-10-16-native-preview-publisher.md) and
+[ordered remaining connections](operations/2026-10-16-native-preview-runtime-next.md).
 
 **Active priority, 2026-10-15 19:56 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
@@ -4205,6 +4207,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     provider payloads are unchanged. Native credential/choice and current-card
     publication plus real OS/privacy acceptance remain required; D-335 stays open.
     [Current source and next connection](operations/2026-10-16-readable-notification-lookup.md).
+
+    **2026-10-16 renderer continuation:** inactive current-card publisher and
+    immutable parsed content tuple pass combined292/292, actual SDK34s and frozen
+    independent review. Original PendingIntent/generation/channel/time and generic
+    publicVersion retained; no second alert, expired/retired/read/replaced content
+    refused. Main receiver design uses bounded lookup before first publication,
+    not a late upgrade that can recreate a swiped card. Existing-vault credential
+    consumption, ordinary Auth/choice lifecycle and real OS acceptance remain;
+    protocol0 and D-335 OPEN. [Renderer evidence](operations/2026-10-16-native-preview-publisher.md)
+    and [ordered remaining work](operations/2026-10-16-native-preview-runtime-next.md).
 
     **2026-10-16 updated Realme acceptance:** current repaired AndroidTest,
     actual SDK17s/Javac/signature/DEX and fresh host metadata pass. One actual

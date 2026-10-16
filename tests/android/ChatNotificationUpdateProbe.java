@@ -6,6 +6,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class ChatNotificationUpdateProbe {
     static final String CHAT="00000000-0000-0000-0000-000000000001";
@@ -53,7 +57,22 @@ public final class ChatNotificationUpdateProbe {
         ChatNotificationCleanup.Owner owner=ChatNotificationCleanup.matches(INSTANCE,1,USER,1);
         ChatNotificationCleanup.Card card=cards.post(NOTICE);
         int[] calls={0};Runnable action=()->calls[0]++;
-        if(scenario.equals("current")){
+        if(scenario.equals("replacement-serialized")){
+            final ChatNotificationCleanup.Card before=card;
+            CountDownLatch snapshot=new CountDownLatch(1),release=new CountDownLatch(1);
+            AtomicBoolean updated=new AtomicBoolean();AtomicReference<Throwable> error=new AtomicReference<>();
+            cards.snapshot=()->{snapshot.countDown();try{check(release.await(3,TimeUnit.SECONDS),"RELEASE_CONTROL");}catch(InterruptedException e){throw new AssertionError(e);}};
+            Thread updating=new Thread(()->{try{updated.set(update(owner,before,cards,action));}catch(Throwable e){error.set(e);}});
+            Thread replacement=new Thread(()->cards.post(USER));
+            updating.start();check(snapshot.await(3,TimeUnit.SECONDS),"SNAPSHOT_CONTROL");replacement.start();
+            boolean blocked=false;long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(3);
+            try{
+                while(replacement.isAlive()&&System.nanoTime()<until){if(replacement.getState()==Thread.State.BLOCKED){blocked=true;break;}Thread.yield();}
+            }finally{release.countDown();updating.join(3000);replacement.join(3000);}
+            check(blocked,"REPLACEMENT_WAITS_FOR_CURRENT_PUBLICATION");
+            check(!updating.isAlive()&&!replacement.isAlive()&&error.get()==null&&updated.get()&&calls[0]==1,"SERIALIZED_PUBLICATION_COMPLETES");
+            check(cards.visible.size()==1&&USER.equals(cards.visible.get(0).notificationId),"REPLACEMENT_REMAINS_LATEST");
+        }else if(scenario.equals("current")){
             check(update(owner,card,cards,action),"CURRENT_CARD_UPDATED");
             check(calls[0]==1&&cards.read(TAG).generation==card.generation,"NO_NEW_GENERATION");
         }else if(scenario.equals("unknown-effect")){

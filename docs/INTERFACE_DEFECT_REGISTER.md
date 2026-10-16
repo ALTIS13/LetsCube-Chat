@@ -24889,6 +24889,16 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**2026-10-16 renderer continuation:** inactive native current-card renderer now
+passes combined292/292, actual isolated SDK34s and independent frozen review.
+Exact parsed recipient/card tuple, original PendingIntent/generation/channel/time,
+quiet update and generic publicVersion are checked. This is presentation source,
+not background credential authority or OS proof. Main delivery should resolve
+content before initial notify; an OS swipe is not serialized by an app lock.
+Existing-vault credential consumption, ordinary lifecycle and connected receiver/
+OS acceptance remain. Protocol0 and OPEN remain.
+[Renderer and current next action](operations/2026-10-16-native-preview-publisher.md).
+
 **2026-10-16 updated actual acceptance:** repaired AndroidTest built SDK17s with
 fresh Javac, QA signature and actual DEX. One isolated Realme pointer-driven
 Settings cycle none -> sender -> message -> none, native retirement and logout

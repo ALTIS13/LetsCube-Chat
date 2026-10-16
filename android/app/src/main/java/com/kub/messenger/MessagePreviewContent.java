@@ -21,10 +21,13 @@ final class MessagePreviewContent {
     private static final Pattern TIMESTAMP = Pattern.compile("([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.([0-9]{1,9}))?(Z|[+-](?:0[0-9]|1[0-8]):[0-5][0-9])");
     private static final String GENERIC = "\u041d\u043e\u0432\u043e\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435";
     final String title, body, level;
+    final String recipient, notification, chat, message;
     final long expiresAt;
 
-    private MessagePreviewContent(String title, String body, String level, long expiresAt) {
+    private MessagePreviewContent(String title, String body, String level, long expiresAt,
+            String recipient, String notification, String chat, String message) {
         this.title = title; this.body = body; this.level = level; this.expiresAt = expiresAt;
+        this.recipient = recipient; this.notification = notification; this.chat = chat; this.message = message;
     }
 
     static MessagePreviewContent parse(Object data, String recipient, String session, String device,
@@ -49,7 +52,8 @@ final class MessagePreviewContent {
             if (parsed == null) return null;
             long expiry = parsed;
             if (expiry <= now || expiry > now + 15_000) return null;
-            return new MessagePreviewContent((String) title, (String) body, (String) level, expiry);
+            return new MessagePreviewContent((String) title, (String) body, (String) level, expiry,
+                recipient, notification, chat, message);
         } catch (RuntimeException refused) { return null; }
     }
 

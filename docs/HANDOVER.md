@@ -6,13 +6,16 @@ Settings cycle none -> sender -> message -> none, native retirement and logout.
 Independent server retirement, exact three-package absence, primary20/test/users
 and original power restoration pass. This is automated PERSON_CHOICE_NOT_PROVEN,
 not readable OS-card acceptance. Current-card final publication ordering is
-source-accepted24/24, adjacent125/125 and reviewed; durable/cache divergence and
-read-retirement races refuse. Next: native card render updater, credential/choice
-lifecycle and actual receiver/presenter/OS acceptance. Do not replay passing
+source-accepted26/26 and reviewed; durable/cache divergence and read-retirement
+races refuse. Native readable-card renderer is now source/SDK accepted: final
+combined292/292, actual SDK34s and independent review; no runtime caller. Next:
+load existing vault/consume credential, ordinary Auth/choice lifecycle, then
+reserve-before-lookup initial delivery and actual OS acceptance. Do not replay passing
 Settings, lookup251/251 or unchanged transport checks. Keep SDK13/identity12 and
 original r1 records immutable. Protocol0/generic/richfalse remain; no release,
 provider, migration or deployment change. Preserve foreign sidebar/search and
-private Android overlay. [Current evidence and next action](operations/2026-10-16-native-preview-choice-and-card-publication.md).
+private Android overlay. [Current evidence](operations/2026-10-16-native-preview-publisher.md)
+and [ordered next connections](operations/2026-10-16-native-preview-runtime-next.md).
 
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned

@@ -18,7 +18,7 @@ function compile(target,text){
 function cleanup(target){const actual=realpathSync(target);assert.ok(actual.startsWith(realpathSync(tmpdir())+sep)&&actual===resolve(target));rmSync(actual,{recursive:true});}
 test.before(()=>{directory=mkdtempSync(join(tmpdir(),'letscube-current-card-'));compile(directory,source);});
 test.after(()=>{if(directory)cleanup(directory);});
-for(const name of ['current','durable-missing','durable-different','durable-generation','replaced','lagging-generation','dismissed','duplicate','retired','retire-snapshot','read','queued-read','read-failure','new-after-read','wrong-message','legacy','summary','unknown-effect'])test('actual current-card publication: '+name,()=>{
+for(const name of ['replacement-serialized','current','durable-missing','durable-different','durable-generation','replaced','lagging-generation','dismissed','duplicate','retired','retire-snapshot','read','queued-read','read-failure','new-after-read','wrong-message','legacy','summary','unknown-effect'])test('actual current-card publication: '+name,()=>{
   const result=spawnSync(binary('java'),['-cp',directory,'com.kub.messenger.ChatNotificationUpdateProbe',name],{encoding:'utf8',timeout:10000});
   assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.trim(),'PASS '+name);
 });
@@ -29,6 +29,8 @@ for(const [before,after,scenario] of [
   ['if (matches != 1 || owner != expected ||','if (matches != 1 ||','retire-snapshot'],
   ['if (matches != 1 || owner != expected ||','if (owner != expected ||','dismissed'],
   ['card.generation != expectedCard.generation','false','lagging-generation'],
+  ['if (expected == null || cards == null || posting == null || !tracked(expectedCard)) return false;\n        synchronized (CARDS) {',
+    'if (expected == null || cards == null || posting == null || !tracked(expectedCard)) return false;\n        {','replacement-serialized'],
 ])test('compiled omission control: '+scenario,()=>{
   assert.equal(source.split(before).length,2);
   const target=mkdtempSync(join(tmpdir(),'letscube-current-card-mutant-'));
@@ -36,6 +38,6 @@ for(const [before,after,scenario] of [
     compile(target,source.replace(before,after));
     const result=spawnSync(binary('java'),['-cp',target,'com.kub.messenger.ChatNotificationUpdateProbe',scenario],{encoding:'utf8',timeout:10000});
     assert.equal(result.status,1,'COMPILED_BEHAVIORAL_FAILURE');
-    assert.match(result.stderr,/^Exception in thread "main" java.lang.AssertionError: STALE_OR_READ_CARD_NOT_UPDATED/);
+    assert.match(result.stderr,new RegExp('^Exception in thread "main" java.lang.AssertionError: '+(scenario==='replacement-serialized'?'REPLACEMENT_WAITS_FOR_CURRENT_PUBLICATION':'STALE_OR_READ_CARD_NOT_UPDATED')));
   }finally{cleanup(target);}
 });
