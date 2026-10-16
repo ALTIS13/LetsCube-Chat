@@ -11,11 +11,20 @@ async function nativeShell(page: Page, supported = false) {
     const wire = window as unknown as Record<string, unknown>;
     wire.androidBridge = { postMessage() {} };
     wire.Capacitor = {
-      PluginHeaders: supported ? [{ name: "MessagePreviews", methods: [{ name: "getCapabilities", rtype: "promise" }] }] : [],
+      PluginHeaders: supported ? [{ name: "MessagePreviews", methods: ["getCapabilities", "beginUserChoice", "confirmUserChoice"]
+        .map(name => ({ name, rtype: "promise" })).concat([{ name: "addListener", rtype: "callback" }, { name: "removeListener", rtype: "promise" }]) }] : [],
+      nativeCallback() { return "fixture-preview-listener"; },
       nativePromise: async (plugin: string, method: string) => {
-        if (plugin !== "MessagePreviews" || method !== "getCapabilities") throw Error("unexpected native boundary");
+        if (plugin !== "MessagePreviews") throw Error("unexpected native boundary");
+        if (method === "removeListener") return {};
+        if (method === "beginUserChoice" || method === "confirmUserChoice") return { applied: true };
+        if (method !== "getCapabilities") throw Error("unexpected native method");
         await wire.previewNativeGate;
-        return { protocol: 1, recipientId: owner, recipientSessionId: session, deviceId: device };
+        const storePath = "/src/store/app.store.ts";
+        const { useAppStore } = await import(storePath);
+        return { protocol: 1, recipientId: owner, recipientSessionId: session, deviceId: device,
+          contextId: "44444444-4444-4444-8444-000000000001", accountEpoch: useAppStore.getState().accountEpoch,
+          expiresAt: Date.now() + 3_600_000 };
       },
     };
     const original = Storage.prototype.setItem;

@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { nativeChatStubs } from "../android/native-chat-stubs.fixture.mjs";
+import { nativeChatStubs, nativeChatGenericPreviewStubs } from "../android/native-chat-stubs.fixture.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const nativeRoot = resolve(root, "android/app/src/main/java/com/kub/messenger");
-const files = ["ChatNotificationCleanup.java", "ChatNotificationIntentStore.java", "ChatNotificationsPlugin.java", "ChatPushNotifications.java", "ChatPushNotificationContract.java"];
+const files = ["ChatNotificationCleanup.java", "ChatNotificationIntentStore.java", "ChatNotificationsPlugin.java", "ChatPushNotifications.java", "ChatPushNotificationContract.java", "MessagePreviewContent.java"];
 const sources = Object.fromEntries(files.map(file => [file, readFileSync(resolve(nativeRoot, file), "utf8").replaceAll("\r\n", "\n")]));
 const home = process.env.CHAT_PUSH_TEST_JDK ?? process.env.JAVA_HOME
   ?? (process.platform === "win32" ? "C:/Program Files/Android/Android Studio/jbr" : null);
@@ -17,7 +17,7 @@ const binary = name => home ? resolve(home, "bin", name + (process.platform === 
 let directory;
 function compile(target, changed = {}) {
   const paths = [];
-  for (const [file, source] of Object.entries(nativeChatStubs)) {
+  for (const [file, source] of Object.entries({...nativeChatStubs, ...nativeChatGenericPreviewStubs})) {
     const path = join(target, "src", file); mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, source); paths.push(path);
   }
   for (const file of files) {
@@ -71,10 +71,10 @@ const mutations = [
   ["ChatNotificationCleanup.java", "read && owner == expected", "read", "retire-during-take", "RETIRED_DURING_SNAPSHOT"],
   ["ChatNotificationCleanup.java", " || nextRevision < revision", "", "stale-binding", "STALE_BINDING_REFUSED"],
   ["ChatPushNotifications.java", "cleanup.putString(ChatNotificationCleanup.EXTRA_NOTIFICATION, notificationId);", "", "producer-read", "CONFIRMED_PRODUCER_CARD_REMOVED"],
-  ["ChatPushNotifications.java", "notification.extras.putLong(ChatNotificationCleanup.EXTRA_GENERATION, generation);", "", "producer-read", "CONFIRMED_PRODUCER_CARD_REMOVED"],
-  ["ChatPushNotifications.java", "boolean tracked = ChatNotificationCleanup.post", "notification.contentIntent = PendingIntent.getActivity(context, event.chatId.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);\n        boolean tracked = ChatNotificationCleanup.post",
+  ["ChatPushNotifications.java", "initial.extras.putLong(ChatNotificationCleanup.EXTRA_GENERATION, generation);", ";", "producer-read", "CONFIRMED_PRODUCER_CARD_REMOVED"],
+  ["ChatPushNotifications.java", "ChatNotificationIntentStore intents = new ChatNotificationIntentStore(context);", "notification.contentIntent = PendingIntent.getActivity(context, event.chatId.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);\n        ChatNotificationIntentStore intents = new ChatNotificationIntentStore(context);",
     "producer-write-failed-same-message", "OLD_TAP_RETAINED"],
-  ["ChatPushNotifications.java", "if (!tracked) {", "if (false) {", "producer-write-failed", "UNTRACKED_GENERIC_DELIVERED"],
+  ["ChatPushNotifications.java", "if (untracked) {", "if (false) {", "producer-write-failed", "UNTRACKED_GENERIC_DELIVERED"],
   ["ChatPushNotifications.java", "notification.extras.remove(key);", "", "producer-write-failed", "UNTRACKED_WITHOUT_AUTHORITY"],
   ["ChatPushNotifications.java", ' + "/untracked/" + nonce', "", "producer-write-failed", "UNTRACKED_EXACT_DISTINCT_TAP"],
   ["ChatPushNotifications.java", 'String fallbackTag = event.tag + ":untracked:" + nonce;', "String fallbackTag = event.tag;", "producer-write-failed", "UNPERSISTED_CARD_NOT_POSTED"],
@@ -83,7 +83,7 @@ const mutations = [
   ["ChatNotificationCleanup.java", "posted = intents.read(tag);", "posted = null;", "producer-process-restart", "COLD_OWN_CARD_REMOVED"],
   ["ChatNotificationCleanup.java", "revision = 0;", "revision = 0; latestPosts.clear();", "producer-rotation-read-failed", "CONFIRMED_PRODUCER_CARD_REMOVED"],
   ["ChatNotificationCleanup.java", "if (!matchesLatest(card, cards.intents())) continue;", "", "producer-os-missing", "OS_MISSING_INTENT_RETAINED"],
-  ["ChatNotificationCleanup.java", "if (!intents.write(tag, intent)) return false;", "intents.write(tag, intent);", "producer-write-failed", "UNPERSISTED_CARD_NOT_POSTED"],
+  ["ChatNotificationCleanup.java", "if (!intents.write(tag, intent)) return null;", "intents.write(tag, intent);", "producer-write-failed", "UNPERSISTED_CARD_NOT_POSTED"],
   ["ChatNotificationIntentStore.java", 'return preferences.edit().putString(tag + ":notification", intent.notificationId)\n                .putString(tag + ":message", intent.messageId).putLong(tag + ":generation", intent.generation).commit();',
     "return true;", "producer-process-restart", "COLD_OWN_CARD_REMOVED"],
   ["ChatNotificationsPlugin.java", "number == Math.rint(number)", "true", "wire-fractional", "FRACTIONAL_REFUSED"],

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -117,9 +119,16 @@ test("Android phone activity stays in portrait orientation", () => {
   assert.match(manifest, /android:screenOrientation="portrait"/);
 });
 
-test("Android production debug build reads canonical release metadata", () => {
-  assert.deepEqual(readAndroidReleaseMetadata(process.cwd()), {
-    versionName: "0.1.13",
-    versionCode: 14,
-  });
+test("Android production build reads metadata from the selected checkout", () => {
+  const root = fs.mkdtempSync(join(tmpdir(), "letscube-release-metadata-"));
+  try {
+    fs.mkdirSync(join(root, "android"));
+    fs.writeFileSync(join(root, "android/version.properties"), "VERSION_NAME=7.8.9\nVERSION_CODE=765\n");
+    assert.deepEqual(readAndroidReleaseMetadata(root), {
+      versionName: "7.8.9",
+      versionCode: 765,
+    });
+  } finally {
+    fs.rmSync(root, {recursive:true, force:true});
+  }
 });

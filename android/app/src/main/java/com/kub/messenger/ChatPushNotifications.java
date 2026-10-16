@@ -71,8 +71,7 @@ final class ChatPushNotifications {
         intent.putExtra("chat_id", event.chatId);
         intent.putExtra("message_id", event.messageId);
         intent.putExtra("tag", event.tag);
-        for (String key : new String[] {"notification_id", "sender_kind", "sender_id", "bot_id", "sender_name",
-            "sender_avatar_url", "kub_message_type", "preview", "group_tag"}) {
+        for (String key : new String[] {"notification_id", "sender_kind", "sender_id", "bot_id", "kub_message_type", "group_tag"}) {
             String value = data.get(key);
             if (value != null) intent.putExtra(key, value);
         }
@@ -97,13 +96,26 @@ final class ChatPushNotifications {
             .addExtras(cleanup)
             .setAutoCancel(true)
             .build();
-        boolean tracked = ChatNotificationCleanup.post(new ChatNotificationIntentStore(context), event.tag, notificationId, event.messageId, generation -> {
-            notification.contentIntent = PendingIntent.getActivity(context, event.chatId.hashCode(), intent,
+        MessagePreviewNotification.Posting posting = (generation, content) -> {
+            Notification initial = initialNotification(context, notification, content, event.title, event.body);
+            initial.contentIntent = PendingIntent.getActivity(context, event.chatId.hashCode(), intent,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-            notification.extras.putLong(ChatNotificationCleanup.EXTRA_GENERATION, generation);
-            manager.notify(event.tag, 0, notification);
-        });
-        if (!tracked) {
+            if (generation > 0) initial.extras.putLong(ChatNotificationCleanup.EXTRA_GENERATION, generation);
+            return () -> manager.notify(event.tag, 0, initial);
+        };
+        ChatNotificationIntentStore intents = new ChatNotificationIntentStore(context);
+        boolean untracked;
+        if (notificationId != null) {
+            MessagePreviewNotification.Result result = MessagePreviewNotification.receive(context, intents, event.tag,
+                notificationId, event.chatId, event.messageId, posting);
+            untracked = result == MessagePreviewNotification.Result.UNTRACKED;
+        } else {
+            // Legacy generic payloads have no content-lookup or initial reservation identity.
+            Runnable prepared = posting.prepare(0, null);
+            untracked = !ChatNotificationCleanup.post(intents, event.tag, null, event.messageId,
+                generation -> prepared.run());
+        }
+        if (untracked) {
             // Preserve generic delivery without aliasing a tracked identity after a durable-write failure.
             String nonce = UUID.randomUUID().toString();
             String fallbackTag = event.tag + ":untracked:" + nonce;
@@ -115,6 +127,23 @@ final class ChatPushNotifications {
                 notification.extras.remove(key);
             }
             manager.notify(fallbackTag, 0, notification);
+        }
+    }
+
+    private static Notification initialNotification(Context context, Notification generic, MessagePreviewContent content,
+            String genericTitle, String genericBody) {
+        if (content == null) return generic;
+        try {
+            Notification publicVersion = Notification.Builder.recoverBuilder(context, generic.clone())
+                .setContentTitle(genericTitle).setContentText(genericBody)
+                .setStyle(new Notification.BigTextStyle().bigText(genericBody))
+                .setVisibility(Notification.VISIBILITY_PUBLIC).build();
+            return Notification.Builder.recoverBuilder(context, generic.clone())
+                .setContentTitle(content.title).setContentText(content.body)
+                .setStyle(new Notification.BigTextStyle().setBigContentTitle(content.title).bigText(content.body))
+                .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion).build();
+        } catch (RuntimeException unavailable) {
+            return generic;
         }
     }
 }

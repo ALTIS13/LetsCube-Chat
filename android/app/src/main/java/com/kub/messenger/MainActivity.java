@@ -13,9 +13,16 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        if (!BuildConfig.LETSCUBE_QA_MESSAGE_PREVIEW_COMPOSITION && !BuildConfig.LETSCUBE_QA_MESSAGE_PREVIEW_USER_CHOICE) {
+            try { MessagePreviewSession.getOrCreate(getApplication()); }
+            catch (Exception unavailable) { /* Generic push remains available without preview storage. */ }
+        }
+        MessagePreviewForegroundComposition.bootstrap(getApplication());
+        MessagePreviewQaUserChoice.bootstrap(getApplication());
         registerPlugin(VoiceCallsPlugin.class);
         registerPlugin(MediaExportPlugin.class);
         registerPlugin(ChatNotificationsPlugin.class);
+        registerPlugin(MessagePreviewsPlugin.class);
         Intent intent = getIntent();
         if (VoiceCallRuntime.isVoiceIntent(intent)) {
             VoiceCallRuntime.get(this).captureIntent(intent);

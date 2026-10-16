@@ -1,5 +1,18 @@
 # LETSCUBE — handover
 
+**Current resume, 2026-10-16:** coordinator; item76/D-335 Android readable
+notifications. Reviewed ordinary Auth, encrypted choice and once-only receiver
+are integrated on main base80e4069e, not merged from the divergent root branch.
+Actual isolated Realme R4 passes login/Settings/readback and real readable FCM;
+the original notification PendingIntent opens the exact message and read cleanup
+removes its card. Remaining none/logout device proof is in progress after an
+Android15 host foreground-parser refusal. Main-based binding/controller101/101
+and release-tool9/9 pass; earlier source/pixel evidence is reused. Next: finish
+remaining device proof, sign/verify0.1.21/build22 and publish Stable with rollback
+and public-byte proof. Stable remains0.1.20/build21 until observed publication.
+Preserve foreign sidebar/search work and the private version overlay; A063 stays
+excluded. [Evidence and limits](operations/2026-10-16-native-preview-runtime-integration.md).
+
 **Current resume, 2026-10-15 20:42 UTC:** coordinator; shared-web D-365 is
 accepted at main/runtime59f1fe8b: one cancellable message/resource-owned pending
 position for detach and explicit seek, including pending inline handoff. Final

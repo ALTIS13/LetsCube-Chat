@@ -5,6 +5,7 @@ export const nativeChatStubs = {
   "android/content/pm/PackageManager.java": `package android.content.pm; public class PackageManager { public static final int PERMISSION_GRANTED=0; }`,
   "android/os/Build.java": `package android.os; public class Build { public static class VERSION { public static int SDK_INT=34; } }`,
   "android/os/Bundle.java": `package android.os; import java.util.HashMap; public class Bundle extends HashMap<String,Object> {
+    public Bundle(){} public Bundle(Bundle source){super(source);}
     public void putInt(String k,int v){put(k,v);} public void putString(String k,String v){put(k,v);}
     public void putLong(String k,long v){put(k,v);} public long getLong(String k,long fallback){Object v=get(k);return v instanceof Long?(Long)v:fallback;}
     public int getInt(String k,int fallback){Object v=get(k);return v instanceof Integer?(Integer)v:fallback;}
@@ -47,15 +48,22 @@ export const nativeChatStubs = {
       else if((f&FLAG_UPDATE_CURRENT)!=0)p.data=new java.util.HashMap<>(i.extras);
       return p;
     } }`,
-  "android/app/Notification.java": `package android.app; import android.content.Context; import android.os.Bundle;
-    public class Notification { public static final int VISIBILITY_PRIVATE=0,FLAG_GROUP_SUMMARY=512; public static final String CATEGORY_MESSAGE="msg";
-    public Bundle extras=new Bundle(); public int flags; public String title,body; public PendingIntent contentIntent;
-    public static class BigTextStyle { public BigTextStyle bigText(String s){return this;} }
-    public static class Builder { private final Notification n=new Notification();
-    public Builder(Context c){} public Builder(Context c,String channel){}
-    public Builder setSmallIcon(int i){return this;} public Builder setContentTitle(String s){n.title=s;return this;}
-    public Builder setContentText(String s){n.body=s;return this;} public Builder setStyle(BigTextStyle s){return this;}
-    public Builder setCategory(String s){return this;} public Builder setVisibility(int i){return this;}
+  "android/graphics/drawable/Icon.java": `package android.graphics.drawable; public class Icon { public final int resource; public Icon(int i){resource=i;} }`,
+  "android/app/Notification.java": `package android.app; import android.content.Context; import android.os.Bundle; import android.graphics.drawable.Icon;
+    public class Notification { public static final int VISIBILITY_PRIVATE=0,VISIBILITY_PUBLIC=1,FLAG_ONLY_ALERT_ONCE=8,FLAG_GROUP_SUMMARY=512; public static final String CATEGORY_MESSAGE="msg";
+    public Bundle extras=new Bundle(); public int flags,visibility; public long when=System.currentTimeMillis(); public String title,body,channel,bigText,bigTitle; public PendingIntent contentIntent;
+    public Notification publicVersion; public Icon icon; public String getChannelId(){return channel;} public Icon getSmallIcon(){return icon;}
+    public Notification clone(){Notification copy=new Notification();copy.extras=new Bundle(extras);copy.flags=flags;copy.visibility=visibility;copy.when=when;
+      copy.title=title;copy.body=body;copy.channel=channel;copy.contentIntent=contentIntent;copy.publicVersion=publicVersion;copy.icon=icon;copy.bigText=bigText;copy.bigTitle=bigTitle;return copy;}
+    public static class BigTextStyle { String text,title; public BigTextStyle bigText(String s){text=s;return this;} public BigTextStyle setBigContentTitle(String s){title=s;return this;} }
+    public static class Builder { private final Notification n; public static Runnable onRecover=()->{}; public static Notification lastRecovered;
+    public Builder(Context c){n=new Notification();} public Builder(Context c,String channel){this(c);n.channel=channel;}
+    private Builder(Notification source){n=source;} public static Builder recoverBuilder(Context c,Notification source){lastRecovered=source;onRecover.run();return new Builder(source);}
+    public Builder setSmallIcon(int i){n.icon=new Icon(i);return this;} public Builder setSmallIcon(Icon i){n.icon=i;return this;} public Builder setContentTitle(String s){n.title=s;return this;}
+    public Builder setContentText(String s){n.body=s;return this;} public Builder setStyle(BigTextStyle s){n.bigText=s.text;n.bigTitle=s.title;return this;}
+    public Builder setCategory(String s){return this;} public Builder setVisibility(int i){n.visibility=i;return this;}
+    public Builder setWhen(long value){n.when=value;return this;} public Builder setPublicVersion(Notification value){n.publicVersion=value;return this;}
+    public Builder setOnlyAlertOnce(boolean value){if(value)n.flags|=FLAG_ONLY_ALERT_ONCE;else n.flags&=~FLAG_ONLY_ALERT_ONCE;return this;}
     public Builder setContentIntent(PendingIntent p){n.contentIntent=p;return this;} public Builder setAutoCancel(boolean b){return this;}
     public Builder addExtras(Bundle b){n.extras.putAll(b);return this;} public Notification build(){return n;} } }`,
   "android/app/NotificationChannel.java": `package android.app; import android.net.Uri; import android.media.AudioAttributes;
@@ -63,6 +71,7 @@ export const nativeChatStubs = {
     public String getId(){return id;} public int getImportance(){return 3;} public void setLockscreenVisibility(int i){} public void setSound(Uri u,AudioAttributes a){} }`,
   "android/service/notification/StatusBarNotification.java": `package android.service.notification; import android.app.Notification;
     public class StatusBarNotification { private final String tag; private final int id; private final Notification n;
+    public String packageName="com.kub.messenger"; public String getPackageName(){return packageName;}
     public StatusBarNotification(String t,int i,Notification n){tag=t;id=i;this.n=n;} public String getTag(){return tag;}
     public int getId(){return id;} public Notification getNotification(){return n;} }`,
   "android/app/NotificationManager.java": `package android.app; import java.util.*; import android.service.notification.StatusBarNotification;
@@ -96,4 +105,23 @@ export const nativeChatStubs = {
     public void resolve(JSObject r){result=r;} public void reject(String text,String code){error=code;} }`,
   "com/getcapacitor/PluginMethod.java": `package com.getcapacitor; public @interface PluginMethod {}`,
   "com/getcapacitor/annotation/CapacitorPlugin.java": `package com.getcapacitor.annotation; public @interface CapacitorPlugin { String name(); }`,
+};
+
+// Older cleanup/updater probes exercise only generic receipt. Rich receipt has its
+// own actual-entry probe; this explicit boundary avoids substituting vault/HTTP authority.
+export const nativeChatGenericPreviewStubs = {
+  "com/kub/messenger/MessagePreviewNotification.java": `package com.kub.messenger; import android.content.Context;
+    final class MessagePreviewNotification {
+      enum Result { PUBLISHED, SKIPPED, UNKNOWN, UNTRACKED }
+      interface Posting { Runnable prepare(long generation, MessagePreviewContent content); }
+      static Result receive(Context context, ChatNotificationCleanup.IntentStore intents, String tag,
+          String notification, String chat, String message, Posting posting) {
+        var reservation=ChatNotificationCleanup.reserve(intents,tag,notification,message);
+        if(reservation==null)return Result.UNTRACKED;
+        try { Runnable prepared=posting.prepare(reservation.generation(),null);
+          return ChatNotificationCleanup.publishInitial(reservation,g->prepared.run())?Result.PUBLISHED:Result.SKIPPED;
+        } catch(RuntimeException unknown){return Result.UNKNOWN;}
+        finally {ChatNotificationCleanup.cancelInitial(reservation);}
+      }
+    }`,
 };

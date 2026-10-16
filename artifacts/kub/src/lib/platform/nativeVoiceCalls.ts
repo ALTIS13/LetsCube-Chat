@@ -2,13 +2,16 @@ import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { PushNotifications } from "@capacitor/push-notifications";
 import { isNativeAndroid, supportsCapacitorPlugin } from "./capabilities";
-import { createClient } from "../supabase/client";
+import { createClient, getSupabasePublishableKey } from "../supabase/client";
 import { getBuildMetadata } from "../monitoring";
 import { safeOpenChat } from "../safeOpenChat";
 import { useAppStore } from "../../store/app.store";
 import { enableNativeAndroidPush, disableNativeAndroidPush, type NativePushResult } from "./nativePush";
 import { createNativeVoiceController, type NativeVoiceBridge, type NativeVoiceController, type NativeVoiceContext } from "./nativeVoiceController";
 import { attachNativeVoiceLifecycle } from "./nativeVoiceLifecycle";
+import type { MessagePreviewBinding } from "./nativeMessagePreviewContract";
+import { createNativeMessagePreviewVerification } from "./nativeMessagePreviewVerification";
+import { nativeMessagePreviewVerificationBridge, subscribeNativeMessagePreviewReady } from "./nativeMessagePreviews";
 export type { NativeVoiceContext } from "./nativeVoiceController";
 
 interface VoiceCallsPlugin extends NativeVoiceBridge {
@@ -65,6 +68,10 @@ export async function disableNativeVoicePush(): Promise<NativePushResult> {
   return controller?.disable() ?? { status: "native_inactive", message: "" };
 }
 export function nativeVoicePushSnapshot(): NativePushResult | null { return pushResult; }
+/** Unprivileged JS selector only. The native MessagePreviews getter remains authoritative. */
+export function nativeMessagePreviewBindingSnapshot(): MessagePreviewBinding | null {
+  return controller?.messagePreviewBindingSnapshot() ?? null;
+}
 export function subscribeNativeVoicePush(listener: () => void): () => void {
   statusListeners.add(listener);
   return () => { statusListeners.delete(listener); };
@@ -74,8 +81,25 @@ export function subscribeNativeVoicePush(listener: () => void): () => void {
 export function startNativeVoiceCalls(onSessionChanged?: () => void): () => void {
   if (!isNativeAndroid()) return () => undefined;
   const supabase = createClient();
+  const currentPreviewOwner = () => {
+    const state = useAppStore.getState();
+    const identity = state.authSessionIdentity;
+    if (!identity?.sessionId || (state.currentUser && state.currentUser.id !== identity.userId)) return null;
+    return { recipientId: identity.userId, recipientSessionId: identity.sessionId, accountEpoch: state.accountEpoch };
+  };
+  const verification = createNativeMessagePreviewVerification({
+    bridge: nativeMessagePreviewVerificationBridge,
+    currentOwner: currentPreviewOwner,
+    currentBinding: () => controller === runtime ? runtime.messagePreviewBindingSnapshot() : null,
+    getSession: () => supabase.auth.getSession(),
+    publicApiKey: getSupabasePublishableKey,
+    now: Date.now,
+    monotonicNow: () => performance.now(),
+    onStateChanged: () => { for (const listener of statusListeners) listener(); },
+  });
   const rpc = (name: string, args: Record<string, unknown>) => (supabase as unknown as {
-    rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
+    rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>
+      & { abortSignal(signal: AbortSignal): PromiseLike<{ data: unknown; error: unknown }> };
   }).rpc(name, args);
   const runtime = createNativeVoiceController({
     bridge,
@@ -101,6 +125,11 @@ export function startNativeVoiceCalls(onSessionChanged?: () => void): () => void
       return { tokenHash, deviceModel: navigator.userAgent || null, appVersion: getBuildMetadata().version };
     },
     rpc: (args) => rpc("register_push_device", args),
+    messagePreviewBinding: {
+      currentOwner: currentPreviewOwner,
+      resolve: (tokenHash, signal) => rpc("native_push_device_binding", { p_token_hash: tokenHash }).abortSignal(signal),
+      onChanged: binding => verification.bindingChanged(binding),
+    },
     openChat: (chatId, canCommit) => safeOpenChat(chatId, { canCommit }),
     navigationReady: (userId) => useAppStore.getState().currentUser?.id === userId,
     navigate: (route) => {
@@ -128,8 +157,9 @@ export function startNativeVoiceCalls(onSessionChanged?: () => void): () => void
     }).catch(() => undefined);
   };
   if (available()) own(VoiceCalls.addListener("actionPending", () => { void runtime.actionPending(); }));
+  own(subscribeNativeMessagePreviewReady(() => { for (const listener of statusListeners) listener(); }));
   own(PushNotifications.addListener("registration", ({ value }) => runtime.tokenChanged(value)));
-  const offStore = useAppStore.subscribe(() => { void runtime.actionPending(); });
+  const offStore = useAppStore.subscribe(() => { runtime.syncMessagePreviewOwner(); void runtime.actionPending(); });
   const disposeLifecycle = attachNativeVoiceLifecycle(runtime, {
     subscribe: (signal) => {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -164,6 +194,7 @@ export function startNativeVoiceCalls(onSessionChanged?: () => void): () => void
   return () => {
     disposed = true;
     disposeLifecycle();
+    verification.dispose();
     offStore();
     handles.forEach((handle) => { void handle.remove().catch(() => undefined); });
     if (controller === runtime) {

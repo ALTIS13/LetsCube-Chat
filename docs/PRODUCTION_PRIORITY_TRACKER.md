@@ -2,6 +2,13 @@
 
 Status: active production-hardening tracker, updated 2026-10-15.
 
+**Current execution,2026-10-16:** item76/D-335 is the release focus. Main-based
+ordinary Auth/consent/receiver source is integrated; isolated Realme confirms
+readable real FCM and exact original-PendingIntent routing/read cleanup. None
+and logout acceptance is not yet claimed. Candidate metadata0.1.21/build22;
+Stable remains0.1.20/build21 until actual publication. No new SQL apply or package
+identity change. [Current proof and release gates](operations/2026-10-16-native-preview-runtime-integration.md).
+
 **Current checkpoint,2026-10-15 20:42UTC:** shared-web D-365 at59f1fe8b
 accepted: actual native/controlled RED-to-GREEN90/90, adjacent59/59, final
 typecheck/build,14 own-tree aliases, independent-review P2 fix pass, exact single
