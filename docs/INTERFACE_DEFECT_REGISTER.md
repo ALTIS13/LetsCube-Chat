@@ -24889,6 +24889,16 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**Owner priority, 2026-10-16 / source continuation:** now the first requested
+priority. The missing Android recipient content RPC boundary is implemented and
+source-accepted: fixed-origin HTTP, strict exact-tuple/choice/text/expiry parser
+and cancellable current-owner/card consumer. Compiled251/251, actual isolated
+SDK Java compile and independent frozen review pass. No production caller or
+protocol1/display/credential gate is enabled; no APK, provider or SQL change.
+Native lifecycle, final presenter guard and real OS privacy/routing/read cleanup
+remain unaccepted. Keep OPEN, not fixed by dormant source.
+[Current evidence and next action](operations/2026-10-16-readable-notification-lookup.md).
+
 **Severity:** medium, reported usability defect; exact affected client/build and
 root cause are not yet established. Tracker item 76. Source: one authorised tester
 voice note of 2026-10-02, 14:22 MSK, read and transcribed locally Oct 3. The same

@@ -1,6 +1,14 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-15.
+Status: active production-hardening tracker, updated 2026-10-16.
+
+**Owner priority, 2026-10-16:** readable notifications (item76/D-335) come first.
+The missing Android content RPC transport/parser/current-owner consumer is now
+source-accepted:251/251 compiled affected checks, actual SDK Java compile and
+independent frozen review. No runtime caller or display gate was enabled; this
+does not close D-335 or release readable cards. Next: native credential/choice
+lifecycle, receiver/presenter and exact-card/OS acceptance. Do not replay the old
+screen/ARM attempts. [Current slice](operations/2026-10-16-readable-notification-lookup.md).
 
 **Active priority, 2026-10-15 19:56 UTC:** the owner's instruction puts Nikita's
 active-test reports first. One selected read-only DB intake returned19 rows
@@ -4180,6 +4188,17 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     foreground/background and locked/unlocked cards at supported real client
     boundaries. No production message/provider request was sent in this intake.
     [Evidence and limits](operations/2026-10-03-tester-feedback.md).
+
+    **2026-10-16 source continuation / owner priority:** the Android runtime had
+    no caller for the installed recipient preview RPC. A fixed-origin bounded
+    transport now shares the existing HTTPS boundary; a strict twelve-field
+    parser and cancellable single-flight consumer reject foreign tuples,
+    consent escalation, expiry, cancellation and retired owner/card answers.
+    Actual compiled251/251 checks, SDK Java compile and independent frozen review
+    pass. This remains inactive: protocol0, generic v1, QA effective-none and
+    provider payloads are unchanged. Native credential/choice and current-card
+    publication plus real OS/privacy acceptance remain required; D-335 stays open.
+    [Current source and next connection](operations/2026-10-16-readable-notification-lookup.md).
 
     **2026-10-05 adjacent repair:** D-344/D-345 fence shared activation ownership,
     Windows emitted click order and old-account card retirement, including true

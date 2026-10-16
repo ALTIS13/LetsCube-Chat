@@ -33,36 +33,64 @@ final class MessagePreviewHttpTransport implements MessagePreviewVerificationRun
     MessagePreviewHttpTransport(LongSupplier elapsed, Connections connections) { this.elapsed = elapsed; this.connections = connections; }
     private int remaining(long deadline) throws IOException {
         long left = deadline - elapsed.getAsLong();
-        if (left <= 0) throw new IOException("PREVIEW_REFUSED");
+        if (deadline < 0 || left <= 0) throw new IOException("PREVIEW_REFUSED");
         return (int) Math.min(2_000, left);
+    }
+    private int remaining(HttpsURLConnection connection, long deadline) throws IOException {
+        if (active.get() != connection) throw new IOException("PREVIEW_REFUSED");
+        return remaining(deadline);
     }
     @Override public Object request(boolean user, String access, String key, String hash, long deadline) throws Exception {
         remaining(deadline);
-        if (!MessagePreviewVerificationRuntime.header(access, 8192) || !MessagePreviewVerificationRuntime.header(key, 4096)
-            || (!user && (hash == null || !hash.matches("[0-9a-f]{64}")))) throw new IOException("PREVIEW_REFUSED");
+        if (!user && (hash == null || !hash.matches("[0-9a-f]{64}"))) throw new IOException("PREVIEW_REFUSED");
         URL url = URI.create(user ? "https://core.letscube.ru/auth/v1/user" : "https://core.letscube.ru/rest/v1/rpc/native_push_device_binding").toURL();
+        byte[] body = user ? null : ("{\"p_token_hash\":\"" + hash + "\"}").getBytes(StandardCharsets.UTF_8);
+        Object value = exchange(url, access, key, body, deadline);
+        if (user) {
+            if (!(value instanceof JSONObject)) return null;
+            JSONObject row = (JSONObject) value;
+            Map<String,Object> result = new HashMap<>();
+            result.put("id", row.opt("id")); result.put("is_anonymous", row.opt("is_anonymous"));
+            return result;
+        }
+        List<Map<String,Object>> rows = rows(value);
+        return rows != null && rows.size() == 1 ? rows : null;
+    }
+    Object preview(String access, String key, String device, String notification, long deadline) throws Exception {
+        if (!MessagePreviewVerificationState.uuid(device) || !MessagePreviewVerificationState.uuid(notification))
+            throw new IOException("PREVIEW_REFUSED");
+        URL url = URI.create("https://core.letscube.ru/rest/v1/rpc/native_message_notification_preview").toURL();
+        byte[] body = ("{\"p_device_id\":\"" + device + "\",\"p_notification_id\":\"" + notification + "\"}").getBytes(StandardCharsets.UTF_8);
+        List<Map<String,Object>> rows = rows(exchange(url, access, key, body, deadline));
+        if (rows == null) throw new IOException("PREVIEW_REFUSED");
+        return rows;
+    }
+    private Object exchange(URL url, String access, String key, byte[] body, long deadline) throws Exception {
+        remaining(deadline);
+        if (!MessagePreviewVerificationRuntime.header(access, 8192) || !MessagePreviewVerificationRuntime.header(key, 4096))
+            throw new IOException("PREVIEW_REFUSED");
         HttpsURLConnection connection = connections.open(url);
         if (!active.compareAndSet(null, connection)) { connection.disconnect(); throw new IOException("PREVIEW_REFUSED"); }
         try {
             connection.setInstanceFollowRedirects(false);
             connection.setUseCaches(false);
-            connection.setConnectTimeout(remaining(deadline));
-            connection.setReadTimeout(remaining(deadline));
-            connection.setRequestMethod(user ? "GET" : "POST");
+            connection.setConnectTimeout(remaining(connection, deadline));
+            connection.setReadTimeout(remaining(connection, deadline));
+            connection.setRequestMethod(body == null ? "GET" : "POST");
             connection.setRequestProperty("Authorization", "Bearer " + access);
             connection.setRequestProperty("apikey", key);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Accept-Encoding", "identity");
             connection.setRequestProperty("Connection", "close");
-            if (!user) {
-                byte[] body = ("{\"p_token_hash\":\"" + hash + "\"}").getBytes(StandardCharsets.UTF_8);
+            if (body != null) {
                 connection.setRequestProperty("Content-Type", "application/json");
                 connection.setDoOutput(true);
                 connection.setFixedLengthStreamingMode(body.length);
-                try (OutputStream output = connection.getOutputStream()) { remaining(deadline); output.write(body); }
+                try (OutputStream output = connection.getOutputStream()) { remaining(connection, deadline); output.write(body); }
             }
-            connection.setReadTimeout(remaining(deadline));
+            connection.setReadTimeout(remaining(connection, deadline));
             if (connection.getResponseCode() != 200) throw new IOException("PREVIEW_REFUSED");
+            remaining(connection, deadline);
             String type = connection.getContentType();
             if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/json")
                 || connection.getContentLengthLong() > MAX_BODY) throw new IOException("PREVIEW_REFUSED");
@@ -70,9 +98,9 @@ final class MessagePreviewHttpTransport implements MessagePreviewVerificationRun
             try (InputStream input = connection.getInputStream(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[1024];
                 for (;;) {
-                    connection.setReadTimeout(remaining(deadline));
+                    connection.setReadTimeout(remaining(connection, deadline));
                     int count = input.read(buffer);
-                    remaining(deadline);
+                    remaining(connection, deadline);
                     if (count == -1) break;
                     if (output.size() + count > MAX_BODY) throw new IOException("PREVIEW_REFUSED");
                     output.write(buffer, 0, count);
@@ -80,21 +108,22 @@ final class MessagePreviewHttpTransport implements MessagePreviewVerificationRun
                 bytes = output.toByteArray();
             }
             Object value = json(utf8(bytes));
-            if (user) {
-                if (!(value instanceof JSONObject)) return null;
-                JSONObject row = (JSONObject) value;
-                Map<String,Object> result = new HashMap<>();
-                result.put("id", row.opt("id")); result.put("is_anonymous", row.opt("is_anonymous"));
-                return result;
-            }
-            if (!(value instanceof JSONArray)) return null;
-            JSONArray array = (JSONArray) value;
-            if (array.length() != 1 || !(array.opt(0) instanceof JSONObject)) return null;
-            JSONObject row = (JSONObject) array.opt(0);
+            remaining(connection, deadline);
+            return value;
+        } finally { active.compareAndSet(connection, null); connection.disconnect(); }
+    }
+    private static List<Map<String,Object>> rows(Object value) {
+        if (!(value instanceof JSONArray)) return null;
+        JSONArray array = (JSONArray) value;
+        List<Map<String,Object>> rows = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            if (!(array.opt(i) instanceof JSONObject)) return null;
+            JSONObject row = (JSONObject) array.opt(i);
             Map<String,Object> result = new HashMap<>();
             for (Iterator<String> keys = row.keys(); keys.hasNext();) { String name = keys.next(); result.put(name, row.opt(name)); }
-            List<Object> rows = new ArrayList<>(); rows.add(result); return rows;
-        } finally { active.compareAndSet(connection, null); connection.disconnect(); }
+            rows.add(result);
+        }
+        return rows;
     }
     @Override public void cancel() { HttpsURLConnection connection = active.getAndSet(null); if (connection != null) connection.disconnect(); }
     @Override public Map<String,Object> decode(String token) throws Exception {
