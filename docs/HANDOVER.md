@@ -1,6 +1,18 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-16:** coordinator; Android0.1.21/build22 is published
+**Current resume,2026-10-16, D-366:** coordinator; shared-web product a07c5ae6
+is deployed and accepted: exact healthy image, compiled old/new marker1/0→0/1,
+public/container JS+SW parity, retained rollback and anonymous smoke. Recorder
+feedback no longer changes dock/history geometry; jump control stays free.
+Source/QA lives in main-based worktree
+`C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
+`codex/composer-feedback-20261016`. Root stays divergent; do not merge it wholesale.
+Native packages remain unchanged, Android Stable0.1.21/build22. Next: item77
+topic notification overrides with backend enforcement; item87 still requires a
+current-client latency episode. Preserve foreign sidebar/search/version paths;
+A063 excluded. [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
+
+**Earlier release, 2026-10-16:** coordinator; Android0.1.21/build22 is published
 Stable,mandatory=false; product main/web75096aa3 is healthy with public/container
 JS+SW parity and rollback retained. Actual isolated Realme confirms ordinary
 Auth/Settings/encrypted choice, readable real FCM, generic none choice, original
@@ -14,8 +26,8 @@ android-current-20261015 worktree. Preserve foreign sidebar/search work and
 private version overlay; A063 excluded. No SQL reapply or package-id change.
 [Release proof and limits](operations/2026-10-16-android-stable22.md).
 
-Owner follow-up,2026-10-16: recorder voice/video switch feedback has reported
-text displacement and poor presentation, queued as D-366/item105, not yet fixed.
+Owner follow-up,2026-10-16: recorder feedback D-366/item105 is repaired and
+accepted in shared web; embedded/native release acceptance remains separate.
 Deep microinteraction review is an explicit focus of existing interface item18;
 retain the shared motion plan and current Liquid Glass, not a parallel redesign.
 

@@ -26098,30 +26098,16 @@ Separately review the backup/recovery procedure and durable coverage before its
 own reversible deployment. Application-row/media/provider/native actions remain
 outside this task. [Source-observation record](operations/2026-10-04-avatar-source-observation.md).
 
-## D-366 `[ ]` Voice/video recorder switch feedback has displaced text and awkward presentation
+## D-366 `[~]` Voice/video recorder switch feedback has displaced text and awkward presentation
 
-**Severity:** medium usability/visual report. Owner report2026-10-16: the notice
-when switching from microphone to video has strange text offsets and looks
-unpleasant. Exact affected client/build, rendered geometry and cause are not yet
-measured; no screenshot or runtime reproduction is supplied in this intake.
-Tracker item105; deep interaction quality remains part of existing item18.
-
-**Source candidate, not a measured cause:** MessageInput.tsx sets modeFeedback
-to the selected voice/video mode and renders recorder-mode-feedback above the
-composer alongside the short-press hint. Establish that this is the reported
-surface before editing it. This is separate from D-335 system notifications and
-the already fixed D-326 onboarding-hint/jump-button overlap.
-
-**Acceptance:** concise copy must identify the selected recording mode without
-claiming capture has begun. Align icon/text, wrapping, padding and baseline; no
-clipped text, sudden composer/history displacement or covered action. Rapid
-toggles must retain only the latest relevant feedback; switching mode must not
-start capture, request permission or lose draft/recording state by itself.
-Preserve the existing Liquid Glass and shared motion behavior, including reduced
-motion and prompt access to controls rather than waiting for an animation.
-
-Reproduce against shipped code with fictional content before repair; inspect
-pixels at1440/390 in both themes, plus360, enlarged text100/125/150% and keyboard
-open/closed where supported. Check real affected shells without personal captures.
-Compare dated, named Telegram/Discord clients for mechanics and proportion;
-reference parity and a completed fix are not claimed by this report.
+**Severity:** medium usability/visual. Actual fictional MessageInput measured
+dock66→109.328125px at1440/390, both themes; temporary row changed history inset.
+Four RED regressions precede the repair. Compact glass status now stays outside
+layout flow, with truthful selected-mode copy, matching fixed icon, wrapping,
+shared motion/reduced-motion, latest timer and no media acquisition. A new
+1120px² jump-control overlap was also reproduced and removed by reserving space.
+Browser/adjacent tests, actual typecheck/build and independent review pass.
+Shared-web a07c5ae6 exact healthy runtime, old/new markers, byte parity, rollback
+and anonymous smoke pass. Actual native package acceptance remains separate;
+Android Stable22 embeds the preceding bundle. D-335/OEM and general item18 are
+not closed. [Evidence](operations/2026-10-16-recorder-mode-feedback.md).

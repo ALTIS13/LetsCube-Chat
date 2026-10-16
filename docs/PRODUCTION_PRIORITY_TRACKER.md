@@ -4966,16 +4966,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     predates this source, not implied updated by a web deployment.
     [Evidence and boundaries](operations/2026-10-15-media-position-lifetime.md).
 
-105. `[ ]` Recorder voice/video switch feedback: reported text displacement and
-    visually awkward presentation, **D-366**, owner follow-up2026-10-16. First
-    identify and reproduce the exact transient notice; the current source
-    candidate is MessageInput's recorder-mode-feedback, not native push. Improve
-    truthful mode copy, text/icon alignment, wrapping, spacing and appearance;
-    preserve composer/history geometry, keyboard access and real recording state.
-    Check rapid toggling, enlarged text, both themes and narrow/wide layouts using
-    fictional data. D-326's accepted jump-button interception repair stays intact.
-    This is queued work, not a reproduced cause or a shipped fix. Deeper recurring
-    interaction review remains item18 rather than a duplicate audit queue.
+105. `[~]` Recorder voice/video feedback, **D-366**. In-flow dock66→109.328px
+    reproduced and repaired; floating glass status preserves geometry, truthful
+    copy, wrapping, latest timer, shared motion and jump-control access.
+    Chromium10/10, WebKit9 reused+corrected setup1/1, adjacent105/105 and actual
+    typecheck/build pass. Shared-web a07c5ae6 exact healthy image, old/new markers,
+    public/container JS+SW parity, rollback and anonymous smoke accepted.
+    Android Stable22 embeds the older bundle; native-package/physical acceptance
+    remains separate. Item18's broader interface work is not closed.
+    [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 
