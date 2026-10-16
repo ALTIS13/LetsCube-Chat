@@ -1,26 +1,18 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-16:** coordinator; item76/D-335 remains first, with
-owner authority to continue through verified Stable. Ordinary Auth/producer,
-encrypted confirmed choice, Settings and once-only receiver are connected in
-unpublished source. Review fixes include constant-memory revision IDs, crash-head
-retirement, document ownership, callback lock order and shared choice-file
-serialization. Isolated main-based integration is prepared; do not merge this
-divergent root branch wholesale. Realme QA R1 refused the omitted logging-none
-configuration; R2 fixes that exact packaged input but ordinary verification did
-not complete. Independent post-cleanup DB read: zero fresh sessions, one fresh
-Android row, zero enabled, choice none. R3 measured actual UI login but terminal
-unloaded Session. Idle-pristine clear and overlapping Auth during bootstrap now
-have genuine RED-to-GREEN repairs and independent review. R4 SDK258/45s and actual
-Realme ordinary login, message choice/encrypted readback and Settings remount pass.
-Only owned QA data was explicitly cleared after verified server retirement;
-production data was not reset. Unchanged web build4ab6aa6cbacbf5c5 is reused.
-Next: real FCM/card/privacy/routing, then actual Stable
-publication. Protected primary20/test/CE+DE/users are unchanged; A063 excluded.
-Owned QA canary preparation is accepted; no send/FCM result is claimed yet.
-No main push, schema/provider change or Stable change yet. Preserve foreign
-sidebar/search paths and private Android overlay. Do not replay unchanged tests.
-[Current integration and next action](operations/2026-10-16-native-preview-runtime-integration.md).
+**Current resume, 2026-10-16:** coordinator; Android0.1.21/build22 is published
+Stable,mandatory=false; product main/web75096aa3 is healthy with public/container
+JS+SW parity and rollback retained. Actual isolated Realme confirms ordinary
+Auth/Settings/encrypted choice, readable real FCM, generic none choice, original
+PendingIntent exact-message routing/read cleanup and logout→EMPTY/protocol0.
+Post-logout DB:0 fresh sessions/0 enabled new devices. Three QA canaries are
+soft-deleted through the normal RPC; two owned QA packages removed, protected
+primary20/test/data/users unchanged. Next: item87 current-client latency/intake
+and remaining D-335 OEM/lock/physical-tap matrix; do not replay accepted checks.
+Root branch remains divergent; canonical release lives in the main-based
+android-current-20261015 worktree. Preserve foreign sidebar/search work and
+private version overlay; A063 excluded. No SQL reapply or package-id change.
+[Release proof and limits](operations/2026-10-16-android-stable22.md).
 
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned

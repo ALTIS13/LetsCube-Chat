@@ -24889,6 +24889,15 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**2026-10-16 current status:** Android implementation is released in
+Stable0.1.21/build22,mandatory=false (product75096aa3). Actual isolated Realme
+ordinary Auth/Settings/encrypted choice, readable FCM, none/generic card,
+original-PendingIntent exact-message routing/read cleanup and logout→EMPTY pass.
+Public APK hash/bytes, signer/Firebase and web deployment are verified. Broader
+OEM/lock-screen/physical SystemUI-tap and media/group matrix remains open, so the
+whole defect is not marked closed. Earlier source-only status below is historical.
+[Release evidence and boundaries](operations/2026-10-16-android-stable22.md).
+
 **2026-10-16 ordinary integration:** unpublished ordinary Auth/choice/Settings/
 initial-receiver source is connected and reviewed. Native revision IDs remove
 the arbitrary operation-count ceiling without clearing replay protection. Shared

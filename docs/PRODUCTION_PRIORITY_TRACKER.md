@@ -2,14 +2,14 @@
 
 Status: active production-hardening tracker, updated 2026-10-16.
 
-**Owner priority, 2026-10-16:** readable notifications (item76/D-335) come first.
-Ordinary Auth/consent/Settings/receiver source is connected, with explicit
-authority to finish verified Stable. R1/R2 configuration-delta audit passes.
-R3 measured actual UI login but terminal/unloaded Session. Guarded pristine clear
-and overlapping Auth/bootstrap are repaired RED-to-GREEN and reviewed. R4 SDK
-and actual ordinary Realme login/choice/encrypted readback/Settings remount pass.
-Final connected FCM/card/privacy/routing and Stable publication remain open.
-[Active integration checkpoint](operations/2026-10-16-native-preview-runtime-integration.md).
+**Current execution,2026-10-16:** Android0.1.21/build22 is Stable,mandatory=false;
+public APK bytes/SHA and rollback are verified. Product main/web75096aa3 is
+healthy with JS+SW parity. Actual Realme ordinary choice/readable FCM/none,
+original-PendingIntent routing/read cleanup and logout→EMPTY pass; post DB0/0,
+three canaries soft-deleted, two QA packages removed, protected apps unchanged.
+Item76/D-335 retains the broader OEM/lock/physical-tap matrix. Next: item87
+current-client latency/intake, without replaying accepted source/build/FCM checks.
+[Release and exact limits](operations/2026-10-16-android-stable22.md).
 
 Previously accepted foundation evidence, reused rather than replayed:
 The missing Android content RPC transport/parser/current-owner consumer is now

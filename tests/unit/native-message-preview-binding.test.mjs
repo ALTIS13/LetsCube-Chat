@@ -91,7 +91,8 @@ function fixture(options = {}) {
     if (boundary[file]) return boundary[file];
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} }; modules.set(file, module);
-    let text = readFileSync(file, "utf8").replaceAll("import.meta.env.BASE_URL", '"/"');
+    let text = readFileSync(file, "utf8").replaceAll("import.meta.env.BASE_URL", '"/"')
+      .replaceAll("import.meta.env.VITE_LETSCUBE_QA_MESSAGE_PREVIEW_USER_CHOICE", '"false"');
     if (options.transform) text = options.transform(file, text);
     const code = ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     vm.runInNewContext(code, {
