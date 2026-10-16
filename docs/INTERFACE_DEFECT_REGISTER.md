@@ -25733,6 +25733,7 @@ Reviewed candidate: compact glass status outside layout flow, selected-mode
 copy and matching nonshrinking icon, wrapping, shared motion/reduced-motion,
 latest timer, pointer transparency and no media acquisition. An intermediate
 1120px² jump-button overlap was reproduced and removed by reserving its space.
-Browser/adjacent tests, typecheck/build pass; publication and actual native
-package acceptance are distinct, not inferred from this source result.
+Browser/adjacent tests, typecheck/build and shared-web a07c5ae6 exact runtime,
+markers, byte parity, rollback and anonymous smoke pass. Actual native package
+acceptance remains separate; Android Stable22 embeds the preceding bundle.
 [Evidence and remaining scope](operations/2026-10-16-recorder-mode-feedback.md).

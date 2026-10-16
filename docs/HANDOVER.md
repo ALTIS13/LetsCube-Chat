@@ -1,14 +1,17 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-16, D-366:** coordinator; isolated main-based recorder
-feedback candidate reviewed. In-flow dock66→109.328px is repaired by a compact
-pointer-transparent glass status; shared motion, fixed icon/text alignment,
-latest-mode timing and jump-control space are verified. Browser/adjacent unit,
-typecheck and actual build pass. Next: narrow web publication with exact image,
-old/new marker, public/container JS+SW and retained rollback readback. No SQL or
-native republish; Android Stable22 is unchanged. Preserve foreign root
-sidebar/search paths and private version overlay; A063 excluded.
+**Current resume,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is
+deployed and accepted: single healthy exact image, old/new compiled markers,
+public/container JS+SW parity, retained rollback and anonymous smoke. Floating
+glass mode feedback preserves dock/history geometry and jump-control access;
+browser/adjacent unit, typecheck/build and independent review pass. Native
+packages/physical acceptance are separate; Android Stable22 remains unchanged.
+Next: account-synced topic notification overrides, item77, with trusted server
+enforcement; item87 latency still needs a current-client episode, not another
+speculative cache patch. Preserve foreign sidebar/search/version paths; A063
+excluded. No SQL/native publication in this slice.
 [Cause, evidence and boundaries](operations/2026-10-16-recorder-mode-feedback.md).
+[Next fullstack plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
 
 **Current resume, 2026-10-16:** coordinator; Android0.1.21/build22 is published
 Stable,mandatory=false; product main/web75096aa3 is healthy with public/container

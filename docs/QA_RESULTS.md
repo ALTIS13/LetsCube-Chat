@@ -1,5 +1,18 @@
 # QA Results
 
+## 2026-10-16 - Recorder Mode Feedback Shared Web
+
+D-366 product a07c5ae6: actual RED dock66→109.328px becomes stable66; an
+intermediate jump-control1120px² overlap is also reproduced and removed.
+Chromium10/10, WebKit9 accepted unchanged cases plus corrected setup1/1,
+adjacent105/105, actual typecheck/build and independent review pass. Exact
+1440/390 dark/light pixels inspected;360/150% constrained-height notice fits.
+Single healthy exact production image, old/new content markers, public/container
+JS+SW parity, retained prior image/entry and anonymous zero-error/zero-mutation
+home/login matrix pass. No personal captures, SQL or new native packages.
+Android Stable0.1.21/build22 and broader native/OEM acceptance are unchanged.
+[Evidence and boundaries](operations/2026-10-16-recorder-mode-feedback.md).
+
 ## 2026-10-16 - Android Readable Notifications Stable 22
 
 Product75096aa3, Android0.1.21/build22 published Stable,mandatory=false. Actual

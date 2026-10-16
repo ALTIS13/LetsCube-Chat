@@ -3937,6 +3937,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     remain; item76 stays OPEN. [Proposal and boundaries](operations/2026-10-07-native-message-preview-authorization.md).
 
 77. `[ ]` Account-owned notification preferences for individual channels/topics.
+    Fullstack execution plan prepared2026-10-16: canonical topic, CAS/RLS,
+    trusted enqueue/predelivery/album/preview, sound/Windows and compatible
+    rollback. No implementation/migration acceptance is implied by the plan.
+    [Plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
     Same voice note: silence a busy parent chat while explicitly enabling one
     relevant channel/topic; other users keep their own choices. Current scoped
     source has chat-level mute and category preferences, not a topic/channel
@@ -4405,8 +4409,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     dock66→109.328px; reviewed floating status preserves dock/list geometry,
     labels the selected mode and leaves the jump control free. Chromium10/10,
     WebKit final delta1/1 plus reused9/9, adjacent105/105, typecheck/build pass.
-    Await exact shared-web rollout acceptance; embedded/native packages remain
-    a separate release boundary. [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
+    Shared-web a07c5ae6 exact healthy image, old/new markers, JS+SW parity,
+    retained rollback and anonymous smoke pass. Embedded/native packages and
+    physical acceptance remain separate; Android Stable22 unchanged.
+    [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

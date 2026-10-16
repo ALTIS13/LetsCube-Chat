@@ -1,8 +1,8 @@
 # Recorder Mode Feedback: D-366
 
-Owner: coordinator. Stage: reviewed shared-web candidate; production acceptance
-is recorded below only after actual image/content/rollback readback. No SQL or
-native package publication belongs to this slice.
+Owner: coordinator. Stage: shared-web repair deployed and accepted at
+a07c5ae643fc321697094284ef3a06c9e1e28851. Native-package acceptance remains open.
+No SQL or native package publication belongs to this slice.
 
 ## Cause And Repair
 
@@ -54,16 +54,27 @@ Preflight: single healthy d05815aeb31234bc40b9c7b7e5bcb441dc374114 web image;
 old mode copy present/new floating marker absent; public/container JS and SW
 bytes match. Previous image and immutable entry are the rollback target.
 
-Candidate publication and post-state readback are still required at this
-checkpoint. Android Stable0.1.21/build22 embeds its older web bundle; it does not
-receive this change just because the web is deployed. No new APK, Windows or
-iOS native package and no physical-device acceptance is claimed here.
+Actual product image a07c5ae6 is single/healthy. Old/new compiled markers change
+from1/0 to0/1; public/container entry JS and SW hashes match:
+
+- Entry /assets/index-DJ5_Lp26.js;
+  SHA2566aa4df504541f8f289b61cf154c2093aacaa5377aa0edd100507c9ee77a79369.
+- SW SHA256445d64886bf9786feaf7d2c9b20d8c59c02cb446875d437c04cf625cfa254581.
+- Previous d05815ae image ID and immutable entry bytes are retained and readable.
+- Anonymous home/login1440/390, dark/light: zero page errors/zero mutation
+  requests; no personal session, screenshots, traces or video.
+
+Android Stable0.1.21/build22 embeds its older web bundle; it does not receive this
+change just because the web is deployed. No new APK, Windows or iOS native
+package and no physical-device acceptance is claimed here. Docs-only follow-up
+publication must retain these product bytes; it is not another product repair.
 
 ## Next
 
 Item87 remains unmeasured for current-client latency: no new cache patch is
 justified without an episode tied to platform/build/action and history-vs-media
 delay. Do not repeat accepted warm-cache or recovery tests. Next bounded
-implementation planning: item77 account-synced topic notification overrides,
+implementation: item77 account-synced topic notification overrides under the
+[fullstack plan](../superpowers/plans/2026-10-16-topic-notification-overrides.md),
 including trusted server consumers, not a frontend-only toggle. Item18's broad
 microinteraction work and D-335 OEM/lock matrix remain open.
