@@ -14,6 +14,11 @@ android-current-20261015 worktree. Preserve foreign sidebar/search work and
 private version overlay; A063 excluded. No SQL reapply or package-id change.
 [Release proof and limits](operations/2026-10-16-android-stable22.md).
 
+Owner follow-up,2026-10-16: recorder voice/video switch feedback has reported
+text displacement and poor presentation, queued as D-366/item105, not yet fixed.
+Deep microinteraction review is an explicit focus of existing interface item18;
+retain the shared motion plan and current Liquid Glass, not a parallel redesign.
+
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned
 pending position for detach and explicit seek. Final90/90, adjacent59/59, final

@@ -26097,3 +26097,31 @@ database settings on that copy; then require full DDL/role/raw-ACL readback.
 Separately review the backup/recovery procedure and durable coverage before its
 own reversible deployment. Application-row/media/provider/native actions remain
 outside this task. [Source-observation record](operations/2026-10-04-avatar-source-observation.md).
+
+## D-366 `[ ]` Voice/video recorder switch feedback has displaced text and awkward presentation
+
+**Severity:** medium usability/visual report. Owner report2026-10-16: the notice
+when switching from microphone to video has strange text offsets and looks
+unpleasant. Exact affected client/build, rendered geometry and cause are not yet
+measured; no screenshot or runtime reproduction is supplied in this intake.
+Tracker item105; deep interaction quality remains part of existing item18.
+
+**Source candidate, not a measured cause:** MessageInput.tsx sets modeFeedback
+to the selected voice/video mode and renders recorder-mode-feedback above the
+composer alongside the short-press hint. Establish that this is the reported
+surface before editing it. This is separate from D-335 system notifications and
+the already fixed D-326 onboarding-hint/jump-button overlap.
+
+**Acceptance:** concise copy must identify the selected recording mode without
+claiming capture has begun. Align icon/text, wrapping, padding and baseline; no
+clipped text, sudden composer/history displacement or covered action. Rapid
+toggles must retain only the latest relevant feedback; switching mode must not
+start capture, request permission or lose draft/recording state by itself.
+Preserve the existing Liquid Glass and shared motion behavior, including reduced
+motion and prompt access to controls rather than waiting for an animation.
+
+Reproduce against shipped code with fictional content before repair; inspect
+pixels at1440/390 in both themes, plus360, enlarged text100/125/150% and keyboard
+open/closed where supported. Check real affected shells without personal captures.
+Compare dated, named Telegram/Discord clients for mechanics and proportion;
+reference parity and a completed fix are not claimed by this report.
