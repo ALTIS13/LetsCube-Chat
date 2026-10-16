@@ -64,9 +64,26 @@ The current push policy includes source visibility and DND/global/category gates
 it still uses chat-only mute. Topic uniqueness is one general row per chat;
 messages.topic_id has ON DELETE CASCADE, not SET NULL. No old SQL is reapplied.
 
-Local PostgreSQL is18.4, so it cannot be presented as PG17 acceptance. Next use
-an explicitly isolated, network-disabled PG17 fixture with synthetic data and
-real independent sessions. No full-dump restore or D-342 acceptance is inferred.
+Local PostgreSQL is18.4 and was not used as PG17 evidence. The explicit isolated,
+network-disabled PG17 fixture contains synthetic data and real independent
+sessions. No full-dump restore or D-342 acceptance is inferred.
+
+## Delivery Baseline: Task3 Started
+
+Six further captured definitions are hash/owner-pinned: real message fanout,
+notification-to-push enqueue, single Web/native rechecks and album enqueue/recheck.
+The new delivery fixture keeps those producers and the actual composed policy;
+only display-name/avatar/payload formatting and mention recognition are fixture
+boundaries. Four controls pass in PGlite and genuine isolated PG17.6. The PG17
+driver's SELECT-only query wrapper initially refused a DML-returning helper;
+the fixture now uses explicit exec plus a SELECT without weakening the driver.
+
+These controls establish two still-unfixed Task3 failures, not feature success:
+disable then re-enable before a single pending alert's first recheck still
+delivers it; denial of an incomplete album remains non-terminal and the final
+part can revive it. Feed rows and read state remain present in the controls.
+The next enforcement must retain those feed positives while making alert
+suppression monotonic, including later parts/new subscriptions and rollback.
 
 ## Remaining Gates
 
@@ -80,6 +97,14 @@ omission controls; unchanged ownership2/2 and coordinator API build pass.
 Provider-accepted requests cannot be recalled; an unconfirmed ACK is delivery
 uncertainty, not permission for an immediate second send. This is source proof,
 not SQL/fullstack/OS acceptance. Edge and the rest of Task4 remain open.
+
+Fresh review of05f72b25..35110e76 found a remaining P2: a same-ID/UID
+subscription may change endpoint/keys after lookup but before the recheck;
+active/owner checks alone then authorize the cached old descriptor. This is
+before provider entry, not the unavoidable in-flight race. The additive bound
+RPC and descriptor fingerprint repair is in progress. Until its SQL and all
+relevant consumers pass, the legacy checkpoint is not an active-release
+candidate. Do not call a second lookup an atomic fix or enable the opt-in.
 
 Task2 delivery coupling and Tasks3-7 remain open: terminal suppression across all
 dispatch paths; client ownership/sound/Windows without feed loss; actual
