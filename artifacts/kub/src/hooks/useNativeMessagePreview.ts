@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
-import { nativeMessagePreviewsAvailable, readNativeMessagePreviewCandidate, nativeMessagePreviewQaChoiceBridge } from "@/lib/platform/nativeMessagePreviews";
+import { nativeMessagePreviewsAvailable, readNativeMessagePreviewCandidate, nativeMessagePreviewQaChoiceBridge, nativeMessagePreviewChoiceBridge } from "@/lib/platform/nativeMessagePreviews";
 import { nativeMessagePreviewBindingSnapshot, subscribeNativeVoicePush } from "@/lib/platform/nativeVoiceCalls";
 import {
-  isMessagePreviewChoice, readMessagePreviewBinding, readMessagePreviewCapability,
+  isMessagePreviewChoice, readMessagePreviewChoiceContext, readMessagePreviewCapability,
   readMessagePreviewConsent, readMessagePreviewSession, readQaMessagePreviewChoiceContext,
   type MessagePreviewBinding, type MessagePreviewChoice, type MessagePreviewSession,
   type QaMessagePreviewChoiceContext, type QaMessagePreviewChoiceOwner,
+  type MessagePreviewChoiceContext,
 } from "@/lib/platform/nativeMessagePreviewContract";
 
 type Status = "unavailable" | "loading" | "ready" | "saving" | "error";
@@ -16,7 +17,7 @@ type View = { status: Status; savedChoice: MessagePreviewChoice | null; effectiv
 type Snapshot = View & { owner: string | null; epoch: number; authRevision: number; operation: number };
 type Runtime = { matches(snapshot: Snapshot): boolean; refresh(): void; setChoice(choice: MessagePreviewChoice): Promise<boolean> };
 const CLOSED: View = { status: "unavailable", savedChoice: null, effectiveChoice: "none", error: null, nativeClosure: "NOT_REQUESTED" };
-type Admission = { kind: "ordinary"; candidate: MessagePreviewBinding } | { kind: "qa"; candidate: QaMessagePreviewChoiceContext };
+type Admission = { kind: "ordinary"; candidate: MessagePreviewChoiceContext } | { kind: "qa"; candidate: QaMessagePreviewChoiceContext };
 type QaIntent = { revision: number; closure: NativeClosure; erasureRevision?: number; retirement?: Promise<void> };
 type QaLease = { context: QaMessagePreviewChoiceContext; target: QaIntent; terminal: boolean };
 // Intent high-water and terminal context ownership survive a Settings remount.
@@ -160,12 +161,13 @@ export function useNativeMessagePreview() {
         const choice = readMessagePreviewCapability(result.data, candidate);
         return choice === null ? null : { admission: { kind: "qa", candidate } as Admission, choice };
       }
-      const candidate = readMessagePreviewBinding(await readNativeMessagePreviewCandidate(), session!);
-      if (!candidate || !current(auth, op) || (expected && (expected.kind !== "ordinary" || candidate.deviceId !== expected.candidate.deviceId))) return null;
+      const candidate = readMessagePreviewChoiceContext(await readNativeMessagePreviewCandidate(), { ...session!, accountEpoch: epoch });
+      if (!candidate || !current(auth, op) || (expected && (expected.kind !== "ordinary"
+        || candidate.deviceId !== expected.candidate.deviceId || candidate.contextId !== expected.candidate.contextId))) return null;
       const result = await preview.rpc("native_message_preview_capability", { p_device_id: candidate.deviceId });
       if (!current(auth, op) || result.error) return null;
-      const latest = readMessagePreviewBinding(await readNativeMessagePreviewCandidate(), session!);
-      if (!current(auth, op) || !latest || latest.deviceId !== candidate.deviceId) return null;
+      const latest = readMessagePreviewChoiceContext(await readNativeMessagePreviewCandidate(), { ...session!, accountEpoch: epoch });
+      if (!current(auth, op) || !latest || latest.deviceId !== candidate.deviceId || latest.contextId !== candidate.contextId) return null;
       const choice = readMessagePreviewCapability(result.data, candidate);
       return choice === null ? null : { admission: { kind: "ordinary", candidate } as Admission, choice };
     };
@@ -214,15 +216,20 @@ export function useNativeMessagePreview() {
       if (qa && (!lease || !qaTarget || !qaCurrent(authRevision, operation, lease, qaTarget))) {
         invalidate(true); return false;
       }
-      const revision = qa ? nextIntent() : null;
-      if (qa && revision === null) { invalidate(true); return false; }
+      const revision = nextIntent();
+      if (revision === null) { invalidate(true); return false; }
       const previousTarget = qaTarget;
       const target: QaIntent | null = qa ? { revision: revision!, closure: "UNKNOWN" } : null;
       if (lease && target) { lease.target = target; qaTarget = target; }
       const auth = authRevision, op = ++operation, expected = admission;
+      let ordinaryBegun = false;
       const live = () => current(auth, op) && (!qa || (!!lease && !!target && qaCurrent(auth, op, lease, target)));
       publish({ status: "saving", savedChoice, effectiveChoice: "none", error: null, nativeClosure: target?.closure ?? "NOT_REQUESTED" });
       const failed = () => {
+        if (!qa && ordinaryBegun && expected.kind === "ordinary") {
+          const erasure = nextIntent();
+          if (erasure !== null) void nativeMessagePreviewChoiceBridge.beginUserChoice({ contextId: expected.candidate.contextId, revision: erasure });
+        }
         const wasLive = live();
         if (lease && target) retire(lease, target);
         if (qa && !wasLive && own() && auth === authRevision && op === operation) {
@@ -241,6 +248,11 @@ export function useNativeMessagePreview() {
         }
         if (ack?.applied !== true || !live()) return failed();
         target.closure = "PENDING";
+        publish({ ...lastView, nativeClosure: "PENDING" });
+      } else if (expected.kind === "ordinary") {
+        ordinaryBegun = true;
+        const ack = await nativeMessagePreviewChoiceBridge.beginUserChoice({ contextId: expected.candidate.contextId, revision });
+        if (ack?.applied !== true || !live()) return failed();
         publish({ ...lastView, nativeClosure: "PENDING" });
       }
       return enqueue(owner, async () => {
@@ -261,9 +273,12 @@ export function useNativeMessagePreview() {
             const latest = await qaContext(auth, op, lease.context);
             if (!latest || !live()) return failed();
             target.closure = "CONFIRMED";
+          } else if (expected.kind === "ordinary") {
+            const ack = await nativeMessagePreviewChoiceBridge.confirmUserChoice({ contextId: expected.candidate.contextId, revision, choice });
+            if (ack?.applied !== true || !live()) return failed();
           }
           admission = after.admission; binding = admission.candidate; savedChoice = after.choice;
-          publish({ status: "ready", savedChoice, effectiveChoice: qa ? "none" : savedChoice, error: null, nativeClosure: target?.closure ?? "NOT_REQUESTED" });
+          publish({ status: "ready", savedChoice, effectiveChoice: qa ? "none" : savedChoice, error: null, nativeClosure: target?.closure ?? "CONFIRMED" });
           return true;
         } catch {
           return failed();
@@ -284,9 +299,10 @@ export function useNativeMessagePreview() {
       invalidate(qa && (!duplicateInitial || lastView.status === "saving")); acceptSession(value);
     }).data.subscription;
     const unsubscribe = useAppStore.subscribe(() => { if (!own()) invalidate(true); });
-    const unsubscribeNative = qa ? subscribeNativeVoicePush(() => {
-      if (qaLease && !selected(qaLease.context)) invalidate(true);
-    }) : () => {};
+    const unsubscribeNative = subscribeNativeVoicePush(() => {
+      if (qa) { if (qaLease && !selected(qaLease.context)) invalidate(true); }
+      else refresh();
+    });
     const visible = () => { if (document.visibilityState === "visible") refresh(); else if (qa) invalidate(true); };
     const hidden = () => { if (qa) invalidate(true); };
     document.addEventListener("visibilitychange", visible);

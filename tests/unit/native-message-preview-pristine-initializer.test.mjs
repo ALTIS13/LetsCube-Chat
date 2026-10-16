@@ -14,7 +14,8 @@ const base=resolve(root,"android/app/src/main/java/com/kub/messenger");
 const source=join(base,"MessagePreviewPristineInitializer.java");
 const backend=join(base,"MessagePreviewAtomicBackend.java");
 const supporting=["MessagePreviewVerificationState","MessagePreviewVaultFence","MessagePreviewMetadataEnvelope","MessagePreviewJournalIO",
-  "MessagePreviewInstallationMarker","MessagePreviewInitializationGate","MessagePreviewOwnedKeyInventory","MessagePreviewKeystoreReader"]
+  "MessagePreviewInstallationMarker","MessagePreviewInitializationGate","MessagePreviewOwnedKeyInventory","MessagePreviewKeystoreReader",
+  "MessagePreviewCredentialEnvelope","MessagePreviewCredentialKeyCustody","MessagePreviewVaultProvisioning","MessagePreviewExistingVault"]
   .map(name=>join(base,name+".java"));
 const prefix="letscube-pristine-init-";
 let directory;
@@ -25,6 +26,7 @@ function clean(path) {
 }
 function compile(path, ownerSource=source, backendSource=backend) {
   const stubs={...initializerStubs};
+  stubs['android/app/Application.java']='package android.app; public abstract class Application extends android.content.Context {}';
   for (const name of ["KeyInfo","KeyProperties"]) stubs[`android/security/keystore/${name}.java`]=readFileSync(
     resolve(root,"tests/fixtures/native-message-preview-keystore-reader/android/security/keystore",name+".java"),"utf8");
   const files=Object.entries(stubs).map(([name,text])=>{

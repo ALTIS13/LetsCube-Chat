@@ -31,6 +31,29 @@ public class MessagePreviewsPlugin extends Plugin {
     private WebViewListener qaDocumentListener;
     private MessagePreviewQaUserChoice qaUserChoice;
     private WebViewListener qaChoiceDocumentListener;
+    private MessagePreviewSession sessionOwner;
+    private WebViewListener ordinaryDocumentListener;
+    private long ordinaryJsRevision = -1, ordinaryRevision = -1;
+    private MessagePreviewConsent ordinaryConsent;
+    private MessagePreviewSession.Binding ordinaryConfirmed;
+    private String documentId = java.util.UUID.randomUUID().toString();
+    private boolean documentMatches(PluginCall call) {
+        return !ordinary() || sessionOwner == null || documentId.equals(call.getString("documentId"));
+    }
+
+    private boolean ordinary() {
+        return !BuildConfig.LETSCUBE_QA_MESSAGE_PREVIEW_COMPOSITION && !BuildConfig.LETSCUBE_QA_MESSAGE_PREVIEW_USER_CHOICE;
+    }
+    private boolean localDocument() {
+        try {
+            if (Looper.myLooper() != Looper.getMainLooper() || !loggingOff() || getActivity() == null
+                || getActivity().getClass() != MainActivity.class || getBridge().getServerUrl() != null
+                || !"https://localhost".equals(getBridge().getLocalUrl()) || getBridge().getWebView() == null) return false;
+            java.net.URI uri = new java.net.URI(getBridge().getWebView().getUrl());
+            return "https".equals(uri.getScheme()) && "localhost".equals(uri.getRawAuthority())
+                && uri.getRawUserInfo() == null && uri.getPort() == -1;
+        } catch (Exception refused) { return false; }
+    }
 
     @Override public synchronized void load() {
         handleOnDestroy();
@@ -51,13 +74,65 @@ public class MessagePreviewsPlugin extends Plugin {
             Thread thread = new Thread(work, "letscube-preview-deadline"); thread.setDaemon(true); return thread;
         });
         deadlines.setRemoveOnCancelPolicy(true);
+        ordinaryJsRevision = ordinaryRevision = -1;
+        documentId = java.util.UUID.randomUUID().toString();
+        if (ordinary() && getActivity() != null && getActivity().getClass() == MainActivity.class) {
+            try { sessionOwner = MessagePreviewSession.getOrCreate(getActivity().getApplication()); }
+            catch (Exception unavailable) { sessionOwner = null; }
+            if (sessionOwner != null) ordinaryConsent = new MessagePreviewConsent(getActivity().getApplication(), sessionOwner);
+            ordinaryDocumentListener = new WebViewListener() {
+                @Override public void onPageStarted(WebView webView) {
+                    synchronized (MessagePreviewsPlugin.this) {
+                        documentId = java.util.UUID.randomUUID().toString();
+                        MessagePreviewSession.suspendContent();
+                        ordinaryConfirmed = null;
+                        ordinaryJsRevision = ordinaryRevision = -1;
+                        if (runtime != null) runtime.retire();
+                        if (sessionOwner != null) {
+                            long revision = MessagePreviewSession.nextRevision();
+                            if (revision >= 0) sessionOwner.invalidate(getBridge(), runtime, revision);
+                        }
+                    }
+                }
+            };
+            getBridge().addWebViewListener(ordinaryDocumentListener);
+        }
     }
-    @PluginMethod public void getCapabilities(PluginCall call) { call.resolve(new JSObject().put("protocol", 0)); }
+    @PluginMethod public synchronized void getCapabilities(PluginCall call) {
+        MessagePreviewSession.Binding binding = ordinaryConfirmed;
+        if (!ordinary() || !loggingOff() || sessionOwner == null || binding == null
+            || sessionOwner.binding(getBridge(), runtime) != binding) { call.resolve(new JSObject().put("protocol", 0)); return; }
+        call.resolve(new JSObject().put("protocol", 1).put("recipientId", binding.recipient)
+            .put("recipientSessionId", binding.session).put("deviceId", binding.device)
+            .put("contextId", binding.contextId).put("accountEpoch", binding.accountEpoch).put("expiresAt", binding.expiresAt));
+    }
+    @PluginMethod public void getVerificationContext(PluginCall call) {
+        if (!new Handler(Looper.getMainLooper()).post(() -> {
+            synchronized (MessagePreviewsPlugin.this) {
+                boolean ready = keys(call) && localDocument();
+                if (ready && ordinary()) {
+                    if (sessionOwner == null || runtime == null) ready = false;
+                    else try { sessionOwner.attach(getBridge(), runtime); }
+                    catch (RuntimeException unavailable) { ready = false; }
+                }
+                call.resolve(new JSObject().put("documentId", ready ? documentId : JSONObject.NULL));
+            }
+        })) call.resolve(new JSObject().put("documentId", JSONObject.NULL));
+    }
     @PluginMethod public synchronized void beginBinding(PluginCall call) {
+        if (!documentMatches(call)) { call.resolve(new JSObject().put("epoch", JSONObject.NULL)); return; }
         if (qaUserChoice != null && !loggingOff()) qaUserChoice.close();
         if (qaComposition != null && !loggingOff()) qaComposition.close();
         if (!loggingOff()) { if (runtime != null) runtime.retire(); call.resolve(new JSObject().put("epoch", JSONObject.NULL)); return; }
         Long revision = integer(call, "revision"), account = integer(call, "accountEpoch");
+        if (ordinary() && revision != null) {
+            if (revision <= ordinaryJsRevision) { call.resolve(new JSObject().put("epoch", JSONObject.NULL)); return; }
+            ordinaryJsRevision = revision; ordinaryRevision = MessagePreviewSession.nextRevision();
+            revision = ordinaryRevision < 0 ? null : ordinaryRevision;
+            MessagePreviewSession.suspendContent();
+            ordinaryConfirmed = null;
+            if (sessionOwner != null && revision != null) sessionOwner.invalidate(getBridge(), runtime, revision);
+        }
         String epoch = runtime == null || revision == null ? null
             : runtime.beginBinding(revision, call.getString("recipientId"), call.getString("recipientSessionId"), account == null ? -1 : account);
         if (qaComposition != null && revision != null) qaComposition.bindingChanged(revision);
@@ -65,21 +140,33 @@ public class MessagePreviewsPlugin extends Plugin {
         call.resolve(new JSObject().put("epoch", epoch == null ? JSONObject.NULL : epoch));
     }
     @PluginMethod public synchronized void clearBinding(PluginCall call) {
+        if (!documentMatches(call)) { call.resolve(new JSObject().put("applied", false)); return; }
         Long revision = integer(call, "revision");
+        if (ordinary() && revision != null) {
+            if (revision <= ordinaryJsRevision) { call.resolve(new JSObject().put("applied", false)); return; }
+            ordinaryJsRevision = revision; ordinaryRevision = MessagePreviewSession.nextRevision();
+            revision = ordinaryRevision < 0 ? null : ordinaryRevision;
+            MessagePreviewSession.suspendContent();
+            ordinaryConfirmed = null;
+        }
         boolean applied = runtime != null && revision != null && runtime.clearBinding(revision);
+        if (applied && ordinary() && sessionOwner != null) sessionOwner.invalidate(getBridge(), runtime, revision);
         if (applied && qaComposition != null) qaComposition.bindingChanged(revision);
         if (applied && qaUserChoice != null) qaUserChoice.bindingChanged(revision);
         call.resolve(new JSObject().put("applied", applied));
     }
     @PluginMethod public synchronized void verifyBinding(PluginCall call) {
-        long started = qaComposition == null ? -1 : SystemClock.elapsedRealtime();
+        long started = SystemClock.elapsedRealtime();
         long originalDeadline = MessagePreviewVerificationState.safe(started) && started <= 9007199254732991L
             ? started + 8_000 : -1;
-        Long revision = integer(call, "revision"), account = integer(call, "accountEpoch");
+        Long requestedRevision = integer(call, "revision"), account = integer(call, "accountEpoch");
+        final Long revision = ordinary() && requestedRevision != null
+            ? requestedRevision == ordinaryJsRevision && ordinaryRevision >= 0 ? ordinaryRevision : null : requestedRevision;
         String epoch = call.getString("epoch"), user = call.getString("recipientId"), session = call.getString("recipientSessionId");
         String device = call.getString("deviceId"), access = call.getString("accessToken"), key = call.getString("publicApiKey");
         // The Capacitor call remains pending, but its retained data must not hold credentials.
         call.getData().remove("accessToken"); call.getData().remove("publicApiKey");
+        if (!documentMatches(call)) { verified(call, false); return; }
         MessagePreviewQaUserChoice choiceOwner = qaUserChoice;
         Bridge choiceBridge = getBridge();
         MessagePreviewVerificationRuntime choiceRuntime = runtime;
@@ -105,6 +192,38 @@ public class MessagePreviewsPlugin extends Plugin {
         if (qaComposition != null && qaComposition.offer(getBridge(), runtime,
             revision == null ? -1 : revision, epoch, user, session, account == null ? -1 : account,
             device, access, key, originalDeadline, reply::accept)) return;
+        if (ordinary() && sessionOwner != null) {
+            MessagePreviewSession expectedSession = sessionOwner;
+            MessagePreviewVerificationRuntime expectedRuntime = runtime;
+            Bridge expectedBridge = getBridge();
+            Long expectedRevision = revision, expectedAccount = account;
+            if (!new Handler(Looper.getMainLooper()).post(() -> {
+                synchronized (MessagePreviewsPlugin.this) {
+                    if (sessionOwner != expectedSession || runtime != expectedRuntime || getBridge() != expectedBridge
+                        || expectedRevision == null || expectedAccount == null || !localDocument()) { reply.accept(false); return; }
+                    expectedSession.attach(expectedBridge, expectedRuntime);
+                    expectedSession.verify(expectedBridge, expectedRuntime, expectedRevision, epoch, user, session,
+                        expectedAccount, device, access, key, originalDeadline, success -> {
+                            synchronized (MessagePreviewsPlugin.this) {
+                                MessagePreviewSession.Binding binding = expectedSession.binding(expectedBridge, expectedRuntime);
+                                MessagePreviewConsent consent = ordinaryConsent;
+                                if (!success || binding == null || consent == null || runtime != expectedRuntime
+                                    || getBridge() != expectedBridge || !localDocument()) { reply.accept(false); return; }
+                                consent.refresh(binding, accepted -> new Handler(Looper.getMainLooper()).post(() -> {
+                                    synchronized (MessagePreviewsPlugin.this) {
+                                        if (ordinaryConsent != consent || runtime != expectedRuntime || getBridge() != expectedBridge
+                                            || !localDocument() || !expectedSession.current(binding)) return;
+                                        ordinaryConfirmed = accepted ? binding : null;
+                                        notifyListeners("ready", new JSObject());
+                                    }
+                                }));
+                                reply.accept(true);
+                            }
+                        });
+                }
+            })) reply.accept(false);
+            return;
+        }
         if (runtime == null || worker == null || revision == null || account == null) { reply.accept(false); return; }
         MessagePreviewVerificationRuntime owner = runtime;
         AtomicBoolean replied = new AtomicBoolean();
@@ -211,6 +330,25 @@ public class MessagePreviewsPlugin extends Plugin {
         };
         if (!new Handler(Looper.getMainLooper()).post(work)) call.resolve(refused);
     }
+    private void ordinaryChoice(PluginCall call, boolean confirm) {
+        boolean shape = confirm ? keys(call, "contextId", "revision", "choice") : keys(call, "contextId", "revision");
+        String contextId = string(call, "contextId"), choice = string(call, "choice");
+        Long revision = integer(call, "revision");
+        synchronized (this) {
+            MessagePreviewSession.Binding binding = ordinaryConfirmed;
+            MessagePreviewConsent consent = ordinaryConsent;
+            if (!ordinary() || !shape || revision == null || revision < 1 || binding == null || consent == null
+                || sessionOwner == null || !binding.contextId.equals(contextId) || !loggingOff()
+                || sessionOwner.binding(getBridge(), runtime) != binding) {
+                call.resolve(new JSObject().put("applied", false)); return;
+            }
+            MessagePreviewConsent.Completion completion = accepted -> call.resolve(new JSObject().put("applied", accepted));
+            if (confirm) consent.confirm(binding, revision, choice, completion);
+            else consent.begin(binding, revision, completion);
+        }
+    }
+    @PluginMethod public void beginUserChoice(PluginCall call) { ordinaryChoice(call, false); }
+    @PluginMethod public void confirmUserChoice(PluginCall call) { ordinaryChoice(call, true); }
     @PluginMethod public void getQaUserChoiceContext(PluginCall call) {
         boolean shape = keys(call, "recipientId", "recipientSessionId", "deviceId", "accountEpoch");
         String user = string(call, "recipientId"), session = string(call, "recipientSessionId"), device = string(call, "deviceId");
@@ -242,6 +380,12 @@ public class MessagePreviewsPlugin extends Plugin {
             && qaUserChoice.retire(context, expected, revision)), new JSObject().put("applied", false));
     }
     @Override protected synchronized void handleOnDestroy() {
+        ordinaryConfirmed = null;
+        if (ordinaryConsent != null) { ordinaryConsent.close(); ordinaryConsent = null; }
+        if (ordinaryDocumentListener != null) {
+            Bridge oldBridge = getBridge(); WebViewListener oldListener = ordinaryDocumentListener; ordinaryDocumentListener = null;
+            if (oldBridge != null) new Handler(Looper.getMainLooper()).post(() -> oldBridge.removeWebViewListener(oldListener));
+        }
         if (qaUserChoice != null) qaUserChoice.close();
         if (qaChoiceDocumentListener != null) {
             Bridge oldBridge = getBridge();

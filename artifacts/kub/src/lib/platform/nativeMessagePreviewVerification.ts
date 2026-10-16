@@ -11,6 +11,7 @@ interface VerificationDependencies {
   publicApiKey(): string;
   now(): number;
   monotonicNow(): number;
+  onStateChanged?(): void;
 }
 
 // One native revision domain, not a per-controller counter reset on remount.
@@ -69,6 +70,7 @@ export function createNativeMessagePreviewVerification(deps: VerificationDepende
         if (!exactAck(ack, "applied") || ack.applied !== true) return;
       }).catch(() => undefined);
     } catch { /* Optional bridge failures never affect ordinary push/voice. */ }
+    try { deps.onStateChanged?.(); } catch { /* A UI observer cannot reopen the native lease. */ }
   };
   const owned = (op: Operation) => !closed && active === lease && operation === op && revision === op.revision;
   const current = (op: Operation): boolean => {
@@ -122,6 +124,7 @@ export function createNativeMessagePreviewVerification(deps: VerificationDepende
       if (deadline !== null) clearTimeout(deadline);
       deadline = null;
       op.pendingUntil = Infinity;
+      try { deps.onStateChanged?.(); } catch { /* Verification is independent of Settings observers. */ }
       expiry = setTimeout(() => { if (owned(op)) retire(); },
         Math.max(0, Math.min(op.expiresAt - deps.now(), op.monotonicExpiry - deps.monotonicNow())));
     } catch { if (owned(op)) retire(); }

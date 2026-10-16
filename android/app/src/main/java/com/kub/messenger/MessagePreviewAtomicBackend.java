@@ -11,7 +11,6 @@ import android.system.StructStat;
 import android.util.AtomicFile;
 import java.io.File;
 import java.io.FileDescriptor;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -276,7 +275,6 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
 
         private void writeMarker() throws Exception {
             FileDescriptor fd = null;
-            FileOutputStream stream = null;
             try {
                 currentNamespace();
                 fd = Os.open(marker.getPath(), OsConstants.O_WRONLY | OsConstants.O_CREAT | OsConstants.O_EXCL | OsConstants.O_NOFOLLOW, 0600);
@@ -285,18 +283,22 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
                 StructStat opened = Os.fstat(fd); same(markerIdentity, opened);
                 if (opened.st_size != 0) throw new MarkerUnavailable();
                 currentNamespace();
-                stream = new FileOutputStream(fd); fd = null;
-                currentNamespace(); stream.write(encoded);
-                currentNamespace(); stream.flush();
-                currentNamespace(); stream.getFD().sync();
+                int offset = 0;
+                while (offset < encoded.length) {
+                    currentNamespace();
+                    int count = Os.write(fd, encoded, offset, encoded.length - offset);
+                    currentNamespace();
+                    if (count <= 0 || count > encoded.length - offset) throw new MarkerUnavailable();
+                    offset += count;
+                }
+                currentNamespace(); Os.fsync(fd);
                 currentNamespace();
                 StructStat after = ownedStat(marker, false, 0600);
-                same(markerIdentity, after); same(after, Os.fstat(stream.getFD()));
+                same(markerIdentity, after); same(after, Os.fstat(fd));
                 if (after.st_size != 28) throw new MarkerUnavailable();
                 markerIdentity = after;
             } finally {
-                if (stream != null) stream.close();
-                else if (fd != null) Os.close(fd);
+                if (fd != null) Os.close(fd);
             }
         }
 
@@ -304,7 +306,6 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
 
         private String readMarker(boolean afterInitialJournal) throws Exception {
             FileDescriptor fd = null;
-            FileInputStream stream = null;
             String installation;
             try {
                 currentNamespace();
@@ -314,15 +315,14 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
                 fd = Os.open(marker.getPath(), OsConstants.O_RDONLY | OsConstants.O_NOFOLLOW, 0);
                 StructStat opened = Os.fstat(fd); same(before, opened);
                 if (opened.st_size != 28) throw new MarkerUnavailable();
-                stream = new FileInputStream(fd); fd = null;
                 byte[] bytes = new byte[29];
                 int total = 0;
                 while (total < bytes.length) {
                     currentNamespace();
-                    int count = stream.read(bytes, total, bytes.length - total);
+                    int count = Os.read(fd, bytes, total, bytes.length - total);
                     currentNamespace();
-                    if (count == -1) break;
-                    if (count <= 0) throw new MarkerUnavailable();
+                    if (count == 0) break;
+                    if (count < 0 || count > bytes.length - total) throw new MarkerUnavailable();
                     total += count;
                 }
                 if (total != 28 || !Arrays.equals(encoded, Arrays.copyOf(bytes, total))) throw new MarkerUnavailable();
@@ -331,8 +331,7 @@ final class MessagePreviewAtomicBackend implements MessagePreviewJournalIO.Backe
                 same(markerIdentity, after);
                 if (after.st_size != 28) throw new MarkerUnavailable();
             } finally {
-                if (stream != null) stream.close();
-                else if (fd != null) Os.close(fd);
+                if (fd != null) Os.close(fd);
             }
             currentNamespace();
             String[] children = namespace.list();

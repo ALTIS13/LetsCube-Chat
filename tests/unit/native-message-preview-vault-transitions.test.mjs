@@ -14,7 +14,8 @@ const base = resolve(root, "android/app/src/main/java/com/kub/messenger");
 const source = join(base, "MessagePreviewPristineInitializer.java");
 const names = ["MessagePreviewVerificationState", "MessagePreviewVaultFence", "MessagePreviewMetadataEnvelope",
   "MessagePreviewJournalIO", "MessagePreviewInstallationMarker", "MessagePreviewInitializationGate",
-  "MessagePreviewOwnedKeyInventory", "MessagePreviewKeystoreReader", "MessagePreviewAtomicBackend"];
+  "MessagePreviewOwnedKeyInventory", "MessagePreviewKeystoreReader", "MessagePreviewAtomicBackend",
+  "MessagePreviewCredentialEnvelope", "MessagePreviewCredentialKeyCustody", "MessagePreviewVaultProvisioning", "MessagePreviewExistingVault"];
 const prefix = "letscube-vault-transitions-";
 let directory;
 function clean(path) {
@@ -24,6 +25,7 @@ function clean(path) {
 }
 function compile(path, ownerSource = source) {
   const stubs = { ...transitionStubs };
+  stubs['android/app/Application.java']='package android.app; public abstract class Application extends android.content.Context {}';
   for (const name of ["KeyInfo", "KeyProperties"]) stubs[`android/security/keystore/${name}.java`] = readFileSync(
     resolve(root, "tests/fixtures/native-message-preview-keystore-reader/android/security/keystore", name + ".java"), "utf8");
   const files = Object.entries(stubs).map(([name, text]) => {
@@ -70,7 +72,7 @@ const initHeaderGuard = `        if (!installation.equals(h.installation) || h.g
             || !h.operationId.isEmpty() || h.baseGeneration != 0 || h.vaultRevision != 0
             || readback.credentialBytes().length != 0) throw new Unavailable();`;
 const mutations = [
-  ["kernel preauth currency", "try { if (work != null) transitionCurrent(work); }", "try { }",
+  ["kernel preauth currency", "if (work != null) transitionCurrent(work);", "",
     "held-kernel-auth", "NO_FIRST_EFFECT_AFTER_HELD_AUTH"],
   ["syntax before CAS", "|| !MessagePreviewVerificationState.safe(expectedGeneration)", "",
     "malformed", "MALFORMED_SYNTAX_BEFORE_CAS"],
@@ -90,8 +92,8 @@ const mutations = [
     "final-deadline", "FRESH_FINAL_PUBLICATION_REQUIRED"],
   ["stop after unavailable write", "if (work.state.journal.write(bytes, work.state.installation, key) != MessagePreviewJournalIO.Result.CHECKED)\n            throw new Unavailable();",
     "work.state.journal.write(bytes, work.state.installation, key);", "start-failure", "NO_AUTOMATIC_EXECUTE_REPLAY"],
-  ["no premature initialized state", "Prepared prepared=initialize(attempt.permit);\n                current(attempt.permit);",
-    "Prepared prepared=initialize(attempt.permit);\n                initialized=new InitializedState(prepared);\n                current(attempt.permit);",
+  ["no premature initialized state", "Prepared prepared=attempt.existing ? load(attempt.permit) : initialize(attempt.permit);\n                current(attempt.permit);",
+    "Prepared prepared=attempt.existing ? load(attempt.permit) : initialize(attempt.permit);\n                initialized=new InitializedState(prepared);\n                current(attempt.permit);",
     "held-init-final", "NO_STATE_BEFORE_FINAL_INIT_SUCCESS"],
   ["authenticated literal G0", initHeaderGuard, "", "wrong-g0", "CURRENT_COMPOSITION_REFUSED", "MessagePreviewPristineInitializerProbe"],
 ];

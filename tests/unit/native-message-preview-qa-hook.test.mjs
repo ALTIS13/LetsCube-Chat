@@ -34,6 +34,8 @@ function fixture(options={}) {
     return value;
   }
   const native={
+    async beginUserChoice(input){calls.push(['ordinary-begin',plain(input)]);return{applied:true};},
+    async confirmUserChoice(input){calls.push(['ordinary-confirm',plain(input)]);return{applied:true};},
     async getCapabilities(){calls.push(['cap0']);return options.ordinaryCandidate ?? {protocol:0};},
     async getQaUserChoiceContext(input){
       calls.push(['context',plain(input)]);
@@ -220,11 +222,13 @@ async function heldOrdering(options={}){await withStart(options,async(f,m)=>{
   assert.equal(f.view(m).nativeClosure,'CONFIRMED');assert.equal(f.of('upsert').length,1);
 });}
 test('held begin pre-read upsert post-read confirm preserves radios and exact ordering',()=>heldOrdering());
-test('ordinary protocol1 unchanged positive path uses no QA methods',async()=>{
-  await withStart({qa:false,ordinaryCandidate:{protocol:1,recipientId:USER,recipientSessionId:SID,deviceId:DEVICE}},async(f,m)=>{
+test('ordinary protocol1 uses confirmed native consent without QA methods',async()=>{
+  await withStart({qa:false,ordinaryCandidate:{protocol:1,recipientId:USER,recipientSessionId:SID,deviceId:DEVICE,
+    contextId:CONTEXT,accountEpoch:1,expiresAt:1700000300000}},async(f,m)=>{
     assert.equal(f.view(m).canChoose,true);await savedSender(f,m);assert.equal(f.view(m).effectiveChoice,'sender');
     assert.equal(f.of('rpc').length,3);assert.equal(f.of('cap0').length,6);assert.equal(f.of('upsert').length,1);
     for(const name of ['context','begin','confirm','retire'])assert.equal(f.of(name).length,0);
+    assert.equal(f.of('ordinary-begin').length,1);assert.equal(f.of('ordinary-confirm').length,1);
   });
 });
 async function rejectedContext(patch,options={}){
@@ -471,8 +475,8 @@ const mutants=[
     from:'if (ack?.applied !== true || !live()) return failed();\n            const latest = await qaContext(auth, op, lease.context);\n            if (!latest || !live()) return failed();',
     to:'if (ack?.applied !== true) return failed();',run:lateConfirm,assertion:'LATE_CONFIRM_CANNOT_PUBLISH'},
   {name:'QA effective none',file:hookFile,
-    from:'publish({ status: "ready", savedChoice, effectiveChoice: qa ? "none" : savedChoice, error: null, nativeClosure: target?.closure ?? "NOT_REQUESTED" });',
-    to:'publish({ status: "ready", savedChoice, effectiveChoice: savedChoice, error: null, nativeClosure: target?.closure ?? "NOT_REQUESTED" });',
+    from:'publish({ status: "ready", savedChoice, effectiveChoice: qa ? "none" : savedChoice, error: null, nativeClosure: target?.closure ?? "CONFIRMED" });',
+    to:'publish({ status: "ready", savedChoice, effectiveChoice: savedChoice, error: null, nativeClosure: target?.closure ?? "CONFIRMED" });',
     run:roundTrip,assertion:'QA_EFFECTIVE_LITERAL_NONE'},
   {name:'module-global intent cannot reset at mount',file:hookFile,
     from:'if (!owner || !nativeMessagePreviewsAvailable()) return;',to:'if (!owner || !nativeMessagePreviewsAvailable()) return; intentRevision = 0;',

@@ -11,7 +11,7 @@ import { createNativeVoiceController, type NativeVoiceBridge, type NativeVoiceCo
 import { attachNativeVoiceLifecycle } from "./nativeVoiceLifecycle";
 import type { MessagePreviewBinding } from "./nativeMessagePreviewContract";
 import { createNativeMessagePreviewVerification } from "./nativeMessagePreviewVerification";
-import { nativeMessagePreviewVerificationBridge } from "./nativeMessagePreviews";
+import { nativeMessagePreviewVerificationBridge, subscribeNativeMessagePreviewReady } from "./nativeMessagePreviews";
 export type { NativeVoiceContext } from "./nativeVoiceController";
 
 interface VoiceCallsPlugin extends NativeVoiceBridge {
@@ -95,6 +95,7 @@ export function startNativeVoiceCalls(onSessionChanged?: () => void): () => void
     publicApiKey: getSupabasePublishableKey,
     now: Date.now,
     monotonicNow: () => performance.now(),
+    onStateChanged: () => { for (const listener of statusListeners) listener(); },
   });
   const rpc = (name: string, args: Record<string, unknown>) => (supabase as unknown as {
     rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>
@@ -156,6 +157,7 @@ export function startNativeVoiceCalls(onSessionChanged?: () => void): () => void
     }).catch(() => undefined);
   };
   if (available()) own(VoiceCalls.addListener("actionPending", () => { void runtime.actionPending(); }));
+  own(subscribeNativeMessagePreviewReady(() => { for (const listener of statusListeners) listener(); }));
   own(PushNotifications.addListener("registration", ({ value }) => runtime.tokenChanged(value)));
   const offStore = useAppStore.subscribe(() => { runtime.syncMessagePreviewOwner(); void runtime.actionPending(); });
   const disposeLifecycle = attachNativeVoiceLifecycle(runtime, {

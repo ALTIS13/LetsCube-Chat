@@ -1,22 +1,26 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-16:** coordinator; item76/D-335 readable notifications
-remain first. Existing-vault snapshot reader and synchronous native credential
-consumer are source-accepted36/134 with affected provisioning/producer173 accepted
-cases (172 reused plus one corrected stale mutation anchor). Independent review's
-Android borrowed-FD issue is fixed RED-to-GREEN using Os.read/explicit close.
-Actual isolated SDK/QA-signed APK and two-process Realme checks pass11+18, with
-20 repeated loads retaining FD106 ->106; exact QA removal and primary20/test/users
-preservation pass. Not FCM/card/choice acceptance. Next: ordinary Auth/producer/
-choice lifecycle and reserve-before-lookup initial delivery. The
-initializer must adopt the authenticated head/revision, not reset G0; legacy
-create-only MarkerIO FD ownership also needs correction before lifecycle reuse.
-Do not replay accepted Settings, renderer292/292 or unchanged transport checks.
-Keep SDK13/identity12 and original r1 records immutable. Protocol0/generic/richfalse
-remain; no release, provider, migration or deployment change. Preserve foreign
-sidebar/search and private Android overlay.
-[Current evidence](operations/2026-10-16-native-preview-existing-vault.md)
-and [ordered next connections](operations/2026-10-16-native-preview-runtime-next.md).
+**Current resume, 2026-10-16:** coordinator; item76/D-335 remains first, with
+owner authority to continue through verified Stable. Ordinary Auth/producer,
+encrypted confirmed choice, Settings and once-only receiver are connected in
+unpublished source. Review fixes include constant-memory revision IDs, crash-head
+retirement, document ownership, callback lock order and shared choice-file
+serialization. Isolated main-based integration is prepared; do not merge this
+divergent root branch wholesale. Realme QA R1 refused the omitted logging-none
+configuration; R2 fixes that exact packaged input but ordinary verification did
+not complete. Independent post-cleanup DB read: zero fresh sessions, one fresh
+Android row, zero enabled, choice none. R3 measured actual UI login but terminal
+unloaded Session. Idle-pristine clear and overlapping Auth during bootstrap now
+have genuine RED-to-GREEN repairs and independent review. R4 SDK258/45s and actual
+Realme ordinary login, message choice/encrypted readback and Settings remount pass.
+Only owned QA data was explicitly cleared after verified server retirement;
+production data was not reset. Unchanged web build4ab6aa6cbacbf5c5 is reused.
+Next: real FCM/card/privacy/routing, then actual Stable
+publication. Protected primary20/test/CE+DE/users are unchanged; A063 excluded.
+Owned QA canary preparation is accepted; no send/FCM result is claimed yet.
+No main push, schema/provider change or Stable change yet. Preserve foreign
+sidebar/search paths and private Android overlay. Do not replay unchanged tests.
+[Current integration and next action](operations/2026-10-16-native-preview-runtime-integration.md).
 
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and
 controlled RED-to-GREEN is repaired using one cancellable message/resource-owned

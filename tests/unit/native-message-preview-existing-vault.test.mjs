@@ -19,14 +19,6 @@ function clean(path) {
 }
 function compile(path, source = subject) {
   const stubs = {...markerIOStubs};
-  stubs['android/system/Os.java'] = stubs['android/system/Os.java'].replace('  public static void fsync(',
-    `  public static int read(FileDescriptor fd, byte[] bytes, int offset, int count) throws ErrnoException {
-    Handle h=handles.get(fd); if(h==null || h.file==null) throw new ErrnoException(13);
-    event("read:" + new File(h.path).getName());
-    try { int n=h.file.read(bytes,offset,count); return n<0 ? 0 : n; }
-    catch(IOException failure) { throw new ErrnoException(13); }
-  }
-  public static void fsync(`);
   stubs['android/content/Context.java'] = stubs['android/content/Context.java'].replace(
     'public abstract Object getSystemService(String name);',
     'public abstract Object getSystemService(String name);\n  public <T> T getSystemService(Class<T> kind) { return kind.cast(getSystemService(USER_SERVICE)); }');

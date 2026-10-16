@@ -6,12 +6,13 @@ Realme Settings cycle is accepted; do not use it as a reason to repeat the case.
 Item76/D-335 remains first. Ordinary production caller/protocol1 stays disabled
 until the connections and real-system checks below exist.
 
-**Current progress:** cuts1/2 have source and actual isolated two-process Realme
-storage/credential evidence. They are not ordinary lifecycle integration or
-publication authority. Continue at cut3: adopt the authenticated generation and
-revision into the single owner, repair legacy MarkerIO descriptor ownership,
-then connect Auth and confirmed choice. Do not redo the accepted primitive or
-Settings checks. [Exact results and limits](2026-10-16-native-preview-existing-vault.md).
+**Current progress:** cuts1-5 below are connected in unpublished source. Their
+original sequence remains an acceptance map, not work to restart. Main-based
+isolated QA artifacts have SDK/signature/Firebase/web-byte acceptance; ordinary
+Realme verification is still open. Continue with the repaired idle-pristine-clear
+in R3, then real FCM/card/privacy/routing and publication. Published Stable still
+has the older generic-only behavior. Do not redo accepted primitive/renderer
+checks. [Current checkpoint](2026-10-16-native-preview-runtime-integration.md).
 
 ## Ordered Work
 

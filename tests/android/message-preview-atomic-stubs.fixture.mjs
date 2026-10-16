@@ -64,6 +64,8 @@ public final class Os {
   public static void mkdir(String name, int mode) throws ErrnoException { throw new ErrnoException(13); }
   public static java.io.FileDescriptor open(String name, int flags, int mode) throws ErrnoException { throw new ErrnoException(13); }
   public static StructStat fstat(java.io.FileDescriptor fd) throws ErrnoException { throw new ErrnoException(13); }
+  public static int read(java.io.FileDescriptor fd, byte[] bytes, int offset, int count) throws ErrnoException { throw new ErrnoException(13); }
+  public static int write(java.io.FileDescriptor fd, byte[] bytes, int offset, int count) throws ErrnoException { throw new ErrnoException(13); }
   public static void fsync(java.io.FileDescriptor fd) throws ErrnoException { throw new ErrnoException(13); }
   public static void close(java.io.FileDescriptor fd) throws ErrnoException { throw new ErrnoException(13); }
 }`,

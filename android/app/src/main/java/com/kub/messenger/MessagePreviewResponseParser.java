@@ -24,6 +24,17 @@ final class MessagePreviewResponseParser {
         Map<?,?> value = (Map<?,?>) data;
         return user.equals(value.get("id")) && Boolean.FALSE.equals(value.get("is_anonymous"));
     }
+    static String capability(Object response, String recipient, String session, String device) {
+        if (!(response instanceof List) || ((List<?>) response).size() != 1 || !(((List<?>) response).get(0) instanceof Map)
+            || !MessagePreviewVerificationState.uuid(recipient) || !MessagePreviewVerificationState.uuid(session)
+            || !MessagePreviewVerificationState.uuid(device)) return null;
+        Map<?,?> row = (Map<?,?>) ((List<?>) response).get(0);
+        Object version = row.get("preview_v"), level = row.get("preview_level");
+        if (row.size() != 5 || !(version instanceof Number) || ((Number) version).doubleValue() != 1d
+            || !recipient.equals(row.get("recipient_id")) || !session.equals(row.get("session_id"))
+            || !device.equals(row.get("device_id"))) return null;
+        return "none".equals(level) || "sender".equals(level) || "message".equals(level) ? (String) level : null;
+    }
     static boolean binding(Object data, String user, String session, String device) {
         if (!(data instanceof List) || ((List<?>) data).size() != 1 || !(((List<?>) data).get(0) instanceof Map)) return false;
         Map<?,?> row = (Map<?,?>) ((List<?>) data).get(0);

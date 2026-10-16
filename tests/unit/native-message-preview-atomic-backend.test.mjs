@@ -54,7 +54,7 @@ for (const scenario of ["healthy", "policy", "missing", "paths", "symlinks", "ow
 
 const mutations = [
   ["CE admission", "if (context.isDeviceProtectedStorage()) throw unavailable();", "", "policy", "CE_RECHECKED"],
-  ["unlocked admission", "!((UserManager) service).isUserUnlocked()", "false", "policy", "UNLOCK_REQUIRED"],
+  ["unlocked admission", "if (!(service instanceof UserManager) || !((UserManager) service).isUserUnlocked()) throw unavailable();", "if (!(service instanceof UserManager)) throw unavailable();", "policy", "UNLOCK_REQUIRED"],
   ["raw root traversal", "if (\".\".equals(part.getName()) || \"..\".equals(part.getName())) throw unavailable();", "", "paths", "CANONICAL_PATH_REQUIRED"],
   ["one writer", "if (active != null) throw unavailable();", "", "ownership", "ONE_WRITER"],
   ["stream identity before I/O", "borrowed != active", "false", "ownership", "FOREIGN_BEFORE_IO_OR_CLOSE"],

@@ -76,7 +76,8 @@ test("Android36 public Os member closure (javap only)", () => {
   assert.doesNotMatch(markerIOStubs["android/system/OsConstants.java"], /\bO_DIRECTORY\b/);
 });
 for (const scenario of ["healthy", "policy", "absence", "permits", "failures", "readback", "identities", "held",
-  "context-return", "context-write", "namespace-stat", "root-stat", "descriptor", "descriptor-size", "directory-descriptor", "file-sync-fault", "file-write-fault", "root-alias", "android-main", "entry-failure"]) {
+  "context-return", "context-write", "namespace-stat", "root-stat", "descriptor", "descriptor-size", "directory-descriptor", "file-sync-fault", "file-write-fault", "root-alias", "android-main", "entry-failure",
+  "posix-ports", "descriptor-close", "partial-io", "marker-faults", "partial-currency"]) {
   test(`compiled marker I/O: ${scenario}`, () => {
     const result = run(scenario);
     assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, "");
@@ -89,7 +90,7 @@ test("old backend52B2 byte projection is unchanged outside root-helper extractio
   assert.ok(start > 0);
   actual = actual.slice(0, start) + "}\n";
   for (const line of ["import android.os.Looper;\n", "import android.os.Process;\n", "import java.io.FileDescriptor;\n",
-    "import java.io.FileInputStream;\n", "import java.security.SecureRandom;\n", "import java.util.Arrays;\n"]) {
+    "import java.security.SecureRandom;\n", "import java.util.Arrays;\n"]) {
     assert.equal(actual.split(line).length, 2); actual = actual.replace(line, "");
   }
   const extraction = "    private File platformRoot() throws IOException {\n        return platformRoot(context);\n    }\n\n    private static File platformRoot(Context context) throws IOException {";
@@ -113,6 +114,11 @@ const mutations = [
   ["entry latch ordering", "attempted = true;\n                currentRoot();", "currentRoot();\n                attempted = true;", "entry-failure", "ONE_USE_ON_ENTRY_FAILURE"],
   ["directory no-follow", "FileDescriptor fd = Os.open(path.getPath(), OsConstants.O_RDONLY | OsConstants.O_NOFOLLOW, 0);", "FileDescriptor fd = Os.open(path.getPath(), OsConstants.O_RDONLY, 0);", "healthy", "DIRECTORY_RDONLY_NOFOLLOW"],
   ["opened directory custody", "if (!OsConstants.S_ISDIR(opened.st_mode)) throw new MarkerUnavailable();\n                same(identity, opened);", "", "directory-descriptor", "DIRECTORY_FD_CUSTODY_REQUIRED"],
+  ["write FD finally", "markerIdentity = after;\n            } finally {\n                if (fd != null) Os.close(fd);", "markerIdentity = after;\n            } finally {", "descriptor-close", "EXPLICIT_OS_CLOSE_REQUIRED"],
+  ["read FD finally", "            } finally {\n                if (fd != null) Os.close(fd);\n            }\n            currentNamespace();\n            String[] children", "            } finally {\n            }\n            currentNamespace();\n            String[] children", "descriptor-close", "EXPLICIT_OS_CLOSE_REQUIRED"],
+  ["partial write progress", "offset += count;", "offset = encoded.length;", "partial-io", "ALL_PARTIAL_MARKER_BYTES_REQUIRED"],
+  ["POSIX zero EOF", "if (count == 0) break;", "if (count == 0) throw new MarkerUnavailable();", "partial-io", "ALL_PARTIAL_MARKER_BYTES_REQUIRED"],
+  ["marker file fsync", "currentNamespace(); Os.fsync(fd);", "currentNamespace();", "marker-faults", "MARKER_IO_FAILURE_REQUIRED"],
 ];
 for (const [name, before, after, scenario, oracle] of mutations) {
   test(`compiled marker I/O omission: ${name}`, () => {

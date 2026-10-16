@@ -21,6 +21,8 @@ async function compile(mutation) {
     "lib/platform/capabilities.ts": `export const isNativeAndroid=()=>window.native;
       export const supportsCapacitorPlugin=name=>name==='MessagePreviews' && window.plugin;`,
     "lib/supabase/client.ts": `export const createClient=()=>window.client;`,
+    "lib/platform/nativeVoiceCalls.ts": `export const nativeMessagePreviewBindingSnapshot=()=>window.binding;
+      export const subscribeNativeVoicePush=()=>()=>{};`,
     "store/app.store.ts": `import {useSyncExternalStore} from 'react';
       const listeners=new Set();
       export function useAppStore(select) {return useSyncExternalStore(fn=>{listeners.add(fn);return()=>listeners.delete(fn);},()=>select(window.state));}
@@ -32,11 +34,13 @@ async function compile(mutation) {
   if (!existsSync(resolve(root, "hooks/useNativeMessagePreview.ts"))) stubs["hooks/useNativeMessagePreview.ts"] =
     `export const useNativeMessagePreview=()=>({status:'unavailable',savedChoice:null,effectiveChoice:'none',canChoose:false,saving:false,error:null,refresh(){},async setChoice(){return false;}});`;
   const result = await build({write:false, bundle:true, platform:"browser", format:"iife", jsx:"automatic",
-    alias:{"@":root}, define:{"process.env.NODE_ENV":'"development"'}, plugins:[{name:"offline",setup(p) {
+    alias:{"@":root}, define:{"process.env.NODE_ENV":'"development"',"import.meta.env.VITE_LETSCUBE_QA_MESSAGE_PREVIEW_USER_CHOICE":'"false"'}, plugins:[{name:"offline",setup(p) {
       p.onResolve({filter:/^@capacitor\/core$/},()=>({path:"core",namespace:"fixture"}));
       p.onLoad({filter:/.*/,namespace:"fixture"},()=>({contents:`export function registerPlugin(name) {
         window.registered.push(name);if(name!=='MessagePreviews') throw Error('wrong authority');
-        return {async getCapabilities(){const value={...window.binding};window.calls.push(['native']);await window.gate('native');return value;}};}`,loader:"ts"}));
+        return {async getCapabilities(){const value={...window.binding};window.calls.push(['native']);await window.gate('native');return value;},
+          async beginUserChoice(input){window.calls.push(['native-begin',input]);await window.gate('native-begin');return {applied:window.nativeBeginAck};},
+          async confirmUserChoice(input){window.calls.push(['native-confirm',input]);await window.gate('native-confirm');return {applied:window.nativeConfirmAck};}};}`,loader:"ts"}));
       p.onResolve({filter:/useNativeMessagePreview/},args=>stubs["hooks/useNativeMessagePreview.ts"] ? {path:"missing-hook",namespace:"baseline"}:undefined);
       p.onLoad({filter:/.*/,namespace:"baseline"},()=>({contents:stubs["hooks/useNativeMessagePreview.ts"],loader:"ts"}));
       p.onLoad({filter:/\.[tj]s$/},args=>{
@@ -55,7 +59,8 @@ async function compile(mutation) {
       const U='${U}',S='${S}',D='${D}';window.state={currentUser:{id:U},accountEpoch:1};
       window.native=true;window.plugin=true;window.registered=[];window.calls=[];window.holds={};window.gates=new Map();
       window.results=[];window.level='none';window.capError=null;window.writeError=null;window.badWrite=false;window.capExtra={};
-      window.binding={protocol:1,recipientId:U,recipientSessionId:S,deviceId:D};
+      window.nativeBeginAck=true;window.nativeConfirmAck=true;
+      window.binding={protocol:1,recipientId:U,recipientSessionId:S,deviceId:D,contextId:'55555555-5555-4555-8555-000000000001',accountEpoch:1,expiresAt:Date.now()+3600000};
       window.makeSession=(sid=S,extra={})=>({user:{id:U},access_token:'fixture.'+btoa(JSON.stringify({sub:U,session_id:sid,
         role:'authenticated',is_anonymous:false,exp:Math.floor(Date.now()/1000)+3600,...extra}))+'.fixture'});
       window.session=window.makeSession();window.authListeners=new Set();
@@ -111,6 +116,9 @@ test("explicit choice needs exact own-row ACK and a fresh matching capability",a
     assert.deepEqual(await f.page.evaluate(()=>window.calls.find(x=>x[0]==='write')),
       ["write","notification_preview_preferences",{user_id:U,preview_level:"sender"},{onConflict:"user_id"}]);
     assert.deepEqual(await f.page.evaluate(()=>window.results),[true]);
+    const order=await f.page.evaluate(()=>window.calls.map(x=>x[0]));
+    assert.ok(order.indexOf('native-begin')>=0&&order.indexOf('native-begin')<order.indexOf('write'),"native denial before server write");
+    assert.ok(order.indexOf('native-confirm')>order.indexOf('write'),"native confirmation after own-row ACK");
   }finally{await f.close();}
 });
 test("failed none is locally closed without claiming a saved ACK",async()=>{
@@ -226,7 +234,7 @@ test("unmounted held auth/native/capability reads do not continue backend work",
 test("a setter captured by account A cannot write into the later ready account B",async()=>{
   const f=await fixture();try {await ready(f);await f.page.evaluate(()=>{
     window.oldChoice=window.preview.setChoice;const owner=window.binding.deviceId;
-    window.binding.recipientId=owner;window.session={user:{id:owner},access_token:'fixture.'+btoa(JSON.stringify({
+    window.binding.recipientId=owner;window.binding.accountEpoch=window.state.accountEpoch+1;window.binding.contextId=owner;window.session={user:{id:owner},access_token:'fixture.'+btoa(JSON.stringify({
       sub:owner,session_id:window.binding.recipientSessionId,role:'authenticated',is_anonymous:false,exp:Math.floor(Date.now()/1000)+3600}))+'.fixture'};
     window.account(owner);
   });await f.drain();assert.equal((await f.view()).choose,true);
@@ -283,13 +291,13 @@ const mutants = [
     oracle:async f=>{await ready(f);await f.page.evaluate(()=>{window.holds.write=true;window.choose('sender');});await f.drain();
       assert.equal(await f.page.evaluate(()=>window.gates.has('write')),true);await f.page.evaluate(()=>{window.detach();window.attach();});await f.drain();
       await f.release('write');assert.equal((await f.view()).saved,'sender');}},
-  {name:"disposal retirement", file:hookFile, from:'stopped = true; invalidate(); authSubscription.unsubscribe();', to:'authSubscription.unsubscribe();',
+  {name:"disposal retirement", file:hookFile, from:'invalidate(true); stopped = true; authSubscription.unsubscribe();', to:'authSubscription.unsubscribe();',
     setup:()=>{window.holds.session=true;}, oracle:async f=>{assert.equal(await f.page.evaluate(()=>window.gates.has('session')),true);
       const before=await f.page.evaluate(()=>window.calls.length);await f.page.evaluate(()=>window.detach());await f.release('session');assert.equal(await f.page.evaluate(()=>window.calls.length),before);}},
   {name:"render-owned setter", file:hookFile,
     from:'ownsRender() ? runtime.current?.setChoice(choice) ?? Promise.resolve(false) : Promise.resolve(false)', to:'runtime.current?.setChoice(choice) ?? Promise.resolve(false)',
     oracle:async f=>{await ready(f);await f.page.evaluate(()=>{window.oldChoice=window.preview.setChoice;const owner=window.binding.deviceId;
-      window.binding.recipientId=owner;window.session={user:{id:owner},access_token:'fixture.'+btoa(JSON.stringify({
+      window.binding.recipientId=owner;window.binding.accountEpoch=window.state.accountEpoch+1;window.binding.contextId=owner;window.session={user:{id:owner},access_token:'fixture.'+btoa(JSON.stringify({
         sub:owner,session_id:window.binding.recipientSessionId,role:'authenticated',is_anonymous:false,exp:Math.floor(Date.now()/1000)+3600}))+'.fixture'};window.account(owner);});
       await f.drain();assert.equal((await f.view()).choose,true);assert.equal(await f.page.evaluate(()=>window.oldChoice('message')),false);}},
 ];

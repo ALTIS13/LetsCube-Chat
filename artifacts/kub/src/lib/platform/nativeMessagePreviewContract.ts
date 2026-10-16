@@ -1,6 +1,7 @@
 export type MessagePreviewChoice = "none" | "sender" | "message";
 export type MessagePreviewSession = { recipientId: string; recipientSessionId: string; expiresAt: number };
 export type MessagePreviewBinding = { recipientId: string; recipientSessionId: string; deviceId: string };
+export type MessagePreviewChoiceContext = MessagePreviewBinding & { contextId: string; accountEpoch: number; expiresAt: number };
 export type QaMessagePreviewChoiceOwner = MessagePreviewBinding & { accountEpoch: number };
 export type QaMessagePreviewChoiceContext = QaMessagePreviewChoiceOwner & { contextId: string; expiresAt: number };
 
@@ -36,6 +37,16 @@ export function readMessagePreviewBinding(value: unknown, expected: Pick<Message
   if (!record(value) || value.protocol !== 1 || !uuid(value.recipientId) || !uuid(value.recipientSessionId) || !uuid(value.deviceId)
     || value.recipientId !== expected.recipientId || value.recipientSessionId !== expected.recipientSessionId) return null;
   return { recipientId: value.recipientId, recipientSessionId: value.recipientSessionId, deviceId: value.deviceId };
+}
+
+export function readMessagePreviewChoiceContext(value: unknown,
+  expected: Pick<MessagePreviewSession, "recipientId" | "recipientSessionId"> & { accountEpoch: number },
+  now = Date.now()): MessagePreviewChoiceContext | null {
+  const binding = readMessagePreviewBinding(value, expected);
+  if (!binding || !record(value) || !uuid(value.contextId) || !Number.isSafeInteger(value.accountEpoch)
+    || value.accountEpoch !== expected.accountEpoch || !Number.isSafeInteger(value.expiresAt)
+    || (value.expiresAt as number) <= now) return null;
+  return { ...binding, contextId: value.contextId, accountEpoch: value.accountEpoch as number, expiresAt: value.expiresAt as number };
 }
 
 export function readMessagePreviewCapability(data: unknown, expected: MessagePreviewBinding): MessagePreviewChoice | null {

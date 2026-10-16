@@ -24889,6 +24889,19 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**2026-10-16 ordinary integration:** unpublished ordinary Auth/choice/Settings/
+initial-receiver source is connected and reviewed. Native revision IDs remove
+the arbitrary operation-count ceiling without clearing replay protection. Shared
+choice-file serialization, callback lock ordering, crash-head retirement and
+document-owned clears are repaired. R1/R2 SDK/artifact checks pass; R1 correctly
+refused missing logging-none configuration, R2 verification did not complete.
+Read-only post-cleanup server checks show zero new sessions/enabled QA devices.
+R3 confirms UI login but terminal/unloaded native Session. Idle-pristine clear
+and bootstrap/Auth overlap are reproduced, repaired and independently reviewed.
+R4 actual ordinary login, encrypted message choice and Settings remount pass.
+Real FCM/card/privacy/routing and Stable acceptance remain; keep OPEN.
+[Current checkpoint](operations/2026-10-16-native-preview-runtime-integration.md).
+
 **2026-10-16 existing-vault continuation:** native load-only snapshot reader and
 borrowed credential consumer pass source36/134 and affected173 accepted checks.
 Review's Android borrowed-FD leak is reproduced and repaired. Actual isolated

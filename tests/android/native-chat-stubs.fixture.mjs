@@ -106,3 +106,22 @@ export const nativeChatStubs = {
   "com/getcapacitor/PluginMethod.java": `package com.getcapacitor; public @interface PluginMethod {}`,
   "com/getcapacitor/annotation/CapacitorPlugin.java": `package com.getcapacitor.annotation; public @interface CapacitorPlugin { String name(); }`,
 };
+
+// Older cleanup/updater probes exercise only generic receipt. Rich receipt has its
+// own actual-entry probe; this explicit boundary avoids substituting vault/HTTP authority.
+export const nativeChatGenericPreviewStubs = {
+  "com/kub/messenger/MessagePreviewNotification.java": `package com.kub.messenger; import android.content.Context;
+    final class MessagePreviewNotification {
+      enum Result { PUBLISHED, SKIPPED, UNKNOWN, UNTRACKED }
+      interface Posting { Runnable prepare(long generation, MessagePreviewContent content); }
+      static Result receive(Context context, ChatNotificationCleanup.IntentStore intents, String tag,
+          String notification, String chat, String message, Posting posting) {
+        var reservation=ChatNotificationCleanup.reserve(intents,tag,notification,message);
+        if(reservation==null)return Result.UNTRACKED;
+        try { Runnable prepared=posting.prepare(reservation.generation(),null);
+          return ChatNotificationCleanup.publishInitial(reservation,g->prepared.run())?Result.PUBLISHED:Result.SKIPPED;
+        } catch(RuntimeException unknown){return Result.UNKNOWN;}
+        finally {ChatNotificationCleanup.cancelInitial(reservation);}
+      }
+    }`,
+};

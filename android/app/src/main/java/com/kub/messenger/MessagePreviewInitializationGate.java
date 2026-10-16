@@ -132,6 +132,12 @@ final class MessagePreviewInitializationGate {
         requireCurrent(permit);
         terminal = true; permit.retired = true; active = null; invalidateMemory();
     }
+    synchronized void finishLoaded(Permit permit) throws Unavailable {
+        requireConsumed(permit);
+        if (permit.effectAttempted) throw new Unavailable();
+        requireCurrent(permit);
+        terminal = true; permit.retired = true; active = null; invalidateMemory();
+    }
     synchronized void settleFailure(Permit permit) throws Unavailable {
         requireWorkerActive(permit);
         retire(permit); active = null; invalidateMemory();

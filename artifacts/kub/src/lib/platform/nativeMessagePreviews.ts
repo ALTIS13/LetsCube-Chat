@@ -1,4 +1,4 @@
-import { registerPlugin } from "@capacitor/core";
+import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { isNativeAndroid, supportsCapacitorPlugin } from "./capabilities";
 import { isMessagePreviewChoice, readQaMessagePreviewChoiceContext,
   type MessagePreviewChoice, type QaMessagePreviewChoiceOwner, type QaMessagePreviewChoiceContext } from "./nativeMessagePreviewContract";
@@ -16,14 +16,25 @@ export interface MessagePreviewVerificationBridge {
   }): Promise<unknown>;
   clearBinding(input: { revision: number }): Promise<unknown>;
 }
-interface MessagePreviewsPlugin extends MessagePreviewVerificationBridge {
+interface MessagePreviewsPlugin {
+  getVerificationContext(): Promise<unknown>;
+  beginBinding(input: MessagePreviewVerificationOwner & { documentId: string }): Promise<unknown>;
+  verifyBinding(input: MessagePreviewVerificationOwner & {
+    documentId: string; epoch: string; deviceId: string; accessToken: string; publicApiKey: string;
+  }): Promise<unknown>;
+  clearBinding(input: { revision: number; documentId: string }): Promise<unknown>;
   getCapabilities(): Promise<unknown>;
   getQaUserChoiceContext(input: QaMessagePreviewChoiceOwner): Promise<unknown>;
   beginQaUserChoice(input: { contextId: string; revision: number }): Promise<unknown>;
   confirmQaUserChoice(input: { contextId: string; revision: number; choice: MessagePreviewChoice }): Promise<unknown>;
   retireQaUserChoice(input: { contextId: string; expectedIntentRevision: number; revision: number }): Promise<unknown>;
+  beginUserChoice(input: { contextId: string; revision: number }): Promise<unknown>;
+  confirmUserChoice(input: { contextId: string; revision: number; choice: MessagePreviewChoice }): Promise<unknown>;
+  addListener(event: "ready", listener: () => void): Promise<PluginListenerHandle>;
 }
 let bridge: MessagePreviewsPlugin | null = null;
+let verificationDocumentId: string | null = null;
+let verificationDocument: Promise<string | null> | null = null;
 
 export function nativeMessagePreviewsAvailable(): boolean {
   return isNativeAndroid() && supportsCapacitorPlugin("MessagePreviews");
@@ -34,10 +45,25 @@ function verificationPlugin(): MessagePreviewsPlugin {
   return bridge ??= registerPlugin<MessagePreviewsPlugin>("MessagePreviews");
 }
 
+function withVerificationDocument(invoke: (plugin: MessagePreviewsPlugin, documentId: string) => Promise<unknown>, refused: unknown): Promise<unknown> {
+  const plugin = verificationPlugin();
+  if (verificationDocumentId !== null) return invoke(plugin, verificationDocumentId);
+  verificationDocument ??= (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const value = await Promise.race([plugin.getVerificationContext(),
+        new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 2_000); })]);
+      if (qaShape(value, ["documentId"]) && qaUuid(value.documentId)) return verificationDocumentId = value.documentId;
+    } catch { /* Unsupported shells never receive a credential-bearing verification call. */ }
+    finally { if (timer !== undefined) clearTimeout(timer); }
+    return null;
+  })();
+  return verificationDocument.then(documentId => documentId === null ? refused : invoke(plugin, documentId));
+}
 export const nativeMessagePreviewVerificationBridge: MessagePreviewVerificationBridge = {
-  beginBinding: async input => verificationPlugin().beginBinding(input),
-  verifyBinding: async input => verificationPlugin().verifyBinding(input),
-  clearBinding: async input => verificationPlugin().clearBinding(input),
+  beginBinding: async input => withVerificationDocument((plugin, documentId) => plugin.beginBinding({ ...input, documentId }), { epoch: null }),
+  verifyBinding: async input => withVerificationDocument((plugin, documentId) => plugin.verifyBinding({ ...input, documentId }), { verified: false }),
+  clearBinding: async input => withVerificationDocument((plugin, documentId) => plugin.clearBinding({ ...input, documentId }), { applied: false }),
 };
 
 export async function readNativeMessagePreviewCandidate(): Promise<unknown> {
@@ -46,6 +72,12 @@ export async function readNativeMessagePreviewCandidate(): Promise<unknown> {
     bridge ??= registerPlugin<MessagePreviewsPlugin>("MessagePreviews");
     return await bridge.getCapabilities();
   } catch { return null; }
+}
+
+export async function subscribeNativeMessagePreviewReady(listener: () => void): Promise<PluginListenerHandle> {
+  try { if (nativeMessagePreviewsAvailable()) return await verificationPlugin().addListener("ready", listener); }
+  catch { /* Older shells and an unavailable optional plugin remain generic-only. */ }
+  return { remove: async () => {} };
 }
 
 export type QaMessagePreviewChoiceAck = Readonly<{ applied: boolean }>;
@@ -70,6 +102,30 @@ async function qaCall(invoke: (plugin: MessagePreviewsPlugin) => Promise<unknown
 function qaAck(value: unknown): QaMessagePreviewChoiceAck | null {
   return qaShape(value, ["applied"]) && typeof value.applied === "boolean" ? Object.freeze({ applied: value.applied }) : null;
 }
+
+async function ordinaryChoiceCall(invoke: (plugin: MessagePreviewsPlugin) => Promise<unknown>): Promise<QaMessagePreviewChoiceAck | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    if (!nativeMessagePreviewsAvailable()) return null;
+    return qaAck(await Promise.race([Promise.resolve().then(() => invoke(verificationPlugin())),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 4_000); })]));
+  } catch { return null; }
+  finally { if (timer !== undefined) clearTimeout(timer); }
+}
+
+export const nativeMessagePreviewChoiceBridge = {
+  async beginUserChoice(input: { contextId: string; revision: number }): Promise<QaMessagePreviewChoiceAck | null> {
+    if (!qaShape(input, ["contextId", "revision"]) || !qaUuid(input.contextId) || !qaRevision(input.revision) || input.revision === 0) return null;
+    const captured = Object.freeze({ ...input });
+    return ordinaryChoiceCall(plugin => plugin.beginUserChoice(captured));
+  },
+  async confirmUserChoice(input: { contextId: string; revision: number; choice: MessagePreviewChoice }): Promise<QaMessagePreviewChoiceAck | null> {
+    if (!qaShape(input, ["contextId", "revision", "choice"]) || !qaUuid(input.contextId) || !qaRevision(input.revision)
+      || input.revision === 0 || !isMessagePreviewChoice(input.choice)) return null;
+    const captured = Object.freeze({ ...input });
+    return ordinaryChoiceCall(plugin => plugin.confirmUserChoice(captured));
+  },
+};
 // Null means UNKNOWN, including a lost reply after an action that may have applied.
 export const nativeMessagePreviewQaChoiceBridge = {
   async getQaUserChoiceContext(input: QaMessagePreviewChoiceOwner): Promise<QaMessagePreviewChoiceReply | null> {

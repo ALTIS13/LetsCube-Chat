@@ -56,6 +56,14 @@ final class MessagePreviewHttpTransport implements MessagePreviewVerificationRun
         List<Map<String,Object>> rows = rows(value);
         return rows != null && rows.size() == 1 ? rows : null;
     }
+    Object capability(String access, String key, String device, long deadline) throws Exception {
+        boolean validDevice = MessagePreviewVerificationState.uuid(device);
+        if (!validDevice) throw new IOException("PREVIEW_REFUSED");
+        URL url = URI.create("https://core.letscube.ru/rest/v1/rpc/native_message_preview_capability").toURL();
+        byte[] body = ("{\"p_device_id\":\"" + device + "\"}").getBytes(StandardCharsets.UTF_8);
+        List<Map<String,Object>> rows = rows(exchange(url, access, key, body, deadline));
+        return rows != null && rows.size() == 1 ? rows : null;
+    }
     Object preview(String access, String key, String device, String notification, long deadline) throws Exception {
         if (!MessagePreviewVerificationState.uuid(device) || !MessagePreviewVerificationState.uuid(notification))
             throw new IOException("PREVIEW_REFUSED");

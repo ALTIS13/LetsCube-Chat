@@ -16,7 +16,7 @@ const names = ['MessagePreviewVerificationState', 'MessagePreviewVaultFence', 'M
   'MessagePreviewJournalIO', 'MessagePreviewInstallationMarker', 'MessagePreviewInitializationGate',
   'MessagePreviewOwnedKeyInventory', 'MessagePreviewKeystoreReader', 'MessagePreviewAtomicBackend',
   'MessagePreviewCredentialEnvelope', 'MessagePreviewCredentialKeyCustody', 'MessagePreviewPristineInitializer',
-  'MessagePreviewVaultProvisioning'];
+  'MessagePreviewVaultProvisioning', 'MessagePreviewExistingVault'];
 function compile(replacement) {
   const out = directory('nmpv-d3-');
   const replacements = replacement ? (Array.isArray(replacement) ? replacement : [replacement]) : [];

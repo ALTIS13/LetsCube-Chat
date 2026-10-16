@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { foregroundCompositionStubs as producerStubs, compositionPlatform as producerPlatform }
+import { foregroundCompositionStubs as producerStubs, compositionPlatform as producerPlatform, foregroundCompositionSourceNames }
   from '../android/message-preview-genuine-composition.fixture.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -16,9 +16,10 @@ const names = ['MessagePreviewVerificationState', 'MessagePreviewVaultFence', 'M
   'MessagePreviewJournalIO', 'MessagePreviewInstallationMarker', 'MessagePreviewInitializationGate',
   'MessagePreviewOwnedKeyInventory', 'MessagePreviewKeystoreReader', 'MessagePreviewAtomicBackend',
   'MessagePreviewCredentialEnvelope', 'MessagePreviewCredentialKeyCustody', 'MessagePreviewPristineInitializer',
-  'MessagePreviewVaultProvisioning', 'MessagePreviewVerificationRuntime', 'MessagePreviewResponseParser',
+  'MessagePreviewVaultProvisioning', 'MessagePreviewExistingVault', 'MessagePreviewVerificationRuntime', 'MessagePreviewResponseParser',
   'MessagePreviewHttpTransport', 'MessagePreviewsPlugin', 'MessagePreviewForegroundAuthority',
   'MessagePreviewForegroundComposition', 'MainActivity', 'MessagePreviewQaUserChoice'];
+names.push(...foregroundCompositionSourceNames.filter(name => !names.includes(name) && name !== 'MessagePreviewVerificationProducer'));
 const producer = path.join(base, 'MessagePreviewVerificationProducer.java');
 const sources = names.map(name => path.join(base, `${name}.java`));
 if (existsSync(producer)) sources.push(producer);

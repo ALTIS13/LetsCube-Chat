@@ -4,7 +4,7 @@ import {existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve, sep} from 'node:path';
 import test from 'node:test';
-import {nativeChatStubs} from '../android/native-chat-stubs.fixture.mjs';
+import {nativeChatStubs,nativeChatGenericPreviewStubs} from '../android/native-chat-stubs.fixture.mjs';
 
 const root=resolve(import.meta.dirname,'../..'), native=join(root,'android/app/src/main/java/com/kub/messenger');
 const publisher='ChatMessagePreviewPublisher.java';
@@ -18,7 +18,7 @@ const binary=name=>home?resolve(home,'bin',name+(process.platform==='win32'?'.ex
 let directory;
 function compile(target,changed={},omitted=false){
   const paths=[];
-  for(const [file,source] of Object.entries(nativeChatStubs)){
+  for(const [file,source] of Object.entries({...nativeChatStubs,...nativeChatGenericPreviewStubs})){
     const path=join(target,'src',file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,source);paths.push(path);
   }
   for(const [file,source] of Object.entries({...sources,...changed})){

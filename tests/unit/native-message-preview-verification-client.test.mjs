@@ -19,6 +19,7 @@ const tuple = (recipientId = A, recipientSessionId = S, deviceId = D) => ({ reci
 function fixture(options = {}) {
   let wall = 1_000_000, mono = 0, timerId = 0, voiceEpoch = 0, nativeRevision = 0;
   let auth, changed, runtime, dispose, ticket = null, verified = null, sessionReads = 0, sdkToken = "fictional-one", directBinding = tuple();
+  let documentId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
   const timers = new Map(), listeners = new Map(), effects = [], logs = [], requests = [];
   const state = { currentUser: { id: A }, authSessionIdentity: { userId: A, sessionId: S }, accountEpoch: 1 };
   const makeSession = (user = A, sid = S, exp = Math.floor((wall + 60_000) / 1000), extra = {}) => ({
@@ -33,10 +34,13 @@ function fixture(options = {}) {
     return Promise.resolve({ remove: async () => { set.delete(work); } });
   };
   const native = {
+    getVerificationContext: async () => Object.hasOwn(options, 'documentContext') ? options.documentContext : { documentId },
+    addListener: (event, listener) => add('preview:' + event, listener),
     getCapabilities: async () => ({ protocol: 0 }),
     beginBinding: async args => {
       const index = effects.filter(e => e.name === "begin").length; effects.push({ name: "begin", args: plain(args) });
       const apply = () => {
+        if (args.documentId !== documentId) return { epoch: null };
         if (!Number.isSafeInteger(args.revision) || args.revision <= nativeRevision) throw new Error("fictional stale begin");
         nativeRevision = args.revision; verified = null; ticket = { ...args, epoch: `ticket-${args.revision}` };
         return { epoch: ticket.epoch };
@@ -46,7 +50,7 @@ function fixture(options = {}) {
     verifyBinding: async args => {
       const index = effects.filter(e => e.name === "verify").length; effects.push({ name: "verify", args: plain(args) });
       const apply = () => {
-        const ok = ticket && args.revision === nativeRevision && args.epoch === ticket.epoch
+        const ok = args.documentId === documentId && ticket && args.revision === nativeRevision && args.epoch === ticket.epoch
           && args.recipientId === ticket.recipientId && args.recipientSessionId === ticket.recipientSessionId
           && args.accountEpoch === ticket.accountEpoch;
         if (ok) verified = tuple(args.recipientId, args.recipientSessionId, args.deviceId);
@@ -57,7 +61,7 @@ function fixture(options = {}) {
     clearBinding: async args => {
       const index = effects.filter(e => e.name === "clear").length; effects.push({ name: "clear", args: plain(args) });
       const apply = () => {
-        const applied = Number.isSafeInteger(args.revision) && args.revision > nativeRevision;
+        const applied = args.documentId === documentId && Number.isSafeInteger(args.revision) && args.revision > nativeRevision;
         if (applied) { nativeRevision = args.revision; ticket = verified = null; }
         return { applied };
       };
@@ -112,7 +116,8 @@ function fixture(options = {}) {
     if (boundary[file]) return boundary[file];
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} }; modules.set(file, module);
-    let source = readFileSync(file, "utf8").replaceAll("import.meta.env.BASE_URL", '"/"');
+    let source = readFileSync(file, "utf8").replaceAll("import.meta.env.BASE_URL", '"/"')
+      .replaceAll("import.meta.env.VITE_LETSCUBE_QA_MESSAGE_PREVIEW_USER_CHOICE", '"false"');
     if (options.transform) source = options.transform(file, source);
     const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     vm.runInNewContext(compiled, {
@@ -147,6 +152,9 @@ function fixture(options = {}) {
     start: async () => { dispose = calls.startNativeVoiceCalls(); await flush(); }, stop: () => dispose?.(),
     status: () => calls.nativeVoicePushSnapshot()?.status, verified: () => plain(verified), sdkReads: () => sessionReads,
     preview: () => plain(calls.nativeMessagePreviewBindingSnapshot()),
+    previewReady: () => { for (const listener of listeners.get('preview:ready') ?? []) listener(); },
+    rotateDocument: () => { documentId = "ffffffff-ffff-4fff-8fff-ffffffffffff"; nativeRevision = 0; ticket = verified = null; },
+    nativeCall: (method, input) => native[method](input),
     nativeCandidate: () => load(resolve(root, "lib/platform/nativeMessagePreviews.ts")).readNativeMessagePreviewCandidate(),
     of: name => effects.filter(e => e.name === name), store: update => { Object.assign(state, update); changed?.(); },
     change: value => {
@@ -176,15 +184,61 @@ async function positive(h) {
   assert.equal(h.of("verify").length, 1, "published sidecar must hand off to separate native verifier");
   assert.deepEqual(h.verified(), tuple());
   assert.deepEqual(plain(await h.nativeCandidate()), { protocol: 0 }, "verification is never consent/capability");
-  assert.deepEqual(Object.keys(h.of("begin")[0].args).sort(), ["accountEpoch", "recipientId", "recipientSessionId", "revision"].sort(),
+  assert.deepEqual(Object.keys(h.of("begin")[0].args).sort(), ["accountEpoch", "recipientId", "recipientSessionId", "revision", "documentId"].sort(),
     "Capacitor begin methodData must not contain bearer, public key or caller options");
 }
 test("baseline RED publication hands exact SDK access/public key to separate native verifier", async () => {
   const h = fixture(); try { await positive(h);
     const { args } = h.of("verify")[0];
-    assert.deepEqual(Object.keys(args).sort(), ["accessToken", "accountEpoch", "deviceId", "epoch", "publicApiKey", "recipientId", "recipientSessionId", "revision"].sort());
+    assert.deepEqual(Object.keys(args).sort(), ["accessToken", "accountEpoch", "deviceId", "epoch", "publicApiKey", "recipientId", "recipientSessionId", "revision", "documentId"].sort());
     assert.equal(args.accountEpoch, 1); assert.equal(args.publicApiKey, "sb_publishable_fictional"); assert.equal(args.accessToken, h.makeSession().access_token);
     assert.equal("refreshToken" in args, false); assert.equal("url" in args, false);
+  } finally { h.stop(); }
+});
+
+test("completed native verification wakes Settings without another auth event", async () => {
+  const h = fixture(), notices = [];
+  const verification = h.direct({ onStateChanged: () => notices.push(h.verified()) });
+  try {
+    verification.bindingChanged(tuple()); await h.flush();
+    assert.deepEqual(h.verified(), tuple());
+    assert.deepEqual(notices.at(-1), tuple(), "native completion must refresh the Settings capability read");
+  } finally { verification.dispose(); await h.flush(); }
+});
+
+test("durable consent completion wakes Settings and removes its native listener on dispose", async () => {
+  const h = fixture(); let notices = 0;
+  const off = h.calls.subscribeNativeVoicePush(() => { notices++; });
+  try {
+    await h.start(); const before = notices;
+    h.previewReady(); assert.equal(notices, before + 1);
+    h.stop(); await h.flush(); const stopped = notices;
+    h.previewReady(); assert.equal(notices, stopped);
+  } finally { off(); h.stop(); }
+});
+
+for (const documentContext of [null, {}, { documentId: '' }, { documentId: 1 },
+  { documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', extra: 1 }]) {
+  test('missing or malformed native document context forwards no credentials: ' + JSON.stringify(documentContext), async () => {
+    const h = fixture({ documentContext });
+    try { await h.start(); assert.equal(h.status(), 'native_active');
+      assert.equal(h.of('begin').length, 0); assert.equal(h.of('verify').length, 0);
+    } finally { h.stop(); }
+  });
+}
+
+test('late requests from the old document cannot clear the new document binding', async () => {
+  const h = fixture();
+  try {
+    await positive(h);
+    const old = h.of('begin')[0].args, access = h.of('verify')[0].args;
+    h.rotateDocument(); const { documentId } = await h.nativeCall('getVerificationContext');
+    const began = await h.nativeCall('beginBinding', { ...old, documentId, revision: 1 });
+    await h.nativeCall('verifyBinding', { ...access, documentId, revision: 1, epoch: began.epoch });
+    assert.deepEqual(h.verified(), tuple());
+    assert.deepEqual(plain(await h.nativeCall('clearBinding', { revision: 999, documentId: old.documentId })), { applied: false });
+    h.signal(h.makeSession()); await h.flush();
+    assert.deepEqual(h.verified(), tuple(), 'the old JS module must retain its old native document scope');
   } finally { h.stop(); }
 });
 test("baseline RED retirement sends a strictly newer clear immediately", async () => {
@@ -292,7 +346,7 @@ test("native begin logging refusal forwards zero credentials and never acquires 
   const h = fixture({ begin: () => { throw new Error("fictional logging-enabled refusal"); } });
   try { await h.start(); assert.equal(h.status(), "native_active"); assert.equal(h.of("voice").length, 1);
     assert.equal(h.of("begin").length, 1); assert.equal(h.of("verify").length, 0); assert.equal(h.sdkReads(), 1);
-    assert.deepEqual(Object.keys(h.of("begin")[0].args).sort(), ["accountEpoch", "recipientId", "recipientSessionId", "revision"].sort());
+    assert.deepEqual(Object.keys(h.of("begin")[0].args).sort(), ["accountEpoch", "recipientId", "recipientSessionId", "revision", "documentId"].sort());
     assert.deepEqual(h.logs, []);
   } finally { h.stop(); }
 });

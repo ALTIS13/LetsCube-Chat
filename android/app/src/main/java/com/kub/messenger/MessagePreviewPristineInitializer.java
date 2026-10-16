@@ -19,11 +19,15 @@ import javax.crypto.SecretKey;
 
 // Inactive native-private composition. The genuine passive lifecycle issuer is a future input.
 final class MessagePreviewPristineInitializer {
-    enum Status { INITIALIZED_EMPTY_G0, UNAVAILABLE }
+    enum Status { INITIALIZED_EMPTY_G0, LOADED_EXISTING, LOADED_FOR_RETIREMENT, UNAVAILABLE }
     static final class InitResult {
         final Status status;
         final Long generation;
-        private InitResult(Status status, Long generation) { this.status=status; this.generation=generation; }
+        final Long vaultRevision;
+        private InitResult(Status status, Long generation) { this(status, generation, generation == null ? null : 0L); }
+        private InitResult(Status status, Long generation, Long vaultRevision) {
+            this.status=status; this.generation=generation; this.vaultRevision=vaultRevision;
+        }
     }
     interface Completion { void complete(InitResult result); }
     static final class Unavailable extends Exception {
@@ -45,6 +49,7 @@ final class MessagePreviewPristineInitializer {
     private InitializedState initialized;
     private TransitionWork pendingTransition, activeTransition;
     private final MessagePreviewVaultProvisioning.Authority provisioningAuthority;
+    private final boolean nativeSession;
     private AcquiringTask pendingAcquiring, activeAcquiring;
     private TransitionWork queuedErasure;
 
@@ -53,8 +58,13 @@ final class MessagePreviewPristineInitializer {
         final ProvisionStatus status;
         final Long generation;
         final String ticket;
+        final Long expiresAt;
         private ProvisionResult(ProvisionStatus status, Long generation, String ticket) {
+            this(status, generation, ticket, null);
+        }
+        private ProvisionResult(ProvisionStatus status, Long generation, String ticket, Long expiresAt) {
             this.status=status; this.generation=generation; this.ticket=ticket;
+            this.expiresAt=expiresAt;
         }
     }
     interface ProvisionCompletion { void complete(ProvisionResult result); }
@@ -91,6 +101,7 @@ final class MessagePreviewPristineInitializer {
         final String installation;
         final MessagePreviewJournalIO journal;
         final MessagePreviewVaultFence fence;
+        final boolean nativeSession;
         MessagePreviewMetadataEnvelope.Record checkedHead;
         Retirement current;
         boolean uncertain;
@@ -99,11 +110,20 @@ final class MessagePreviewPristineInitializer {
         MessagePreviewVaultFence.Context boundContext;
         long acceptedVaultRevision=-1;
         final Set<String> acceptedOperations=new HashSet<>();
-        private InitializedState(Prepared prepared) {
+        private InitializedState(Prepared prepared, boolean nativeSession) {
+            this.nativeSession=nativeSession;
             installation=prepared.record.header.installation;
             journal=prepared.journal;
             checkedHead=prepared.record;
-            fence=new MessagePreviewVaultFence(checkedHead.header.generation);
+            fence=nativeSession ? new MessagePreviewVaultFence(checkedHead.header.generation, checkedHead.header.vaultRevision,
+                    checkedHead.header.operationId, installation.substring(0,16))
+                : checkedHead.header.generation == 0 ? new MessagePreviewVaultFence(0)
+                    : new MessagePreviewVaultFence(checkedHead.header.generation, checkedHead.header.vaultRevision, checkedHead.header.operationId);
+            if (nativeSession) acceptedVaultRevision=checkedHead.header.vaultRevision;
+            if (checkedHead.header.generation > 0) {
+                acceptedVaultRevision=checkedHead.header.vaultRevision;
+                acceptedOperations.add(checkedHead.header.operationId);
+            }
         }
     }
     private static final class Retirement {
@@ -133,8 +153,12 @@ final class MessagePreviewPristineInitializer {
     private static final class Attempt {
         final MessagePreviewInitializationGate.Permit permit;
         final Completion completion;
+        final boolean existing;
         Attempt(MessagePreviewInitializationGate.Permit permit, Completion completion) {
-            this.permit=permit; this.completion=completion;
+            this(permit, completion, false);
+        }
+        Attempt(MessagePreviewInitializationGate.Permit permit, Completion completion, boolean existing) {
+            this.permit=permit; this.completion=completion; this.existing=existing;
         }
     }
     private static final class Prepared {
@@ -153,6 +177,17 @@ final class MessagePreviewPristineInitializer {
     static MessagePreviewPristineInitializer getOrCreate(Context supplied,
             MessagePreviewInitializationGate.ForegroundAuthority issuer,
             MessagePreviewVaultProvisioning.Authority provisioningAuthority) throws Unavailable {
+        return getOrCreate(supplied, issuer, provisioningAuthority, false);
+    }
+    static MessagePreviewPristineInitializer getOrCreateForSession(Context supplied,
+            MessagePreviewInitializationGate.ForegroundAuthority issuer,
+            MessagePreviewVaultProvisioning.Authority provisioningAuthority) throws Unavailable {
+        if (provisioningAuthority == null) throw new Unavailable();
+        return getOrCreate(supplied, issuer, provisioningAuthority, true);
+    }
+    private static MessagePreviewPristineInitializer getOrCreate(Context supplied,
+            MessagePreviewInitializationGate.ForegroundAuthority issuer,
+            MessagePreviewVaultProvisioning.Authority provisioningAuthority, boolean nativeSession) throws Unavailable {
         try {
             requireMain();
             if (supplied == null || issuer == null || supplied.isDeviceProtectedStorage()) throw new Unavailable();
@@ -163,10 +198,11 @@ final class MessagePreviewPristineInitializer {
             synchronized (MessagePreviewPristineInitializer.class) {
                 if (registered != null) {
                     if (registered.context != application || registered.uid != uid || registered.issuer != issuer
-                        || registered.closed || registered.provisioningAuthority != provisioningAuthority) throw new Unavailable();
+                        || registered.closed || registered.provisioningAuthority != provisioningAuthority
+                        || registered.nativeSession != nativeSession) throw new Unavailable();
                     return registered;
                 }
-                owner=new MessagePreviewPristineInitializer(application, uid, issuer, provisioningAuthority);
+                owner=new MessagePreviewPristineInitializer(application, uid, issuer, provisioningAuthority, nativeSession);
                 registered=owner;
             }
             try { owner.worker.start(); }
@@ -177,9 +213,10 @@ final class MessagePreviewPristineInitializer {
 
     private MessagePreviewPristineInitializer(Context context, int uid,
             MessagePreviewInitializationGate.ForegroundAuthority issuer,
-            MessagePreviewVaultProvisioning.Authority provisioningAuthority) throws Exception {
+            MessagePreviewVaultProvisioning.Authority provisioningAuthority, boolean nativeSession) throws Exception {
         this.context=context; this.uid=uid; this.issuer=issuer;
         this.provisioningAuthority=provisioningAuthority;
+        this.nativeSession=nativeSession;
         worker=new Thread(new Runnable() {
             @Override public void run() { MessagePreviewPristineInitializer.this.work(); }
         }, "NmpvPristineOwner");
@@ -206,16 +243,22 @@ final class MessagePreviewPristineInitializer {
     }
 
     void initializeExplicit(Completion completion) {
+        prepare(false, completion);
+    }
+    void loadExisting(Completion completion) {
+        prepare(true, completion);
+    }
+    private void prepare(boolean existing, Completion completion) {
         if (completion == null) return;
         try { requireMain(); requireApplication(context, uid); }
         catch (Exception refused) { deliver(completion, REFUSED); return; }
         boolean admitted=false;
         synchronized (this) {
             try {
-                if (closed || busy) throw new Unavailable();
+                if (closed || busy || initialized != null) throw new Unavailable();
                 MessagePreviewInitializationGate.Permit permit=gate.admit(gate.capture());
                 busy=true;
-                pending=new Attempt(permit, completion);
+                pending=new Attempt(permit, completion, existing);
                 admitted=true; notifyAll();
             } catch (Exception refused) { /* Fixed refusal, no platform effects or queued successor. */ }
         }
@@ -238,16 +281,25 @@ final class MessagePreviewPristineInitializer {
         notifyAll();
     }
 
-    void beginOwned(String operationId, long vaultRevision, long expectedGeneration,
+    String nextOperationId(long revision) {
+        try { requireMain(); }
+        catch (Unavailable refused) { return null; }
+        synchronized (this) {
+            if (!nativeSession || closed || initialized == null || revision<=initialized.acceptedVaultRevision) return null;
+            String id=MessagePreviewVaultFence.nativeOperationId(initialized.installation.substring(0,16), revision);
+            return id != null && !initialized.acceptedOperations.contains(id) ? id : null;
+        }
+    }
+    boolean beginOwned(String operationId, long vaultRevision, long expectedGeneration,
             MessagePreviewVaultFence.Context captured, MessagePreviewVaultFence.Owner owner,
             ProvisionCompletion completion) {
-        if (completion == null) return;
+        if (completion == null) return false;
         ProvisionStatus status=ProvisionStatus.UNAVAILABLE;
         try {
             requireMain();
             if (provisioningAuthority == null) throw new Unavailable();
             if (!intentShape(operationId, vaultRevision, expectedGeneration) || !contextShape(captured)) {
-                deliverProvision(completion, new ProvisionResult(ProvisionStatus.INVALID_REQUEST, null, null)); return;
+                deliverProvision(completion, new ProvisionResult(ProvisionStatus.INVALID_REQUEST, null, null)); return false;
             }
             MessagePreviewVaultProvisioning.Identity identity=new MessagePreviewVaultProvisioning.Identity(
                 operationId, vaultRevision, expectedGeneration, captured, owner);
@@ -257,12 +309,15 @@ final class MessagePreviewPristineInitializer {
             synchronized (this) {
                 if (closed || initialized == null) throw new Unavailable();
                 if (busy) status=ProvisionStatus.BUSY;
-                else if (initialized.uncertain || !timeShape(now, 15_000)) status=ProvisionStatus.UNAVAILABLE;
+                else if (initialized.uncertain || (nativeSession && initialized.acquisition == null
+                    && retirementKind(initialized.checkedHead.header.kind)) || !timeShape(now, 15_000)) status=ProvisionStatus.UNAVAILABLE;
                 else if (initialized.checkedHead.header.generation != expectedGeneration) status=ProvisionStatus.STALE_OWNER;
                 else if (vaultRevision<=initialized.acceptedVaultRevision) status=ProvisionStatus.STALE_OWNER;
                 else if (initialized.acceptedOperations.contains(operationId)) status=ProvisionStatus.INVALID_REQUEST;
+                else if (nativeSession && !operationId.equals(MessagePreviewVaultFence.nativeOperationId(
+                    initialized.installation.substring(0,16), vaultRevision))) status=ProvisionStatus.INVALID_REQUEST;
                 else if (expectedGeneration>=9007199254740990L || vaultRevision==9007199254740991L
-                    || initialized.acceptedOperations.size()>=255) status=ProvisionStatus.EXHAUSTED;
+                    || (!nativeSession && initialized.acceptedOperations.size()>=255)) status=ProvisionStatus.EXHAUSTED;
                 else if (initialized.boundContext != null && captured.revision <= initialized.boundContext.revision
                     && !sameContext(initialized.boundContext, captured)) status=ProvisionStatus.STALE_OWNER;
                 else {
@@ -282,13 +337,14 @@ final class MessagePreviewPristineInitializer {
                         }
                         Acquisition target=new Acquisition(program);
                         initialized.acquisition=target; initialized.uncertain=true; initialized.lastMillis=now;
-                        queueAcquiring(new AcquiringTask(initialized, target, true, false, null, completion, program.deadline)); return;
+                        queueAcquiring(new AcquiringTask(initialized, target, true, false, null, completion, program.deadline)); return true;
                     }
                     status=ProvisionStatus.valueOf(admission.decision.name());
                 }
             }
         } catch (Exception refused) { /* Unbound/stale authority never reserves or touches storage. */ }
         deliverProvision(completion, new ProvisionResult(status, null, null));
+        return false;
     }
     void provisionExact(String operationId, String ticket, String borrowedAccess, ProvisionCompletion completion) {
         if (completion == null) return;
@@ -342,7 +398,8 @@ final class MessagePreviewPristineInitializer {
             && MessagePreviewVerificationState.safe(generation);
     }
     private static void rememberIntent(InitializedState state, MessagePreviewVaultFence.Operation operation) {
-        state.acceptedVaultRevision=operation.vaultRevision; state.acceptedOperations.add(operation.operationId);
+        state.acceptedVaultRevision=operation.vaultRevision;
+        if (!state.nativeSession) state.acceptedOperations.add(operation.operationId);
     }
     private static boolean contextShape(MessagePreviewVaultFence.Context c) {
         return c!=null && MessagePreviewVerificationState.safe(c.revision) && MessagePreviewVerificationState.safe(c.accountEpoch)
@@ -411,6 +468,10 @@ final class MessagePreviewPristineInitializer {
                     if (admission.decision == MessagePreviewVaultFence.Decision.RESERVED) {
                         rememberIntent(initialized, admission.operation);
                         Retirement target=new Retirement(admission.operation, initialized.checkedHead);
+                        if (initialized.checkedHead.header.kind == MessagePreviewMetadataEnvelope.Kind.COMMITTED
+                            || (nativeSession && retirementKind(initialized.checkedHead.header.kind)))
+                            target.program=new MessagePreviewVaultProvisioning.Work(admission.operation, null,
+                                initialized.checkedHead, now, now+TRANSITION_BUDGET_MILLIS, "");
                         initialized.current=target; initialized.uncertain=true; initialized.lastMillis=now;
                         queueTransition(new TransitionWork(initialized, target, false, now, completion));
                         return;
@@ -482,17 +543,21 @@ final class MessagePreviewPristineInitializer {
             boolean finished=false;
             try {
                 gate.consume(attempt.permit);
-                Prepared prepared=initialize(attempt.permit);
+                Prepared prepared=attempt.existing ? load(attempt.permit) : initialize(attempt.permit);
                 current(attempt.permit);
                 synchronized (this) {
                     if (closed) throw new Unavailable();
                     gate.currentBeforeEffect(attempt.permit);
-                    gate.finishInitialized(attempt.permit);
+                    if (attempt.existing) gate.finishLoaded(attempt.permit);
+                    else gate.finishInitialized(attempt.permit);
                     journal=prepared.journal;
                     metadataKey=prepared.key;
-                    initialized=new InitializedState(prepared);
+                    initialized=new InitializedState(prepared, nativeSession);
                     finished=true;
-                    result=new InitResult(Status.INITIALIZED_EMPTY_G0, 0L);
+                    result=new InitResult(attempt.existing
+                        ? (nativeSession && retirementKind(prepared.record.header.kind) ? Status.LOADED_FOR_RETIREMENT : Status.LOADED_EXISTING)
+                        : Status.INITIALIZED_EMPTY_G0,
+                        prepared.record.header.generation, prepared.record.header.vaultRevision);
                 }
             } catch (Exception refused) { /* Retain every attempted marker/key/journal residue. */ }
             finally {
@@ -516,6 +581,27 @@ final class MessagePreviewPristineInitializer {
             }
         });
         current(permit);
+    }
+    private static boolean retirementKind(MessagePreviewMetadataEnvelope.Kind kind) {
+        return kind == MessagePreviewMetadataEnvelope.Kind.PENDING || kind == MessagePreviewMetadataEnvelope.Kind.RETIRING;
+    }
+    private Prepared load(MessagePreviewInitializationGate.Permit permit) throws Exception {
+        current(permit);
+        MessagePreviewExistingVault reader=MessagePreviewExistingVault.open(context);
+        MessagePreviewMetadataEnvelope.Record record=reader.readAuthenticated();
+        current(permit);
+        if (record.header.kind != MessagePreviewMetadataEnvelope.Kind.EMPTY
+            && record.header.kind != MessagePreviewMetadataEnvelope.Kind.COMMITTED
+            && !(nativeSession && retirementKind(record.header.kind))) throw new Unavailable();
+        SecretKey key=new MessagePreviewKeystoreReader(context, record.header.installation).loadMetadata();
+        MessagePreviewJournalIO candidate=new MessagePreviewJournalIO(new TransitionBackend(new MessagePreviewAtomicBackend(context)));
+        MessagePreviewMetadataEnvelope.Record fresh=candidate.read(record.header.installation, key);
+        if (!sameHeader(record.header, fresh.header) || !Arrays.equals(record.credentialBytes(), fresh.credentialBytes())) throw new Unavailable();
+        MessagePreviewMetadataEnvelope.Record finalRecord=reader.readAuthenticated();
+        if (!sameHeader(record.header, finalRecord.header)
+            || !Arrays.equals(record.credentialBytes(), finalRecord.credentialBytes())) throw new Unavailable();
+        current(permit);
+        return new Prepared(candidate, key, fresh);
     }
     private void beforeMint(KeyStore store, String alias, MessagePreviewInitializationGate.Permit permit,
             MessagePreviewAtomicBackend.MarkerIO markers, MessagePreviewAtomicBackend.MarkerReservation reservation) throws Exception {
@@ -779,7 +865,8 @@ final class MessagePreviewPristineInitializer {
                     work.target.program.completed=ticket==null;
                     work.state.checkedHead=record; work.state.uncertain=false;
                     result=new ProvisionResult(ticket!=null ? ProvisionStatus.PENDING
-                        : work.begin ? ProvisionStatus.INVALID_OWNER : ProvisionStatus.COMMITTED, record.header.generation, ticket);
+                        : work.begin ? ProvisionStatus.INVALID_OWNER : ProvisionStatus.COMMITTED, record.header.generation, ticket,
+                        record.header.kind==MessagePreviewMetadataEnvelope.Kind.COMMITTED ? record.header.expiresWallMillis : null);
                 }
                 finished=true;
             }

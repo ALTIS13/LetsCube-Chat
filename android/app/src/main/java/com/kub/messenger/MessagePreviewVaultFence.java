@@ -1,6 +1,7 @@
 package com.kub.messenger;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 // Inactive, memory-only foundation. No plugin, persistence, verification or credential authority.
@@ -55,14 +56,37 @@ final class MessagePreviewVaultFence {
     }
 
     private final Set<String> seenIds = new HashSet<>();
+    private final String nativePrefix;
     private long generation, vaultRevision = -1, contextRevision = -1;
     private Context context;
     private Operation current;
 
     // Future trusted metadata input; this constructor does not establish durable generation proof.
     MessagePreviewVaultFence(long initialGeneration) {
+        this(initialGeneration, null);
+    }
+    private MessagePreviewVaultFence(long initialGeneration, String nativePrefix) {
         if (!safe(initialGeneration)) throw new IllegalArgumentException("INVALID_GENERATION");
         generation = initialGeneration;
+        this.nativePrefix = nativePrefix;
+    }
+    MessagePreviewVaultFence(long initialGeneration, long durableRevision, String durableOperationId) {
+        this(initialGeneration);
+        if (!safe(durableRevision) || !operationId(durableOperationId)) throw new IllegalArgumentException("INVALID_REVISION");
+        vaultRevision = durableRevision;
+        seenIds.add(durableOperationId);
+    }
+    MessagePreviewVaultFence(long initialGeneration, long durableRevision, String durableOperationId, String installationPrefix) {
+        this(initialGeneration, installationPrefix);
+        if (nativeOperationId(installationPrefix, durableRevision) == null
+            || (initialGeneration == 0 ? durableRevision != 0 || !"".equals(durableOperationId) : !operationId(durableOperationId)))
+            throw new IllegalArgumentException("INVALID_NATIVE_LEDGER");
+        vaultRevision = durableRevision;
+        if (initialGeneration > 0) seenIds.add(durableOperationId);
+    }
+    static String nativeOperationId(String installationPrefix, long revision) {
+        if (installationPrefix == null || !installationPrefix.matches("[0-9a-f]{16}") || !safe(revision)) return null;
+        return installationPrefix + String.format(Locale.ROOT, "%016x", revision);
     }
     private static boolean safe(long value) {
         return MessagePreviewVerificationState.safe(value);
@@ -111,6 +135,7 @@ final class MessagePreviewVaultFence {
         if (!operationId(operationId) || !safe(nextRevision) || !safe(expectedGeneration)) return Decision.INVALID_REQUEST;
         if (nextRevision <= vaultRevision) return Decision.STALE_OWNER;
         if (seenIds.contains(operationId)) return Decision.INVALID_REQUEST;
+        if (nativePrefix != null && !operationId.equals(nativeOperationId(nativePrefix, nextRevision))) return Decision.INVALID_REQUEST;
         return null;
     }
     synchronized Admission begin(String operationId, long nextRevision, long expectedGeneration, Context captured, Owner owner) {
@@ -141,11 +166,15 @@ final class MessagePreviewVaultFence {
         // Every BEGIN intake, including REFUSED, leaves numeric headroom for exact erasure.
         if (kind != Kind.RETIRE && generation == 9007199254740990L) return rejected(Decision.EXHAUSTED);
         if (kind != Kind.RETIRE && nextRevision == 9007199254740991L) return rejected(Decision.EXHAUSTED);
+        if (kind != Kind.RETIRE && nativePrefix != null && nextRevision == 9007199254740990L
+            && seenIds.contains(nativeOperationId(nativePrefix, 9007199254740991L))) return rejected(Decision.EXHAUSTED);
         // Never evict replay identities; keep the final slot available for erasure of the last begin.
-        if (seenIds.size() >= MAX_OPERATIONS - (kind == Kind.RETIRE ? 0 : 1)) return rejected(Decision.EXHAUSTED);
+        if (nativePrefix == null) {
+            if (seenIds.size() >= MAX_OPERATIONS - (kind == Kind.RETIRE ? 0 : 1)) return rejected(Decision.EXHAUSTED);
+        }
         long base = generation;
         generation = base + 1; vaultRevision = nextRevision;
-        seenIds.add(operationId);
+        if (nativePrefix == null) seenIds.add(operationId);
         current = new Operation(operationId, nextRevision, base, generation, captured, owner, kind);
         return new Admission(kind == Kind.REFUSED ? Decision.INVALID_OWNER : Decision.RESERVED, current);
     }

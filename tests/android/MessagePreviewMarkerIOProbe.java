@@ -5,7 +5,9 @@ import android.content.pm.ApplicationInfo;
 import android.os.Looper;
 import android.os.UserManager;
 import android.system.Os;
+import android.system.OsConstants;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
@@ -79,6 +81,7 @@ public final class MessagePreviewMarkerIOProbe {
             permit=gate.admit(gate.capture());
             Os.events.clear(); Os.fail=null; Os.onEvent=null; Os.wrongDescriptor=false; Os.nonemptyDescriptor=false;
             Os.directoryDescriptorFault=null; Os.directoryFaultTarget=null;
+            Os.readLimit=Integer.MAX_VALUE; Os.writeLimit=Integer.MAX_VALUE;
         }
         void open() throws Exception { worker.on(() -> { gate.consume(permit); io=new MessagePreviewAtomicBackend.MarkerIO(app,gate,permit); }); }
         void reserve() throws Exception { worker.on(() -> reservation=io.reserve()); }
@@ -344,6 +347,75 @@ public final class MessagePreviewMarkerIOProbe {
             check(f.effects()==0 && !f.namespace.exists(),"NO_ENTRY_REPLAY_CREATE");
         }
     }
+    private static void posixPorts(File parent) throws Exception {
+        File file=new File(parent,"ports.bin");
+        Os.writeLimit=3; Os.readLimit=2;
+        FileDescriptor fd=Os.open(file.getPath(),OsConstants.O_WRONLY|OsConstants.O_CREAT|OsConstants.O_EXCL,0600);
+        try {
+            byte[] bytes={11,12,13,14,15,16,17};
+            check(Os.write(fd,bytes,0,7)==3 && Os.write(fd,bytes,3,4)==3 && Os.write(fd,bytes,6,1)==1,
+                "CALIBRATED_PARTIAL_WRITES");
+        } finally { Os.close(fd); }
+        check(Arrays.equals(Files.readAllBytes(file.toPath()),new byte[]{11,12,13,14,15,16,17}),"CALIBRATED_WRITE_OFFSETS");
+        fd=Os.open(file.getPath(),OsConstants.O_RDONLY,0);
+        try {
+            byte[] bytes=new byte[8];
+            check(Os.read(fd,bytes,0,8)==2 && Os.read(fd,bytes,2,6)==2 && Os.read(fd,bytes,4,4)==2
+                && Os.read(fd,bytes,6,2)==1 && Os.read(fd,bytes,7,1)==0,"CALIBRATED_POSIX_ZERO_EOF");
+            check(Arrays.equals(bytes,new byte[]{11,12,13,14,15,16,17,0}),"CALIBRATED_READ_OFFSETS");
+        } finally { Os.close(fd); }
+        Os.assertClosed();
+    }
+    private static void descriptorClose(File parent) throws Exception {
+        try(Fixture f=new Fixture(parent)) {
+            f.open(); f.reserve(); Os.assertClosed();
+            check(Os.events.stream().filter(e -> e.equals("close:installation-v1.bin")).count()==2,"WRITE_AND_READ_CLOSE_ONCE");
+            f.worker.on(() -> f.io.requireCurrent(f.reservation)); Os.assertClosed();
+            check(Os.events.stream().filter(e -> e.equals("close:installation-v1.bin")).count()==3,"CURRENT_READ_CLOSE_ONCE");
+        }
+    }
+    private static void partialIO(File parent) throws Exception {
+        try(Fixture f=new Fixture(parent)) {
+            f.open(); Os.writeLimit=7; Os.readLimit=5;
+            try { f.reserve(); }
+            catch(MessagePreviewAtomicBackend.MarkerUnavailable failure) { throw new AssertionError("ALL_PARTIAL_MARKER_BYTES_REQUIRED"); }
+            check(f.marker.length()==28 && f.reservation!=null,"PARTIAL_IO_COMPLETE_RESERVATION");
+            check(Os.events.stream().filter(e -> e.equals("write:installation-v1.bin")).count()==4
+                && Os.events.stream().filter(e -> e.equals("read:installation-v1.bin")).count()==7,"PUBLIC_PARTIAL_MARKER_IO_REQUIRED");
+            Os.assertClosed();
+        }
+    }
+    private static void markerFaults(File parent) throws Exception {
+        for(String stage:new String[]{"write","fsync","read","write-close","read-close","zero-write","zero-read","negative-read"}) {
+            try(Fixture f=new Fixture(parent)) {
+                f.open();
+                if(stage.equals("zero-write")) Os.writeLimit=0;
+                else if(stage.equals("zero-read")) Os.readLimit=0;
+                else if(stage.equals("negative-read")) Os.readLimit=-1;
+                else if(stage.endsWith("close")) {
+                    int[] closes={0};
+                    Os.onEvent=e -> {
+                        if(e.equals("close:installation-v1.bin") && ++closes[0]==(stage.equals("write-close") ? 1 : 2)) Os.fail=e;
+                    };
+                } else Os.fail=stage+":installation-v1.bin";
+                f.failed("MARKER_IO_FAILURE_REQUIRED");
+                check(f.marker.length()==(stage.equals("write") || stage.equals("zero-write") ? 0 : 28),"EXACT_MARKER_FAULT_RESIDUE");
+            }
+        }
+    }
+    private static void partialCurrency(File parent) throws Exception {
+        for(boolean read:new boolean[]{false,true}) for(boolean deadline:new boolean[]{false,true}) {
+            try(Fixture f=new Fixture(parent)) {
+                f.open(); Os.writeLimit=7; Os.readLimit=5;
+                String event=(read ? "read:" : "write:")+"installation-v1.bin";
+                Os.onEvent=e -> { if(e.equals(event)) { if(deadline) f.clock=10000; else f.snapshot=new Object(); } };
+                f.failed("PARTIAL_IO_CURRENCY_REQUIRED");
+                check(Os.events.stream().filter(e -> e.equals(event)).count()==1,"NO_PARTIAL_IO_AFTER_CURRENCY_LOSS");
+                check(f.marker.length()==(read ? 28 : 7),"PARTIAL_CURRENCY_EXACT_RESIDUE");
+                if(!read) check(!Os.events.contains("fsync:installation-v1.bin"),"NO_SYNC_AFTER_PARTIAL_WRITE_RETIREMENT");
+            }
+        }
+    }
     public static void main(String[] args) throws Exception {
         Looper.getMainLooper(); File root=new File(args[1]);
         switch(args[0]) {
@@ -367,6 +439,11 @@ public final class MessagePreviewMarkerIOProbe {
             case "root-alias": alias(root); break;
             case "android-main": mainThread(root); break;
             case "entry-failure": entryFailure(root); break;
+            case "posix-ports": posixPorts(root); break;
+            case "descriptor-close": descriptorClose(root); break;
+            case "partial-io": partialIO(root); break;
+            case "marker-faults": markerFaults(root); break;
+            case "partial-currency": partialCurrency(root); break;
             default: throw new AssertionError("UNKNOWN_CASE");
         }
         check(android.util.AtomicFile.reads==0 && android.util.AtomicFile.starts==0

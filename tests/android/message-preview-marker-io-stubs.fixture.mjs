@@ -1,6 +1,7 @@
 import { atomicStubs } from "./message-preview-atomic-stubs.fixture.mjs";
 
 // Android policy/stat/directory-fsync doubles, real JVM marker files and file descriptors.
+// Track explicit Os.close independently of the JVM's owning stream-wrapper behavior.
 // Not Android CE/UID/mode/dir-sync/close-failure or crash-durability proof.
 export const markerIOStubs = {
   ...atomicStubs,
@@ -53,6 +54,7 @@ public final class Os {
   public static final List<String> events = new ArrayList<>();
   public static java.util.function.Consumer<String> onEvent;
   public static String fail;
+  public static int readLimit = Integer.MAX_VALUE, writeLimit = Integer.MAX_VALUE;
   public static boolean wrongDescriptor, nonemptyDescriptor;
   public static String directoryDescriptorFault, directoryFaultTarget;
   public static final Map<String,Integer> modes = new HashMap<>();
@@ -133,6 +135,21 @@ public final class Os {
     event("fsync:" + new File(h.path).getName());
     if (h.file != null) try { fd.sync(); } catch(IOException failure) { throw new ErrnoException(13); }
   }
+  public static int read(FileDescriptor fd, byte[] bytes, int offset, int count) throws ErrnoException {
+    Handle h=handles.get(fd); if (h == null || h.file == null) throw new ErrnoException(13);
+    event("read:" + new File(h.path).getName());
+    if (readLimit <= 0) return readLimit;
+    try { int n=h.file.read(bytes,offset,Math.min(count,readLimit)); return n == -1 ? 0 : n; }
+    catch(IOException failure) { throw new ErrnoException(13); }
+  }
+  public static int write(FileDescriptor fd, byte[] bytes, int offset, int count) throws ErrnoException {
+    Handle h=handles.get(fd); if (h == null || h.file == null) throw new ErrnoException(13);
+    event("write:" + new File(h.path).getName());
+    if (writeLimit <= 0) return writeLimit;
+    int n=Math.min(count,writeLimit);
+    try { h.file.write(bytes,offset,n); return n; }
+    catch(IOException failure) { throw new ErrnoException(13); }
+  }
   public static void close(FileDescriptor fd) throws ErrnoException {
     Handle h=handles.remove(fd); if (h == null) throw new ErrnoException(13);
     try { if (h.file != null) h.file.close(); } catch(IOException failure) { throw new ErrnoException(13); }
@@ -144,9 +161,7 @@ public final class Os {
       catch(IOException failure) { throw new AssertionError("FIXTURE_FD_CLOSE_FAILED"); }
   }
   public static void assertClosed() {
-    for (Map.Entry<FileDescriptor,Handle> e : handles.entrySet()) {
-      if (e.getValue().file == null || e.getKey().valid()) throw new AssertionError("OWN_HANDLES_CLOSED");
-    }
+    if (!handles.isEmpty()) throw new AssertionError("EXPLICIT_OS_CLOSE_REQUIRED");
   }
 }`,
 };

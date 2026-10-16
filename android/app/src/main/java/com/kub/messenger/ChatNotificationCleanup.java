@@ -65,6 +65,59 @@ final class ChatNotificationCleanup {
         }
     }
 
+    // Reserve before lookup; no network work belongs inside this lock or the final callback.
+    static Reservation reserve(IntentStore intents, String tag, String notificationId, String messageId) {
+        if (intents == null || tag == null || !tag.startsWith("message:chat:")
+            || !isUuid(tag.substring("message:chat:".length())) || !isUuid(notificationId) || !isUuid(messageId)) return null;
+        synchronized (CARDS) {
+            Posted cached = latest(tag, intents);
+            Posted durable = intents.read(tag);
+            postGeneration = Math.max(postGeneration, Math.max(cached == null ? 0 : cached.generation,
+                durable == null ? 0 : durable.generation));
+            if (postGeneration == Long.MAX_VALUE) return null;
+            long generation = ++postGeneration;
+            Posted intent = new Posted(notificationId, messageId, generation);
+            latestPosts.put(tag, new Posted(null, null, generation));
+            if (!intents.write(tag, intent)) return null;
+            latestPosts.put(tag, intent);
+            return new Reservation(intents, tag, intent);
+        }
+    }
+
+    // A snapshot of pending publication eligibility, not credential/choice authority.
+    static boolean isCurrent(Reservation reservation) {
+        synchronized (CARDS) { return currentInitial(reservation); }
+    }
+
+    private static boolean currentInitial(Reservation reservation) {
+        if (reservation == null || reservation.closed) return false;
+        Posted durable = reservation.intents.read(reservation.tag);
+        return !reservation.closed && latestPosts.get(reservation.tag) == reservation.intent
+            && !reservation.intent.previewRetired && sameIntent(reservation.intent, durable);
+    }
+
+    private static boolean sameIntent(Posted expected, Posted actual) {
+        return actual != null && expected.generation == actual.generation
+            && expected.notificationId.equals(actual.notificationId) && expected.messageId.equals(actual.messageId);
+    }
+
+    // Final initial notify only. Latch first: a throwing callback has an unknown effect, never a retry.
+    static boolean publishInitial(Reservation reservation, LongConsumer posting) {
+        if (reservation == null || posting == null) return false;
+        synchronized (CARDS) {
+            if (!currentInitial(reservation)) return false;
+            reservation.closed = true;
+            posting.accept(reservation.intent.generation);
+            return true;
+        }
+    }
+
+    static void cancelInitial(Reservation reservation) {
+        synchronized (CARDS) {
+            if (reservation != null) reservation.closed = true;
+        }
+    }
+
     private static Posted latest(String tag, IntentStore intents) {
         Posted posted = latestPosts.get(tag);
         if (posted == null) {
@@ -182,6 +235,16 @@ final class ChatNotificationCleanup {
 
     interface Cards { List<Card> active(); void cancel(String tag, int id); IntentStore intents(); }
     interface IntentStore { Posted read(String tag); boolean write(String tag, Posted intent); }
+    static final class Reservation {
+        private final IntentStore intents;
+        private final String tag;
+        private final Posted intent;
+        private boolean closed;
+        private Reservation(IntentStore intents, String tag, Posted intent) {
+            this.intents = intents; this.tag = tag; this.intent = intent;
+        }
+        long generation() { return intent.generation; }
+    }
     static final class Result {
         static final Result SETTLED = new Result(0, false);
         final int removed;

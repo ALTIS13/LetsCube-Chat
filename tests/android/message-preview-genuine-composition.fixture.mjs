@@ -10,14 +10,14 @@ export const compositionSourceNames = [
   'MessagePreviewJournalIO', 'MessagePreviewInstallationMarker', 'MessagePreviewInitializationGate',
   'MessagePreviewOwnedKeyInventory', 'MessagePreviewKeystoreReader', 'MessagePreviewAtomicBackend',
   'MessagePreviewCredentialEnvelope', 'MessagePreviewCredentialKeyCustody', 'MessagePreviewPristineInitializer',
-  'MessagePreviewVaultProvisioning', 'MessagePreviewVerificationRuntime', 'MessagePreviewResponseParser',
+  'MessagePreviewVaultProvisioning', 'MessagePreviewExistingVault', 'MessagePreviewVerificationRuntime', 'MessagePreviewResponseParser',
   'MessagePreviewHttpTransport', 'MessagePreviewsPlugin', 'MessagePreviewVerificationProducer',
 ];
 
 export const foregroundCompositionSourceNames = [
   ...compositionSourceNames, 'MessagePreviewForegroundAuthority',
   'MessagePreviewForegroundComposition', 'MainActivity',
-  'MessagePreviewQaUserChoice',
+  'MessagePreviewQaUserChoice', 'MessagePreviewSession', 'MessagePreviewConsent', 'MessagePreviewChoiceStore',
 ];
 
 // Fictional framework queues are deliberately separate: bridge task execution
@@ -173,6 +173,7 @@ public class Bridge {
   public android.app.Activity getActivity() { return bridge.getActivity(); }
   public android.content.Context getContext() { return bridge.getContext(); }
   public void load() {} protected void handleOnDestroy() {}
+  protected void notifyListeners(String event,JSObject data) {}
 }`,
   'com/getcapacitor/BridgeActivity.java': `package com.getcapacitor; public class BridgeActivity extends android.app.Activity {
   public Bridge bridge; public Bridge getBridge() { return bridge; }
