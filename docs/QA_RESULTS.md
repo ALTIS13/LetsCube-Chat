@@ -1,5 +1,19 @@
 # QA Results
 
+## 2026-10-16 - Android Readable Notifications Stable 22
+
+Product75096aa3, Android0.1.21/build22 published Stable,mandatory=false. Actual
+isolated Realme ordinary Auth/Settings/encrypted choice, readable FCM, none,
+original-PendingIntent exact-message routing/read cleanup and logout→EMPTY pass.
+Post-logout DB0 fresh sessions/0 enabled new devices; three exact canaries
+soft-deleted via normal RPC, two owned QA packages removed, primary/data/users
+preserved. APK7737623 bytes, SHA25645beef75f557ef3d32409023142fec11f11fe8839146440b4e8f6c040b084f8d,
+Firebase4/4, production signer,35-files APK/AAB parity verified. Main-based101+9
+checks and anonymous1440/390 dark/light smoke pass; earlier source/pixel checks
+are reused. Healthy exact web image, public/container JS+SW parity and rollback
+retained. Broader OEM/lock/physical-tap matrix is not claimed complete.
+[Evidence and limits](operations/2026-10-16-android-stable22.md).
+
 ## 2026-10-03 - Exact Variant Claim Ownership
 
 D-339 queue repair runtime `8da252ad` is deployed: sole healthy web/worker/Gateway

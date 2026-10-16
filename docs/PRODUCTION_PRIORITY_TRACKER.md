@@ -1,13 +1,16 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-15.
+Status: active production-hardening tracker, updated 2026-10-16.
 
-**Current execution,2026-10-16:** item76/D-335 is the release focus. Main-based
-ordinary Auth/consent/receiver source is integrated; isolated Realme confirms
-readable real FCM and exact original-PendingIntent routing/read cleanup. None
-and logout acceptance is not yet claimed. Candidate metadata0.1.21/build22;
-Stable remains0.1.20/build21 until actual publication. No new SQL apply or package
-identity change. [Current proof and release gates](operations/2026-10-16-native-preview-runtime-integration.md).
+**Current execution,2026-10-16:** Android0.1.21/build22 is Stable,mandatory=false;
+public APK bytes/SHA and rollback are verified. Product main/web75096aa3 is
+healthy with JS+SW parity. Actual Realme ordinary choice/readable FCM/none,
+original-PendingIntent routing/read cleanup and logout→EMPTY pass; post DB0/0,
+three canaries soft-deleted, two QA packages removed, protected apps unchanged.
+Item76/D-335 retains only its broader acceptance matrix, not an unpublished
+implementation claim. Next: item87's current-client latency/intake and remaining
+OEM/lock/physical-tap checks. No SQL reapply or identity change.
+[Release and exact limits](operations/2026-10-16-android-stable22.md).
 
 **Current checkpoint,2026-10-15 20:42UTC:** shared-web D-365 at59f1fe8b
 accepted: actual native/controlled RED-to-GREEN90/90, adjacent59/59, final

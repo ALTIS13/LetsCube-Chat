@@ -1,5 +1,9 @@
 # Readable Notification Runtime: Remaining Connections
 
+**Published outcome,2026-10-16:** connections1-5 are released in Android
+Stable0.1.21/build22 and shared web75096aa3. The unpublished/disabled statuses below
+are historical. [Actual device/release proof and remaining matrix](2026-10-16-android-stable22.md).
+
 Owner: coordinator. Derived from current source at51b277dc, not a proposal to
 replace the accepted vault or reopen completed preparation. The actual repaired
 Realme Settings cycle is accepted; do not use it as a reason to repeat the case.

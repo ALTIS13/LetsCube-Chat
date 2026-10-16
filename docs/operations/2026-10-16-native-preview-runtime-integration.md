@@ -1,5 +1,9 @@
 # Native Preview Runtime Integration
 
+**Published outcome:** Android Stable0.1.21/build22 and product web75096aa3 are
+verified. The remaining staged records below are historical, not current release
+blockers. [Actual release, cleanup and remaining acceptance matrix](2026-10-16-android-stable22.md).
+
 Owner: coordinator. Active item76/D-335. The owner's direct instruction is to
 continue through verified Stable publication; the records below are intermediate
 source evidence, not release acceptance. No new approval round is required.
