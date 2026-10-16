@@ -26,9 +26,13 @@ const stubs = new Map([
     }
   `],
   ["lib/supabase/client.ts", `
+    const own=()=>[...window.feedRows.values()].filter(row=>row.user_id===window.state.currentUser?.id)
+      .sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
+    const page=()=>({v:2,rows:window.fetchedRows??own().slice(0,30),next:null});
+    const lookup=ids=>({v:2,rows:own().filter(row=>ids.includes(row.id)),
+      unavailable_ids:ids.filter(id=>!own().some(row=>row.id===id))});
     const client = {
-      from() { return {select() {return this;}, eq() {return this;}, order() {return this;},
-        async limit() {return {data:window.fetchedRows ?? [], error:null};}}; },
+      from() { throw Error('raw notification reads forbidden'); },
       channel() {
         const ch = {handlers:[], on(type, filter, callback) {
           this.handlers.push({filter, callback}); return this;
@@ -37,6 +41,17 @@ const stubs = new Map([
       },
       removeChannel(ch) {ch.active=false;},
       async rpc(name,args) {
+        if(name==='notification_feed_page_v2') {
+          const data=page(),held=window.nextFeedRead;window.nextFeedRead=null;
+          if(held) {await new Promise(resolve=>window.gates.set(held,resolve));window.gates.delete(held);}
+          return {data,error:null};
+        }
+        if(name==='notification_feed_lookup_v2') return {data:lookup(args.p_ids),error:null};
+        if(name==='notification_feed_open_v2') {
+          const event=window.feedSignal('invalidate',null,window.state.currentUser.id);
+          const data={v:2,barrier_event_id:event.event_id,page:page(),lookup:lookup(args.p_held_ids)};
+          window.feedEmit(event);return {data,error:null};
+        }
         if(name==='message_notification_alert_decisions') {
           window.decisions.push(args.p_notification_ids);
           const allowed=window.allowMessageAlerts!==false;
@@ -44,7 +59,11 @@ const stubs = new Map([
           if(held) {await new Promise(resolve=>window.gates.set(held,resolve));window.gates.delete(held);}
           return {data:window.decisionResponse ?? args.p_notification_ids.map(id=>({notification_id:id,allowed,scope_key:'general',revision:0})),error:null};
         }
-        if(name==='notifications_mark_read' && window.allowReadWrites) return {data:null,error:null};
+        if(name==='notifications_mark_read' && window.allowReadWrites) {
+          const row=window.feedRows.get(args.p_id);
+          if(row&&!row.read_at) window.feedRows.set(row.id,{...row,read_at:'2026-10-16T12:00:00Z',feed_revision:row.feed_revision+1});
+          return {data:null,error:null};
+        }
         window.serverWrites++; throw Error('server mutation forbidden');
       }
     };
@@ -91,7 +110,17 @@ async function compile(change) {
       import {createRoot} from 'react-dom/client'; import {flushSync} from 'react-dom';
       import {useAppStore} from './src/store/app.store.ts';
       import {useNotifications} from './src/hooks/useNotifications.ts';
-      window.state={currentUser:{id:'A'}, accountEpoch:1, mutedChatIds:[]}; window.channels=[];
+      const users={A:'10000000-0000-4000-8000-000000000001',B:'10000000-0000-4000-8000-000000000002',C:'10000000-0000-4000-8000-000000000003'};
+      const session='20000000-0000-4000-8000-000000000001';
+      window.state={currentUser:{id:users.A},authSessionIdentity:{userId:users.A,sessionId:session}, accountEpoch:1, mutedChatIds:[]}; window.channels=[];
+      window.feedRows=new Map();let eventNo=0;
+      window.feedSignal=(kind,id,owner)=>({event_id:'40000000-0000-4000-8000-'+String(++eventNo).padStart(12,'0'),
+        recipient_id:owner,notification_id:id,event_kind:kind,created_at:'2026-10-16T12:00:00Z'});
+      window.feedEmit=event=>{
+        for(const ch of window.channels.filter(ch=>ch.active)) for(const h of ch.handlers)
+          if(h.filter.event==='INSERT'&&h.filter.table==='notification_feed_events_v2'&&h.filter.filter==='recipient_id=eq.'+event.recipient_id)
+            h.callback({new:event});
+      };
       window.cards=new Map(); window.events=[]; window.gates=new Map(); window.serverWrites=0;
       window.sounds=[]; window.decisions=[]; window.allowMessageAlerts=true;
       window.nextNotify=null; window.nextRemove=null; window.nextForeground=null;
@@ -135,14 +164,21 @@ async function compile(change) {
       flushSync(() => app.render(<Harness/>));
       window.detach=() => flushSync(() => app.render(null));
       window.attach=() => flushSync(() => app.render(<Harness/>));
-      const account=id => useAppStore.setState({currentUser:id ? {id} : null,
-        accountEpoch:window.state.accountEpoch+(window.state.currentUser?.id!==id ? 1 : 0)});
+      const account=label => {const id=users[label]??label;useAppStore.setState({currentUser:id ? {id} : null,
+        authSessionIdentity:id?{userId:id,sessionId:session}:null,
+        accountEpoch:window.state.accountEpoch+(window.state.currentUser?.id!==id ? 1 : 0)});};
       window.account=id => flushSync(() => account(id));
       window.setMuted=ids=>flushSync(()=>useAppStore.setState({mutedChatIds:ids}));
       window.accountRoundTrip=() => {account(null); account('A');};
       window.deliver=(event, row) => flushSync(() => {
-        for (const ch of window.channels.filter(ch => ch.active)) for (const h of ch.handlers)
-          if (h.filter.event===event && h.filter.filter==='user_id=eq.'+row.user_id) h.callback({new:row});
+        const previous=window.feedRows.get(row.id);
+        // Changed/removed signals have no row payload authority. Unknown UPDATE
+        // models an unavailable source; only a real seeded INSERT adds it.
+        if(event==='INSERT'||previous) {
+          const same=previous&&JSON.stringify({...previous,feed_revision:0})===JSON.stringify({...row,feed_revision:0});
+          window.feedRows.set(row.id,{...row,feed_revision:previous?(previous.feed_revision+(same?0:1)):row.feed_revision});
+        }
+        window.feedEmit(window.feedSignal(event==='INSERT'?'created':'changed',row.id,row.user_id));
       });
       window.unmount=() => flushSync(() => app.unmount());
     ` },
@@ -161,7 +197,8 @@ const notificationIds=new Map();
 function notice(label, owner = "A", extra = {}) {
   if(!notificationIds.has(label)) notificationIds.set(label,`93000000-0000-4000-8000-${String(notificationIds.size+1).padStart(12,"0")}`);
   const id=notificationIds.get(label);
-  return { id, user_id: owner, kind: "message", read_at: null,
+  const owners={A:"10000000-0000-4000-8000-000000000001",B:"10000000-0000-4000-8000-000000000002",C:"10000000-0000-4000-8000-000000000003"};
+  return { id, user_id: owners[owner], kind: "message", read_at: null, alert_suppressed_at: null, feed_revision: 1,
     created_at: "2026-10-05T00:00:00.000Z", payload: {
       chat_id: "synthetic-chat", message_id: id, sender_kind: "user", sender_id: "sender",
       bot_id: null, chat_type: "private", sender_name: "Synthetic sender", preview: owner,
@@ -171,6 +208,7 @@ function notice(label, owner = "A", extra = {}) {
 async function fixture(code = bundle) {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const page = await context.newPage();
+  page.setDefaultTimeout(3000);
   const errors = [];
   const network = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -233,7 +271,12 @@ async function replacement(f, returnToA = false) {
   // The assertion below, not a timeout, is the RED oracle on the old source.
   await f.drain();
   assert.equal(await f.page.evaluate(() => window.gates.has("old-remove")), true, "account cleanup reaches the real adapter identity");
-  if (returnToA) await f.account("A");
+  if (returnToA) {
+    // Reuse the native identity only after the old server identity is gone;
+    // reopening an existing history row must stay a quiet v2 baseline.
+    await f.page.evaluate(id=>window.feedRows.delete(id),notice("same-row").id);
+    await f.account("A");
+  }
   const replacementRow = notice("same-row", returnToA ? "A" : "B");
   replacementRow.payload.preview = "replacement";
   await f.insert(replacementRow); await f.drain();
@@ -388,7 +431,8 @@ async function remountReplacement(f, owner = "B") {
   await delivered(f, notice("same-row"));
   await f.page.evaluate(() => {window.nextRemove="unmounted-remove"; window.detach();});
   await f.gated("unmounted-remove");
-  await f.page.evaluate(async owner => {window.account(owner); window.attach(); await window.notices.refresh();}, owner);
+  await f.page.evaluate(async ({owner,id}) => {window.feedRows.delete(id);window.account(owner); window.attach(); await window.notices.refresh();},
+    {owner,id:notice("same-row").id});
   const row = notice("same-row", owner); row.payload.preview="remounted";
   await f.insert(row); await f.drain();
   assert.equal(await f.page.evaluate(() => window.events.filter(event => event.type === "notify-start").length), 1,
@@ -470,7 +514,8 @@ const mutants = [
     "const operation = current.pending.then(() => action(current)).catch(() => false);",
   ], legacyRetry, "unknown icon must reach the existing adapter retry"],
   ["omit the final eligibility boundary before notify", [
-    'if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, mayDeliver, supabase)) return false;\n          if (!mayDeliver()) return false;', "",
+    'if (!mayDeliver()) return false;\n          if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, mayDeliver, supabase)) return false;\n          if (!mayDeliver()) return false;',
+    'if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, () => true, supabase)) return false;',
   ], foregroundGuard, "logged-out foreground work must not invoke notify"],
   ["reset serialization on hook remount", [
     "export function useNotifications() {",
@@ -603,7 +648,7 @@ test("topic unknown UPDATE cannot claim the later INSERT's alert admission",asyn
   } finally {await f.close();}
 });
 
-async function terminalWhileAuthorityWaits(f,{sound=false,evicted=false,staleRefresh=false}={}) {
+async function terminalWhileAuthorityWaits(f,{sound=false,evicted=false,staleRefresh=false,holdSnapshot=false}={}) {
   const row=notice(`terminal-wait-${sound}-${evicted}-${staleRefresh}`);
   if(sound) await f.page.evaluate(()=>{window.letscubeDesktop=null;});
   await f.page.evaluate(()=>{window.nextDecision='terminal-wait';});
@@ -616,7 +661,9 @@ async function terminalWhileAuthorityWaits(f,{sound=false,evicted=false,staleRef
   }
   const update=evicted ? {...row,read_at:'2026-10-16T12:00:00Z'}
     : {...row,alert_suppressed_at:'2026-10-16T12:00:00Z'};
+  if(holdSnapshot) await f.page.evaluate(()=>{window.nextFeedRead='terminal-feed';});
   await f.page.evaluate(row=>window.deliver('UPDATE',row),update);
+  if(holdSnapshot) await f.gated('terminal-feed');
   if(staleRefresh) await f.page.evaluate(async row=>{
     window.fetchedRows=[{...row,alert_suppressed_at:null}];await window.notices.refresh();
   },row);
@@ -625,6 +672,7 @@ async function terminalWhileAuthorityWaits(f,{sound=false,evicted=false,staleRef
     'a terminal or evicted authority attempt must never enter native notify');
   assert.equal(await f.page.evaluate(()=>window.sounds.length),0,
     'a terminal or evicted authority attempt must never sound');
+  if(holdSnapshot) await f.release('terminal-feed');
 }
 for(const sound of [false,true]) for(const variant of ['suppressed','evicted','stale-refresh']) {
   test(`held ${sound?'sound':'desktop'} authority refuses ${variant} current snapshot`,async()=>{
@@ -635,15 +683,15 @@ for(const sound of [false,true]) for(const variant of ['suppressed','evicted','s
 }
 
 for(const [label,needle,replacement,scenario,message] of [
-  ['desktop suppression','latest.read_at || latest.alert_suppressed_at ||','latest.read_at ||',
-    f=>terminalWhileAuthorityWaits(f),'a terminal or evicted authority attempt must never enter native notify'],
-  ['desktop eviction','if (!latest || latest.read_at || latest.alert_suppressed_at ||',
-    'if (latest?.read_at || latest?.alert_suppressed_at ||',
+  ['desktop received source signal','() => current() && allowed()','() => current()',
+    f=>terminalWhileAuthorityWaits(f,{holdSnapshot:true}),'a terminal or evicted authority attempt must never enter native notify'],
+  ['desktop final queued eligibility','if (!mayDeliver()) return false;\n          if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, mayDeliver, supabase)) return false;\n          if (!mayDeliver()) return false;',
+    'if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, () => true, supabase)) return false;',
     f=>terminalWhileAuthorityWaits(f,{evicted:true}),'a terminal or evicted authority attempt must never enter native notify'],
-  ['sound suppression','&& !latest?.read_at && !latest?.alert_suppressed_at','&& !latest?.read_at',
-    f=>terminalWhileAuthorityWaits(f,{sound:true}),'a terminal or evicted authority attempt must never sound'],
-  ['sound eviction','return current() && Boolean(latest) && !latest?.read_at',
-    'return current() && !latest?.read_at',
+  ['sound received source signal','() => current() && allowed()','() => current()',
+    f=>terminalWhileAuthorityWaits(f,{sound:true,holdSnapshot:true}),'a terminal or evicted authority attempt must never sound'],
+  ['sound post-await eligibility','isCurrent: mayAlert,\n      ...(row.kind === "message" ? { authorize: () => currentMessageAlertAllowed(row.id, mayAlert, supabase) } : {})',
+    'isCurrent: () => true,\n      ...(row.kind === "message" ? { authorize: () => currentMessageAlertAllowed(row.id, () => true, supabase) } : {})',
     f=>terminalWhileAuthorityWaits(f,{sound:true,evicted:true}),'a terminal or evicted authority attempt must never sound'],
 ]) test(`compiled pending alert omission rejected: ${label}`,async()=>{
   const f=await fixture(await compile([needle,replacement]));

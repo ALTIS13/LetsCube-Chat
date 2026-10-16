@@ -142,7 +142,8 @@ test.before(async () => {
           <VoiceCallRing /></>;
       }
       const root = createRoot(document.getElementById('root'));
-      window.account = (id) => flushSync(() => useAppStore.setState({currentUser:id ? {id} : null, selectedChatId:null}));
+      window.account = (id) => {window.fixtureOwner=id;flushSync(() => useAppStore.setState({currentUser:id ? {id} : null,
+        authSessionIdentity:id?{userId:id,sessionId:'20000000-0000-4000-8000-000000000001'}:null,selectedChatId:null}));};
       window.refreshPrivacy = () => refreshPrivacyPreferences(useAppStore.getState().currentUser?.id ?? null);
       window.ping = () => playNotificationSoundFor({chatId:'other-chat', osToast:false});
       window.publicStatus = ownPresenceSnapshot;
@@ -172,9 +173,12 @@ function privacy(status = "online", visible = false, until: number | null = null
     manual_status_until: until === null ? null : new Date(until).toISOString(), phone_findable_by: "contacts" };
 }
 
-function notice(id: string, owner = A) {
+const notificationIds = new Map<string, string>();
+function notice(label: string, owner = A) {
+  if (!notificationIds.has(label)) notificationIds.set(label, `30000000-0000-4000-8000-${String(notificationIds.size + 1).padStart(12, '0')}`);
+  const id = notificationIds.get(label)!;
   return { id, user_id: owner, kind: "task_assigned", payload: {task_id:id, title:"Synthetic task"},
-    read_at:null, created_at:new Date(T0).toISOString() };
+    read_at:null,alert_suppressed_at:null,feed_revision:1,created_at:new Date(T0).toISOString() };
 }
 
 async function fixture(desktop = false) {
@@ -190,12 +194,37 @@ async function fixture(desktop = false) {
   const writes: string[] = [];
   const unexpected: string[] = [];
   const errors: string[] = [];
+  let eventNo = 0;
+  const eventId = () => `40000000-0000-4000-8000-${String(++eventNo).padStart(12, '0')}`;
   page.on("pageerror", (error: Error) => errors.push(error.message));
   await page.route("**/*", async (route: any) => {
     const request = route.request();
     const url = new URL(request.url());
     if (url.origin === ORIGIN && url.pathname === "/") {
       return route.fulfill({status:200, contentType:"text/html", body:'<div id="root"></div>'});
+    }
+    if (url.origin === ORIGIN && request.method() === "POST" && ["notification_feed_open_v2", "notification_feed_page_v2", "notification_feed_lookup_v2"]
+      .some(name => url.pathname === `/rest/v1/rpc/${name}`)) {
+      const owner = await page.evaluate(() => (window as any).fixtureOwner), args = request.postDataJSON();
+      const own = rows.filter(row => row.user_id === owner).sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+      const pageResult = {v:2,rows:own.slice(0,30),next:null};
+      const lookup = (ids: string[]) => ({v:2,rows:own.filter(row=>ids.includes(row.id)),unavailable_ids:ids.filter(id=>!own.some(row=>row.id===id))});
+      let data: unknown;
+      if (url.pathname.endsWith("notification_feed_open_v2")) {
+        const marker = eventId();
+        data = {v:2,barrier_event_id:marker,page:pageResult,lookup:lookup(args.p_held_ids)};
+        await page.evaluate(({owner,marker,T0}: any) => {
+          for (const ch of (window as any).channels.filter((ch: any) => ch.active)) for (const {filter,callback} of ch.handlers)
+            if(filter.table==='notification_feed_events_v2'&&filter.event==='INSERT'&&filter.filter==='recipient_id=eq.'+owner)
+              callback({new:{event_id:marker,recipient_id:owner,notification_id:null,event_kind:'invalidate',created_at:new Date(T0).toISOString()}});
+        }, {owner,marker,T0});
+      } else if (url.pathname.endsWith("notification_feed_lookup_v2")) {
+        assert.ok(args.p_ids.length>=1&&args.p_ids.length<=100); data=lookup(args.p_ids);
+      } else {
+        data=pageResult;
+        if (holdNotificationRead) {holdNotificationRead=false;await new Promise<void>(resolve=>{releaseNotificationRead=resolve;});}
+      }
+      return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(data)});
     }
     if (request.method() !== "GET") {
       writes.push(`${request.method()} ${url.pathname}`);
@@ -207,13 +236,6 @@ async function fixture(desktop = false) {
       if (held === owner) await new Promise<void>(resolve => { release = resolve; });
       if (refused === owner) return route.fulfill({status:403, contentType:"application/json", body:'{"message":"fixture refusal","code":"42501"}'});
       data = preferences.get(owner) ?? null;
-    } else if (url.origin === ORIGIN && url.pathname === "/rest/v1/notifications") {
-      const owner = url.searchParams.get("user_id")?.replace(/^eq\./, "");
-      data = rows.filter(row => row.user_id === owner);
-      if (holdNotificationRead) {
-        holdNotificationRead = false;
-        await new Promise<void>(resolve => {releaseNotificationRead = resolve;});
-      }
     } else {
       unexpected.push(url.pathname);
       return route.fulfill({status:404, body:"unexpected provider boundary"});
@@ -269,17 +291,18 @@ async function fixture(desktop = false) {
     },
     async insert(row: any) {
       rows.push(row);
-      await page.evaluate((row: any) => {
+      await page.evaluate(({row,eventId,T0}: any) => {
         for (const ch of (window as any).channels.filter((ch: any) => ch.active)) {
           for (const {filter, callback} of ch.handlers) {
-            if (filter.table === "notifications" && filter.event === "INSERT" && filter.filter === 'user_id=eq.'+row.user_id) callback({new:row});
+            if (filter.table === "notification_feed_events_v2" && filter.event === "INSERT" && filter.filter === 'recipient_id=eq.'+row.user_id)
+              callback({new:{event_id:eventId,recipient_id:row.user_id,notification_id:row.id,event_kind:'created',created_at:new Date(T0).toISOString()}});
           }
         }
-      }, row);
+      }, {row,eventId:eventId(),T0});
       await until(async () => (await page.locator("#state").getAttribute("data-items") ?? "").split(",").includes(row.id), "insert must remain in app");
     },
     async reconnect() {
-      await page.evaluate(() => {for (const ch of (window as any).channels.filter((ch: any) => ch.active)) ch.status('SUBSCRIBED');});
+      await page.evaluate(() => window.dispatchEvent(new Event('kub:connection-revived')));
       await delay(60);
     },
     async close() {

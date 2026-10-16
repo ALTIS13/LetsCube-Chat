@@ -378,7 +378,10 @@ test("desktop notification delivery is owned by Notification Center realtime, no
 
   assert.match(notificationHook, /showDesktopNotificationForRow/);
   assert.match(notificationHook, /isDesktopApp\(\)[\s\S]*presentDesktopNotification/);
-  assert.match(notificationHook, /desktopBaselineLoadedRef/);
+  assert.match(notificationHook, /createNotificationFeedV2/);
+  assert.match(notificationHook, /onCreated:[\s\S]*createdRef\.current/);
+  assert.match(notificationHook, /presentDesktopNotification\(row, mayAlert\)/);
+  assert.doesNotMatch(notificationHook, /table: "notifications"/);
   assert.match(notificationHook, /refresh\(\{ presentNewDesktop: true \}\)/);
   assert.match(notificationHook, /closeDesktopNotificationForRow/);
   assert.match(notificationHook, /const handled = presentedDesktopIdsRef\.current/);

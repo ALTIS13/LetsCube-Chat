@@ -8,6 +8,10 @@ const root = new URL("../../artifacts/kub/src/", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf8").replaceAll("\r\n", "\n");
 const source = read("hooks/useNotifications.ts");
 const syncSource = read("lib/notificationReadSync.ts");
+const feedSource = read("lib/notificationFeedV2.ts");
+const OWNERS = { A: "10000000-0000-4000-8000-000000000001", B: "10000000-0000-4000-8000-000000000002" };
+const SESSION = "20000000-0000-4000-8000-000000000001";
+const ownerId = value => OWNERS[value] ?? value;
 const CHAT = "8c7c07ca-f2b2-4a9d-9c8d-e186ba40268d";
 const OLD = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const NEW = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
@@ -33,7 +37,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 function notice(id = OLD, owner = "A", readAt = null) {
-  return { id, user_id: owner, kind: "message", read_at: readAt,
+  return { id, user_id: ownerId(owner), kind: "message", read_at: readAt, alert_suppressed_at: null, feed_revision: 1,
     // Notification chronology intentionally differs from message chronology.
     created_at: id === OLD ? "2026-10-07T00:00:04.000Z" : "2026-10-07T00:00:05.000Z",
     payload: { chat_id: CHAT, message_id: id, sender_kind: "user", sender_id: "fictional-sender", bot_id: null } };
@@ -41,11 +45,11 @@ function notice(id = OLD, owner = "A", readAt = null) {
 
 // React scheduling and external providers are controlled; the hook, read helper,
 // row merge and notification projection execute actual transpiled source.
-function fixture({ hook = source, sync = syncSource, native = false, nativeResult = "settled" } = {}) {
-  let state = { currentUser: { id: "A" }, accountEpoch: 1, mutedChatIds: [] };
+function fixture({ hook = source, sync = syncSource, feed = feedSource, initial = [], native = false, nativeResult = "settled" } = {}) {
+  let state = { currentUser: { id: OWNERS.A }, authSessionIdentity: { userId: OWNERS.A, sessionId: SESSION }, accountEpoch: 1, mutedChatIds: [] };
   let cursor = 0, dirty = true, mounted = true, view;
   const slots = [], effects = new Map(), cleanups = new Map(), channels = [], calls = [], closed = [];
-  const rows = new Map(), messages = new Map([[OLD, FIRST], [NEW, SECOND]]), gates = new Map();
+  const rows = new Map(initial.map(row => [row.id, row])), messages = new Map([[OLD, FIRST], [NEW, SECOND]]), gates = new Map();
   const equal = (a, b) => a && b && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
   const react = {
     useState(initial) {
@@ -59,6 +63,19 @@ function fixture({ hook = source, sync = syncSource, native = false, nativeResul
   };
   const hold = (name) => { const gate = deferred(); gates.set(name, [...(gates.get(name) ?? []), gate]); return gate; };
   const boundary = (name, fallback) => gates.get(name)?.shift()?.promise ?? Promise.resolve(fallback);
+  let eventNo = 0;
+  const signal = (kind, id, who, eventId) => ({ event_id: eventId ?? `40000000-0000-4000-8000-${String(++eventNo).padStart(12, "0")}`,
+    recipient_id: who, notification_id: id, event_kind: kind, created_at: ACK });
+  function emit(event) {
+    for (const ch of channels.filter(ch => ch.active)) for (const h of ch.handlers)
+      if (h.filter.event === "INSERT" && h.filter.table === "notification_feed_events_v2" && h.filter.filter === `recipient_id=eq.${event.recipient_id}`)
+        h.callback({ new: event });
+  }
+  const ownRows = who => [...rows.values()].filter(row => row.user_id === who)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const page = who => ({ v: 2, rows: ownRows(who).slice(0, 30), next: null });
+  const lookup = (who, ids) => ({ v: 2, rows: ownRows(who).filter(row => ids.includes(row.id)),
+    unavailable_ids: ids.filter(id => !rows.has(id) || rows.get(id).user_id !== who) });
   const client = {
     from(table) {
       const predicates = [], ids = [], query = {
@@ -80,18 +97,30 @@ function fixture({ hook = source, sync = syncSource, native = false, nativeResul
       }; return query;
     },
     rpc(fn, args) {
+      if (fn.startsWith("notification_feed_")) {
+        const owner = state.currentUser?.id, name = fn === "notification_feed_lookup_v2" ? "notification-states" : "refresh";
+        calls.push({ name, fn, owner, ids: args.p_ids, args: plain(args) });
+        const barrier = `40000000-0000-4000-8000-${String(++eventNo).padStart(12, "0")}`;
+        const data = fn === "notification_feed_open_v2"
+          ? { v: 2, barrier_event_id: barrier, page: page(owner), lookup: lookup(owner, args.p_held_ids) }
+          : fn === "notification_feed_page_v2" ? page(owner) : lookup(owner, args.p_ids);
+        return boundary(name, { data, error: null }).then(result => {
+          if (!result.error && fn === "notification_feed_open_v2") emit(signal("invalidate", null, owner, result.data.barrier_event_id));
+          return result;
+        });
+      }
       // Alert authority is a read-only port, not one of the read-state writes
       // whose cardinality and ownership this fixture measures.
       if (fn === "message_notification_alert_decisions") return Promise.resolve({error:null,
         data:args.p_notification_ids.map(id=>({notification_id:id,allowed:true,scope_key:"general",revision:0}))});
       const owner = state.currentUser?.id; calls.push({ name: "rpc", fn, owner, args });
+      const captured = [...rows.values()].filter(row => row.user_id === owner && (fn === "notifications_mark_read" ? row.id === args.p_id
+        : fn === "notifications_mark_all_read" || (row.payload.chat_id === args.p_chat_id
+          && (!args.p_read_until || messages.get(row.payload.message_id) <= args.p_read_until))));
       return boundary(fn, { error: null }).then(result => {
-        if (!result.error) for (const [id, row] of rows) {
-          if (row.user_id !== owner) continue;
-          const matches = fn === "notifications_mark_read" ? id === args.p_id
-            : fn === "notifications_mark_all_read" || (row.payload.chat_id === args.p_chat_id
-              && (!args.p_read_until || messages.get(row.payload.message_id) <= args.p_read_until));
-          if (matches) rows.set(id, { ...row, read_at: row.read_at ?? ACK });
+        if (!result.error) for (const capturedRow of captured) {
+          const row = rows.get(capturedRow.id);
+          if (row?.user_id === owner && !row.read_at) rows.set(row.id, { ...row, read_at: ACK, feed_revision: row.feed_revision + 1 });
         }
         return result;
       });
@@ -109,6 +138,8 @@ function fixture({ hook = source, sync = syncSource, native = false, nativeResul
     "@/lib/dev/instrumentation": { bumpFetch() {}, registerChannel() {}, unregisterChannel() {} }, "@/lib/chatEvents": { dispatchChatsRefresh() {} },
     "@/lib/notificationEvents": { KUB_CHAT_NOTIFICATIONS_READ_EVENT: "kub:chat-notifications-read" },
     "@/lib/notificationReadSync": compile(sync, {}), "@/lib/notificationRows": compile(read("lib/notificationRows.ts"), {}),
+    "@/lib/notificationFeedV2": compile(feed, {}, { Date, Object, JSON, Map, Set, Promise }),
+    "@/lib/realtimeRevival": { CONNECTION_REVIVED_EVENT: "kub:connection-revived" },
     "@/lib/rpcAvailability": compile(read("lib/rpcAvailability.ts"), {}, { console: { warn() {} } }),
     "@/lib/messageNotificationProjection": compile(read("lib/messageNotificationProjection.ts"), {}),
     "@/lib/messageAlertDecisions": compile(read("lib/messageAlertDecisions.ts"), {}),
@@ -123,18 +154,26 @@ function fixture({ hook = source, sync = syncSource, native = false, nativeResul
     "@/lib/platform/desktopNotifications": { desktopMessageOverflowRows: () => [] },
   };
   const events = { addEventListener() {}, removeEventListener() {} };
-  const hookFn = compile(hook, imports, { Date: FixedDate, window: events, document: { ...events, visibilityState: "visible" } }).useNotifications;
+  const hookFn = compile(hook, imports, { Date: FixedDate, window: events, navigator: { onLine: true },
+    setTimeout: () => 1, clearTimeout() {}, document: { ...events, visibilityState: "visible" } }).useNotifications;
   function render() { cursor = 0; dirty = false; view = hookFn(); }
   function commit() { const work = [...effects]; effects.clear(); for (const [id] of work) cleanups.get(id)?.(); for (const [id, effect] of work) cleanups.set(id, effect()); }
-  async function drain() { for (let i = 0; i < 40; i++) { await Promise.resolve(); if (mounted && dirty) render(); if (mounted && effects.size) commit(); } }
+  async function drain() { for (let i = 0; i < 90; i++) { await Promise.resolve(); if (mounted && dirty) render(); if (mounted && effects.size) commit(); } }
   render(); commit();
   const f = { calls, closed, hold, drain, client, channels, advance(ms) { time += ms; },
     get view() { return view; },
-    async insert(row) { rows.set(row.id, row); for (const channel of channels.filter(ch => ch.active)) for (const h of channel.handlers)
-      if (h.filter.event === "INSERT" && h.filter.filter === `user_id=eq.${row.user_id}`) h.callback({ new: row }); await drain(); },
-    async confirm(row) { rows.set(row.id, row); for (const channel of channels.filter(ch => ch.active)) for (const h of channel.handlers)
-      if (h.filter.event === "UPDATE" && h.filter.filter === `user_id=eq.${row.user_id}`) h.callback({ new: row }); await drain(); },
-    async change(owner, renderNow = true, advanceEpoch = true) { state = { ...state, currentUser: owner ? { id: owner } : null,
+    async insert(row) { rows.set(row.id, row); emit(signal("created", row.id, row.user_id)); await drain(); },
+    async confirm(row) {
+      const previous = rows.get(row.id);
+      const same = previous && JSON.stringify({ ...previous, feed_revision: 0 }) === JSON.stringify({ ...row, feed_revision: 0 });
+      rows.set(row.id, { ...row, feed_revision: (previous?.feed_revision ?? 0) + (same ? 0 : 1) });
+      emit(signal("changed", row.id, row.user_id)); await drain();
+    },
+    commitOwner() { render(); commit(); },
+    async redisplay() { state = { ...state, mutedChatIds: [CHAT] }; render(); commit(); await drain(); },
+    signal,
+    async change(owner, renderNow = true, advanceEpoch = true) { state = { ...state, currentUser: owner ? { id: ownerId(owner) } : null,
+      authSessionIdentity: owner ? { userId: ownerId(owner), sessionId: SESSION } : null,
       accountEpoch: state.accountEpoch + (advanceEpoch ? 1 : 0) };
       if (renderNow) { render(); commit(); await drain(); } },
     unmount() { mounted = false; for (const cleanup of cleanups.values()) cleanup?.(); cleanups.clear(); activeFixtures.delete(f); },
@@ -173,8 +212,7 @@ async function nativeLatestCleanup(hook = source) {
 }
 test("native cleanup call removes latest confirmed pair despite older unread same-chat row", () => nativeLatestCleanup());
 async function nativeInitialCleanup(hook = source) {
-  const f = fixture({ native: true, hook }), held = f.hold("refresh");
-  held.resolve({ data: [notice(OLD, "A", ACK), notice(NEW, "A", ACK)], error: null }); await f.drain();
+  const f = fixture({ native: true, hook, initial: [notice(OLD, "A", ACK), notice(NEW, "A", ACK)] }); await f.drain();
   assert.deepEqual(plain(f.closed.map(call => call.read)), [{ chatId: CHAT,
     confirmed: [{ notificationId: NEW, messageId: NEW }, { notificationId: OLD, messageId: OLD }] }], "INITIAL_CONFIRMED_BATCH_FORWARDED");
   await f.confirm(notice(NEW, "A", ACK)); assert.equal(f.closed.length, 1); f.unmount();
@@ -189,10 +227,10 @@ async function pendingHookRetry(hook = source, rejected = false) {
   if (rejected) held.reject(Error("fictional native ACK rejected")); else held.resolve("retry"); await f.drain();
   f.advance(4999); await f.view.refresh(); await f.drain();
   assert.equal(f.closed.length, 1, "PENDING_HOOK_COOLDOWN");
-  f.advance(1); await f.confirm(notice(NEW, "A", ACK)); await f.drain();
+  f.advance(1); await f.redisplay(); await f.drain();
   assert.equal(f.closed.length, 1, "PENDING_HOOK_REALTIME_NOT_RETRY_TRIGGER");
   const failedFetch = f.hold("refresh"); failedFetch.resolve({ data: null, error: { code: "42501" } });
-  await f.view.refresh(); await f.drain(); await f.confirm(notice(NEW, "A", ACK));
+  await f.view.refresh(); await f.drain(); await f.redisplay();
   assert.equal(f.closed.length, 1, "PENDING_HOOK_FAILED_FETCH_NOT_RETRY_TRIGGER");
   await f.view.refresh(); await f.drain();
   assert.equal(f.closed.length, 2, "PENDING_HOOK_FETCH_RETRIES_UNSETTLED_PAIR");
@@ -332,34 +370,54 @@ test("actual hook: captured logged-out refresh cannot clear a successor's rows",
 
 async function retiredReadback(options, thrown = false) {
   const f = await loaded(options); await f.insert(notice());
+  const lookups = f.calls.filter(call => call.name === "notification-states").length;
   const held = f.hold("notification-states"), pending = f.view.markAllRead(); await f.drain();
-  assert.equal(f.calls.filter(call => call.name === "notification-states").length, 1, "readback reached control");
+  assert.equal(f.calls.filter(call => call.name === "notification-states").length, lookups + 1, "readback reached control");
   await f.change("A", false); const before = f.calls.length;
   if (thrown) held.reject(Error("fictional readback offline"));
-  else held.resolve({ data: [{ id: OLD, read_at: ACK }], error: null });
-  await pending; await f.drain();
+  else held.resolve({ data: { v: 2, rows: [{ ...notice(OLD, "A", ACK), feed_revision: 2 }], unavailable_ids: [] }, error: null });
+  await f.drain();
   assert.equal(f.view.items[0].read_at, null, "retired readback cannot update state before commit");
   assert.equal(f.view.error, null, "retired readback cannot publish an error");
   assert.equal(f.closed.length, 0, "retired readback cannot close a card");
-  assert.equal(f.calls.length, before, "retired readback cannot issue extra requests"); f.unmount();
+  assert.equal(f.calls.length, before, "retired readback cannot issue extra requests");
+  // Controller refresh settles when the retired React lifetime is cleaned up;
+  // all data-effect assertions above deliberately run before that cleanup.
+  f.unmount(); await pending;
 }
 test("actual hook: held metadata readback loses to epoch before React commit", () => retiredReadback());
 test("actual hook: held metadata rejection loses to epoch before React commit", () => retiredReadback(undefined, true));
 
 async function metadataBoundary(options, failed = false) {
   const f = await loaded(options); await f.insert(notice());
-  const held = f.hold("notification-states"), pending = f.view.markAllRead(); await f.drain();
-  const call = f.calls.find(call => call.name === "notification-states");
-  assert.equal(call.columns, "id, read_at", "readback needs only read metadata");
-  assert.equal(call.owner, "A", "readback is exact-owner scoped");
-  assert.deepEqual(call.ids, [OLD], "readback requests exact captured notification IDs");
-  held.resolve(failed ? { data: null, error: { code: "42501" } } : { data: [{ id: OLD, read_at: null }, { id: NEW, read_at: ACK }], error: null });
+  const count = f.calls.filter(call => call.name === "notification-states").length;
+  const page = f.hold("refresh"), held = f.hold("notification-states"), pending = f.view.markAllRead(); await f.drain();
+  const call = f.calls.findLast(call => call.name === "notification-states");
+  assert.equal(f.calls.filter(call => call.name === "notification-states").length, count + 1, "readback requests a new owned snapshot");
+  assert.equal(call.fn, "notification_feed_lookup_v2", "readback uses the strict versioned row contract");
+  assert.equal(call.owner, OWNERS.A, "readback is exact-owner scoped");
+  assert.deepEqual(plain(call.ids), [OLD], "readback requests exact captured notification IDs");
+  assert.equal(f.calls.some(call => call.table === "notifications"), false, "no raw metadata read bypass");
+  page.resolve({ data: { v: 2, rows: [notice()], next: null }, error: null });
+  held.resolve(failed ? { data: null, error: { code: "42501" } }
+    : { data: { v: 2, rows: [notice()], unavailable_ids: [] }, error: null });
   await pending; await f.drain();
   assert.equal(f.view.items[0].read_at, null, "ACK without confirmed own row cannot fabricate a read");
   assert.equal(f.closed.length, 0, "unconfirmed read cannot close a card"); f.unmount();
 }
-test("actual hook: readback is exact-owner minimal metadata and requires non-null confirmation", () => metadataBoundary());
+test("actual hook: v2 readback is exact-owner strict metadata and requires non-null confirmation", () => metadataBoundary());
 test("actual hook: failed readback cannot fabricate a read ACK", () => metadataBoundary(undefined, true));
+
+async function foreignReadback(options) {
+  const f = await loaded(options); await f.insert(notice());
+  const page = f.hold("refresh"), lookup = f.hold("notification-states"), work = f.view.markAllRead(); await f.drain();
+  page.resolve({ data: { v: 2, rows: [], next: null }, error: null });
+  lookup.resolve({ data: { v: 2, rows: [{ ...notice(OLD, "B", ACK), feed_revision: 2 }], unavailable_ids: [] }, error: null });
+  await work; await f.drain();
+  assert.equal(f.view.items[0].read_at, null, "foreign readback cannot confirm an own read");
+  assert.equal(f.closed.length, 0); f.unmount();
+}
+test("actual hook: foreign v2 readback cannot become an own read confirmation", () => foreignReadback());
 
 test("actual hook: mark-all ACK does not mark a post-command arrival", async () => {
   const f = await loaded(); await f.insert(notice());
@@ -419,17 +477,17 @@ for (const retired of [false, true]) {
     const f = await loaded(); await f.insert(notice());
     const held = f.hold("refresh"), pending = f.view.refresh(); await f.drain();
     if (retired) await f.change("A", false);
-    held.reject(Error("fictional refresh offline")); await pending; await f.drain();
+    held.reject(Error("fictional refresh offline")); await f.drain();
     assert.equal(f.view.error, retired ? null : "fictional read error", "refresh rejection respects the live epoch");
     if (!retired) assert.equal(f.view.loading, false, "current rejected refresh settles loading");
-    f.unmount();
+    f.unmount(); await pending;
   });
 }
 test("actual hook: retired realtime and subscription callbacks are inert before commit", async () => {
   const f = await loaded(); await f.insert(notice()); const channel = f.channels.at(-1);
   const before = f.calls.length; await f.change("A", false);
-  channel.handlers.find(h => h.filter.event === "UPDATE").callback({ new: notice(OLD, "A", ACK) });
-  channel.handlers.find(h => h.filter.event === "INSERT").callback({ new: notice(NEW) });
+  channel.handlers[0].callback({ new: f.signal("changed", OLD, OWNERS.A) });
+  channel.handlers[0].callback({ new: f.signal("created", NEW, OWNERS.A) });
   channel.status("SUBSCRIBED");
   await f.drain();
   assert.equal(f.view.items.length, 1, "retired insert is inert");
@@ -460,26 +518,26 @@ function replaceOnce(text, anchor, replacement) {
 const mutations = [
   ["live epoch guard", "hook", " && state.accountEpoch === readOwner.accountEpoch", "", precommitEpoch,
     "same-owner epoch must fence callbacks before React commits"],
-  ["live owner guard", "hook", "state.currentUser?.id === readOwner.userId && ", "", async options => {
+  ["live owner guard", "hook", "state.currentUser?.id === readOwner.userId && state.accountEpoch === readOwner.accountEpoch\n      && state.authSessionIdentity?.userId === readOwner.userId", "state.accountEpoch === readOwner.accountEpoch", async options => {
     const f = await loaded(options); const captured = f.view.markAllRead;
     // Owner must refuse even if the store has not yet advanced its epoch.
     await f.change("B", false, false); const start = f.calls.length; await captured();
     assert.equal(f.calls.length, start, "old owner identity cannot start a read"); f.unmount();
   }, "old owner identity cannot start a read"],
-  ["readback owner", "hook", '.eq("user_id", readOwner.userId).in("id", ids)', '.in("id", ids)', metadataBoundary,
-    "readback is exact-owner scoped"],
-  ["readback metadata", "hook", '.select("id, read_at")', '.select("*")', metadataBoundary,
-    "readback needs only read metadata"],
-  ["readback exact IDs", "hook", '.eq("user_id", readOwner.userId).in("id", ids)', '.eq("user_id", readOwner.userId)', metadataBoundary,
-    "readback requests exact captured notification IDs"],
+  ["readback owner", "feed", 'uuid(row.user_id) === userId', 'true', foreignReadback,
+    "foreign readback cannot confirm an own read"],
+  ["readback metadata", "hook", 'rows.map(row => ({ ...row, alert_origin: null }))', 'rows.map(row => ({ ...row, alert_origin: null, read_at: row.read_at ?? new Date().toISOString() }))', metadataBoundary,
+    "ACK without confirmed own row cannot fabricate a read"],
+  ["readback exact IDs", "feed", '...rows.map(row => row.id), ...targets', '...targets', metadataBoundary,
+    "readback requests a new owned snapshot"],
   ["missing RPC only", "hook", 'if (!isMissingRpcError(rpcError)) { setError((prev) => current() ? mapPgError(rpcError) : prev); return; }', '', chatRefusal,
     "permission error cannot invoke per-ID fallback"],
   ["actual message horizon", "hook", '.lte("created_at", readUntil)', '', options => boundedChat(options, true),
     "bounded read preserves the newer message notification"],
-  ["no whole-chat mark", "hook", 'await applyConfirmedReadRows(matchingIds, current);', 'setItems((prev) => prev.map((row) => ({ ...row, read_at: new Date().toISOString() })));', boundedChat,
+  ["no whole-chat mark", "hook", 'await applyConfirmedReadRows(current);\n        return;', 'setItems((prev) => prev.map((row) => ({ ...row, read_at: new Date().toISOString() })));\n        return;', boundedChat,
     "bounded read preserves the newer message notification"],
-  ["retired null refresh", "hook", 'const refresh = useCallback(async (options: { presentNewDesktop?: boolean } = {}) => {\n    if (!isCurrentReadOwner()) return;',
-    'const refresh = useCallback(async (options: { presentNewDesktop?: boolean } = {}) => {\n    if (!userId) { setItems([]); return; }\n    if (!isCurrentReadOwner()) return;', retiredNullRefresh,
+  ["retired null refresh", "hook", 'const refresh = useCallback(async (_options: { presentNewDesktop?: boolean } = {}) => {',
+    'const refresh = useCallback(async (_options: { presentNewDesktop?: boolean } = {}) => {\n    if (!userId) { setItems([]); return; }', retiredNullRefresh,
     "retired logged-out refresh cannot clear B's rows"],
   ["helper startup guard", "sync", 'if (!isCurrent()) return null;', '', options => helperLifecycle(options, true),
     "retired helper cannot start a request"],
@@ -490,7 +548,7 @@ for (const [name, target, anchor, replacement, oracle, expected] of mutations) {
   test(`compiled mutant rejected by behavior: ${name}`, async () => {
     // Control must pass; transpilation/dependency/setup failures are not kills.
     await oracle();
-    const changed = replaceOnce(target === "hook" ? source : syncSource, anchor, replacement);
+    const changed = replaceOnce(target === "hook" ? source : target === "feed" ? feedSource : syncSource, anchor, replacement);
     await assert.rejects(() => oracle({ [target]: changed }), error => {
       assert.equal(error.code, "ERR_ASSERTION", "compile/setup failures cannot kill a mutant");
       assert.equal(error.message.split("\n")[0], expected, "mutant must fail its literal behavioral oracle");

@@ -10,7 +10,8 @@ import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrum
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { KUB_CHAT_NOTIFICATIONS_READ_EVENT, type ChatNotificationsReadDetail } from "@/lib/notificationEvents";
 import { markChatMessageNotificationsRead } from "@/lib/notificationReadSync";
-import { mergeNotificationRows } from "@/lib/notificationRows";
+import { createNotificationFeedV2, type NotificationFeedRowV2 } from "@/lib/notificationFeedV2";
+import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { isMissingRpcError } from "@/lib/rpcAvailability";
 import {
   closeBrowserNotification,
@@ -31,7 +32,15 @@ import { currentMessageAlertAllowed } from "@/lib/messageAlertDecisions";
 
 const PAGE_SIZE = 30;
 const NATIVE_READ_RETRY_MS = 5000;
+const FEED_HANDSHAKE_MS = 10000;
+const FEED_RETRY_MS = 1000;
+const FEED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type NativeReadPairState = { status: "inflight" | "settled" | "retry"; retryAfter: number; fetchRevision: number };
+type FeedConnection = {
+  owner: object;
+  controller: ReturnType<typeof createNotificationFeedV2> | null;
+  refresh(): Promise<void>;
+};
 
 type DesktopCardIdentity = Parameters<NonNullable<ReturnType<typeof getDesktopBridge>>["removeNotification"]>[0];
 type DesktopCardQueue = {
@@ -77,40 +86,24 @@ function payloadString(p: unknown, key: string): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-/**
- * In-app notifications for the current user (Task #32).
- *
- * Loads the latest 30 rows from `public.notifications` and stays in
- * sync via a per-user realtime channel:
- *   • INSERT → prepend, bump unread count.
- *   • UPDATE → replace in place (mark-read flow flips `read_at`).
- *
- * Server-only inserts: clients can't insert into `notifications`
- * directly (no RLS write policy); rows arrive via the SECURITY
- * DEFINER `_notify` helper called by triggers on tasks/chat_members/
- * bans/mutes. Mark-as-read goes through the
- * `notifications_mark_read*` RPCs.
- *
- * Race-safety: the initial fetch and the realtime channel both
- * mutate state, and the channel can deliver an INSERT before the
- * fetch resolves. We therefore never blind-replace state — both
- * paths go through `mergeRows` which dedupes by id and re-sorts by
- * `created_at desc`, then truncates back to PAGE_SIZE so the bell
- * stays bounded.
+/** Versioned own feed. The controller owns bounded reconciliation and stream
+ * admission; snapshots/reconnects never grant sound or Windows presentation.
+ * Read writes retain their existing RPCs, independently of alert authority.
  */
 export function useNotifications() {
   const supabase = createClient();
   // Narrow primitives keep heartbeat updates inert while observing session replacement.
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const sessionId = useAppStore((s) => s.authSessionIdentity?.sessionId ?? null);
   const accountEpoch = useAppStore((s) => s.accountEpoch);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
 
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const readOwnerRef = useRef({ userId, accountEpoch, pending: new Set<string>() });
-  if (readOwnerRef.current.userId !== userId || readOwnerRef.current.accountEpoch !== accountEpoch) {
-    readOwnerRef.current = { userId, accountEpoch, pending: new Set<string>() };
+  const readOwnerRef = useRef({ userId, sessionId, accountEpoch, pending: new Set<string>() });
+  if (readOwnerRef.current.userId !== userId || readOwnerRef.current.sessionId !== sessionId || readOwnerRef.current.accountEpoch !== accountEpoch) {
+    readOwnerRef.current = { userId, sessionId, accountEpoch, pending: new Set<string>() };
   }
   const readOwner = readOwnerRef.current;
   const alertRowsRef = useRef({ owner: readOwner, rows: new Map<string, Notification>() });
@@ -122,7 +115,7 @@ export function useNotifications() {
   const unreadDesktopIdsRef = useRef<Map<string, Notification>>(new Map());
   const trimmedDesktopIdsRef = useRef<Set<string>>(new Set());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
-  const desktopBaselineLoadedRef = useRef(false);
+  const feedRef = useRef<FeedConnection | null>(null);
   const accountGenerationRef = useRef(0);
 
   useEffect(() => {
@@ -132,23 +125,26 @@ export function useNotifications() {
   const isCurrentReadOwner = useCallback(() => {
     const state = useAppStore.getState();
     return readMountedRef.current && readOwnerRef.current === readOwner && Boolean(readOwner.userId)
-      && state.currentUser?.id === readOwner.userId && state.accountEpoch === readOwner.accountEpoch;
+      && state.currentUser?.id === readOwner.userId && state.accountEpoch === readOwner.accountEpoch
+      && state.authSessionIdentity?.userId === readOwner.userId
+      && state.authSessionIdentity.sessionId === readOwner.sessionId;
   }, [readOwner]);
 
-  const rememberAlertRows = useCallback((rows: Notification[]) => {
-    const snapshot = alertRowsRef.current;
-    if (snapshot.owner !== readOwner || !isCurrentReadOwner()) return;
-    snapshot.rows = new Map(mergeNotificationRows([...snapshot.rows.values()], rows, PAGE_SIZE).map(row => [row.id, row]));
-  }, [readOwner, isCurrentReadOwner]);
+  const refresh = useCallback(async (_options: { presentNewDesktop?: boolean } = {}) => {
+    const connection = feedRef.current;
+    if (!isCurrentReadOwner() || connection?.owner !== readOwner) return;
+    // The compatibility option never admits catch-up snapshots as new alerts.
+    await connection.refresh();
+  }, [isCurrentReadOwner, readOwner]);
 
-  const presentDesktopNotification = useCallback((row: Notification) => {
+  const presentDesktopNotification = useCallback((row: Notification, sourceCurrent: () => boolean) => {
     if (!userId || row.user_id !== userId) return;
     const handled = presentedDesktopIdsRef.current;
     let quiet = false;
     const mayDeliver = () => {
-      if (!isCurrentReadOwner() || handled !== presentedDesktopIdsRef.current || useAppStore.getState().accountEpoch !== accountEpoch) return false;
-      const latest = alertRowsRef.current.rows.get(row.id);
-      if (!latest || latest.read_at || latest.alert_suppressed_at || readOwner.pending.has(row.id)) return false;
+      if (!sourceCurrent() || !isCurrentReadOwner() || handled !== presentedDesktopIdsRef.current || useAppStore.getState().accountEpoch !== accountEpoch) return false;
+      const latest = alertRowsRef.current.rows.get(row.id) ?? row;
+      if (latest.read_at || latest.alert_suppressed_at || readOwner.pending.has(row.id)) return false;
       const policy = ownAlertPolicySnapshot(userId);
       if (policy === "quiet") quiet = true;
       return policy === "allow";
@@ -164,6 +160,7 @@ export function useNotifications() {
       return {
         // Foreground resolution above this boundary may have awaited a status/account change.
         sendNotification: (payload) => queueDesktopCard(desktopCardQueues, payload, async (queue) => {
+          if (!mayDeliver()) return false;
           if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, mayDeliver, supabase)) return false;
           if (!mayDeliver()) return false;
           const delivered = await bridge.notify(payload);
@@ -185,7 +182,7 @@ export function useNotifications() {
         sendNotification: async () => false,
         removeNotification: (identity) => queueDesktopCard(desktopCardQueues, identity, async (queue) => {
           const state = useAppStore.getState();
-          if (owner !== presentedDesktopIdsRef.current || state.currentUser?.id !== row.user_id || state.accountEpoch !== accountEpoch) return false;
+          if (!isCurrentReadOwner() || owner !== presentedDesktopIdsRef.current || state.currentUser?.id !== row.user_id || state.accountEpoch !== accountEpoch) return false;
           if (queue.card && (queue.card.owner !== owner || queue.card.rowId !== row.id)) return false;
           const removed = await bridge.removeNotification(identity);
           if (removed) queue.card = null;
@@ -193,7 +190,7 @@ export function useNotifications() {
         }),
       };
     });
-  }, [accountEpoch]);
+  }, [accountEpoch, isCurrentReadOwner]);
 
   useEffect(() => {
     accountGenerationRef.current += 1;
@@ -204,7 +201,6 @@ export function useNotifications() {
     unreadDesktopIdsRef.current = new Map();
     trimmedDesktopIdsRef.current = new Set();
     presentedDesktopIdsRef.current = new Set();
-    desktopBaselineLoadedRef.current = false;
     const owner = presentedDesktopIdsRef.current;
     desktopCardOwners.add(owner);
     return () => {
@@ -220,7 +216,7 @@ export function useNotifications() {
         }).catch(() => undefined);
       }
     };
-  }, [userId, accountEpoch]);
+  }, [userId, sessionId, accountEpoch]);
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
     const generation = accountGenerationRef.current;
@@ -241,12 +237,9 @@ export function useNotifications() {
           if (rpcErr) {
             if (!options.silent) setError((prev) => current() ? mapPgError(rpcErr) : prev);
           } else {
-            const nowIso = new Date().toISOString();
-            const confirmedRow = alertRowsRef.current.rows.get(id);
-            if (confirmedRow) rememberAlertRows([{ ...confirmedRow, read_at: nowIso }]);
-            setItems((prev) => current() ? prev.map((row) =>
-              row.id === id && row.user_id === readOwner.userId && !row.read_at
-                ? { ...row, read_at: nowIso } : row) : prev);
+            // A write ACK has no row/revision. Only a new authoritative read
+            // may advance the feed and clear native cards.
+            await refresh();
           }
         } catch (error) {
           if (!current()) return;
@@ -256,26 +249,15 @@ export function useNotifications() {
     } finally {
       for (const id of idsToMark) readOwner.pending.delete(id);
     }
-  }, [isCurrentReadOwner, readOwner, supabase, rememberAlertRows]);
+  }, [isCurrentReadOwner, readOwner, supabase, refresh]);
 
-  const applyConfirmedReadRows = useCallback(async (ids: string[], current: () => boolean) => {
-    if (!current() || !readOwner.userId || !ids.length) return;
-    const { data, error: readError } = await supabase.from("notifications")
-      .select("id, read_at").eq("user_id", readOwner.userId).in("id", ids);
+  const applyConfirmedReadRows = useCallback(async (current: () => boolean) => {
     if (!current()) return;
-    if (readError) { setError((prev) => current() ? mapPgError(readError) : prev); return; }
-    const requested = new Set(ids);
-    const confirmed = new Map((data ?? []).filter((row) => requested.has(row.id) && row.read_at)
-      .map((row) => [row.id, row.read_at as string]));
-    rememberAlertRows([...alertRowsRef.current.rows.values()].flatMap(row => {
-      const readAt = confirmed.get(row.id);
-      return readAt ? [{ ...row, read_at: readAt }] : [];
-    }));
-    setItems((prev) => current() ? prev.map((row) => {
-      const readAt = confirmed.get(row.id);
-      return readAt && row.user_id === readOwner.userId && !row.read_at ? { ...row, read_at: readAt } : row;
-    }) : prev);
-  }, [readOwner, supabase, rememberAlertRows]);
+    // Controller page+lookup reconciles the entire retained view, including
+    // exact unavailable identities. A partial read reply must not merge old
+    // payload back into a row already retired by the live stream.
+    await refresh();
+  }, [refresh]);
 
   const normalizeRowsForDisplay = useCallback((rows: Notification[]) => {
     const ownUnreadIds = rows
@@ -285,137 +267,128 @@ export function useNotifications() {
     return filterRowsForDisplay(rows, userId, mutedChatIds);
   }, [markReadIds, mutedChatIds, userId]);
 
-  const refresh = useCallback(async (options: { presentNewDesktop?: boolean } = {}) => {
-    if (!isCurrentReadOwner()) return;
-    const generation = accountGenerationRef.current;
-    const current = () => isCurrentReadOwner() && generation === accountGenerationRef.current;
-    setLoading((prev) => current() ? true : prev);
-    bumpFetch("useNotifications");
-    try {
-      const { data, error: err } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId!)
-        .order("created_at", { ascending: false })
-        .limit(PAGE_SIZE);
-      if (!current()) return;
-      setLoading((prev) => current() ? false : prev);
-      if (err) {
-        setError((prev) => current() ? mapPgError(err) : prev);
-        return;
-      }
-      setError((prev) => current() ? null : prev);
-      const nextRows = normalizeRowsForDisplay((data ?? []) as Notification[]);
-      rememberAlertRows(nextRows);
-      if (isDesktopApp()) {
-        if (!desktopBaselineLoadedRef.current) {
-          for (const row of nextRows) presentedDesktopIdsRef.current.add(row.id);
-          desktopBaselineLoadedRef.current = true;
-        } else if (options.presentNewDesktop) {
-          for (const row of nextRows) {
-            if (row.read_at || presentedDesktopIdsRef.current.has(row.id)) continue;
-            presentDesktopNotification(row);
-          }
-        }
-      }
-      if (isNativeAndroid()) nativeReadFetchRevisionRef.current++;
-      setItems((prev) => current()
-        ? filterRowsForDisplay(mergeNotificationRows(prev, nextRows, PAGE_SIZE), userId, mutedChatIds) : prev);
-    } catch (error) {
-      if (!current()) return;
-      setLoading((prev) => current() ? false : prev);
-      setError((prev) => current() ? mapPgError(error) : prev);
+  const displayRef = useRef(normalizeRowsForDisplay);
+  displayRef.current = normalizeRowsForDisplay;
+  const createdRef = useRef((_: NotificationFeedRowV2, _current: () => boolean) => {});
+  createdRef.current = (source, sourceCurrent) => {
+    if (!isCurrentReadOwner() || !sourceCurrent()) return;
+    const row: Notification = { ...source, alert_origin: null };
+    if (row.kind === "chat_added" || row.kind === "group_invite") {
+      dispatchChatsRefresh({ reason: "chat-notification", chatId: payloadString(row.payload, "chat_id") });
     }
-  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification, isCurrentReadOwner, rememberAlertRows]);
-
-  useEffect(() => {
-    if (!userId) {
-      setItems([]);
-      return;
-    }
-    let cancelled = false;
-    const generation = accountGenerationRef.current;
-    const current = () => !cancelled && isCurrentReadOwner() && generation === accountGenerationRef.current;
-    let subscribedOnce = false;
-    void refresh().then(() => {
-      if (cancelled) return;
-      // Merge — never replace — so any realtime INSERTs that landed before
-      // this fetch resolved aren't dropped. `refresh` itself already merges.
-    });
-
-    const channelName = `notifications:${userId}`;
-    registerChannel(channelName);
-    const ch = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-        (payload) => {
-          if (!current()) return;
-          const row = payload.new as Notification;
-          const alreadyKnown = alertRowsRef.current.rows.has(row.id);
-          rememberAlertRows([row]);
-          if (row.kind === "chat_added" || row.kind === "group_invite") {
-            dispatchChatsRefresh({
-              reason: "chat-notification",
-              chatId: payloadString(row.payload, "chat_id"),
-            });
-          }
-          if (isOwnMessageNotification(row, userId)) {
-            if (!row.read_at) void markReadIds([row.id], { silent: true });
-            return;
-          }
-          if (isMutedNotification(row, mutedChatIds)) return;
-          // Feed/read state is independent of alert eligibility. Windows owns
-          // its own sound; foreground audio keeps its existing live guards.
-          const osToast =
-            isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id);
-          setItems((prev) => current() ? mergeNotificationRows(prev, [row], PAGE_SIZE) : prev);
-          if (row.kind === "message" && alreadyKnown) return;
-          const sound = () => playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast });
-          if (row.kind !== "message") sound();
-          else if (!osToast) {
-            const maySound = () => {
-              const latest = alertRowsRef.current.rows.get(row.id);
-              return current() && Boolean(latest) && !latest?.read_at && !latest?.alert_suppressed_at
-                && !readOwner.pending.has(row.id);
-            };
-            playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast: false,
-              isCurrent: maySound, authorize: () => currentMessageAlertAllowed(row.id, maySound, supabase),
-            });
-          }
-          if (osToast) {
-            presentDesktopNotification(row);
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-        (payload) => {
-          if (!current()) return;
-          const row = payload.new as Notification;
-          if (alertRowsRef.current.rows.has(row.id)) rememberAlertRows([row]);
-          setItems((prev) => current() ? prev.map((n) =>
-            (n.id === row.id ? mergeNotificationRows([n], [row], 1)[0] : n)) : prev);
-        },
-      )
-      .subscribe((status) => {
-        if (!current()) return;
-        if (status !== "SUBSCRIBED") return;
-        if (subscribedOnce) void refresh({ presentNewDesktop: true });
-        subscribedOnce = true;
-      });
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(ch);
-      unregisterChannel(channelName);
+    if (isOwnMessageNotification(row, userId) || isMutedNotification(row, mutedChatIds)) return;
+    const mayAlert = () => {
+      const latest = alertRowsRef.current.rows.get(row.id) ?? row;
+      return sourceCurrent() && isCurrentReadOwner() && !latest.read_at && !latest.alert_suppressed_at
+        && !readOwner.pending.has(row.id);
     };
-  }, [userId, supabase, mutedChatIds, refresh, presentDesktopNotification, isCurrentReadOwner, rememberAlertRows, readOwner]);
+    if (!mayAlert()) return;
+    const osToast = isDesktopApp() && !presentedDesktopIdsRef.current.has(row.id);
+    if (!osToast) playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast: false,
+      isCurrent: mayAlert,
+      ...(row.kind === "message" ? { authorize: () => currentMessageAlertAllowed(row.id, mayAlert, supabase) } : {}),
+    });
+    if (osToast) presentDesktopNotification(row, mayAlert);
+  };
 
   useEffect(() => {
-    setItems((prev) => isCurrentReadOwner() ? normalizeRowsForDisplay(prev) : prev);
+    if (!userId || !sessionId || !FEED_UUID.test(userId) || !FEED_UUID.test(sessionId) || !isCurrentReadOwner()) return;
+    let cancelled = false, live = false, stopped = false, refreshAfterOpen = false, retries = 0;
+    let handshake: ReturnType<typeof setTimeout> | undefined, retry: ReturnType<typeof setTimeout> | undefined;
+    let waiting: Promise<void> | undefined, finishWaiting: (() => void) | undefined;
+    const generation = accountGenerationRef.current;
+    const current = () => !cancelled && feedRef.current === connection && isCurrentReadOwner()
+      && generation === accountGenerationRef.current;
+    const settle = () => { finishWaiting?.(); finishWaiting = undefined; waiting = undefined; };
+    const connection: FeedConnection = { owner: readOwner, controller: null, refresh() {
+      if (!current()) return Promise.resolve();
+      waiting ??= new Promise<void>(resolve => { finishWaiting = resolve; });
+      const result = waiting;
+      if (stopped) restart();
+      if (live) connection.controller?.refresh(); else refreshAfterOpen = true;
+      return result;
+    } };
+    feedRef.current = connection;
+    const restart = () => {
+      if (!current() || navigator.onLine === false) { settle(); return; }
+      clearTimeout(retry); retry = undefined;
+      stopped = false; live = false;
+      setLoading(previous => current() ? true : previous);
+      connection.controller?.restart();
+    };
+    const rpcData = async (name: "notification_feed_open_v2" | "notification_feed_page_v2" | "notification_feed_lookup_v2",
+      args: { p_limit: 30; p_held_ids: string[] } | { p_limit: 30 } | { p_ids: string[] }) => {
+      if (!current()) throw new Error("notification_feed_owner");
+      if (handshake === undefined) handshake = setTimeout(() => { if (current()) connection.controller?.timeout(); }, FEED_HANDSHAKE_MS);
+      bumpFetch("useNotifications");
+      const result = await supabase.rpc(name, args);
+      if (result.error) throw result.error;
+      return result.data;
+    };
+    setLoading(previous => current() ? true : previous);
+    connection.controller = createNotificationFeedV2({ userId, sessionId, accountEpoch }, {
+      isCurrent: current,
+      subscribe(receive, status) {
+        live = false; stopped = false;
+        clearTimeout(handshake);
+        handshake = setTimeout(() => { if (current()) connection.controller?.timeout(); }, FEED_HANDSHAKE_MS);
+        const channelName = `notification-feed-v2:${userId}:${sessionId}`;
+        registerChannel(channelName);
+        const channel = supabase.channel(channelName).on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "notification_feed_events_v2", filter: `recipient_id=eq.${userId}`,
+        }, payload => receive(payload.new)).subscribe(status);
+        return () => {
+          clearTimeout(handshake); handshake = undefined;
+          void supabase.removeChannel(channel);
+          unregisterChannel(channelName);
+        };
+      },
+      open: args => rpcData("notification_feed_open_v2", args),
+      page: args => rpcData("notification_feed_page_v2", args),
+      lookup: args => rpcData("notification_feed_lookup_v2", args),
+      onRows(rows) {
+        if (!current()) return;
+        clearTimeout(handshake); handshake = undefined; retries = 0; live = true; stopped = false;
+        const next: Notification[] = rows.map(row => ({ ...row, alert_origin: null }));
+        alertRowsRef.current = { owner: readOwner, rows: new Map(next.map(row => [row.id, row])) };
+        if (isNativeAndroid()) nativeReadFetchRevisionRef.current++;
+        const visible = displayRef.current(next);
+        setItems(previous => current() ? visible : previous);
+        setLoading(previous => current() ? false : previous);
+        setError(previous => current() ? null : previous);
+        if (refreshAfterOpen) { refreshAfterOpen = false; connection.controller?.refresh(); }
+        else settle();
+      },
+      onCreated: (row, allowed) => { if (current()) createdRef.current(row, () => current() && allowed()); },
+      onResync(reason) {
+        if (!current()) return;
+        live = false; stopped = true;
+        setLoading(previous => current() ? false : previous);
+        const error = mapPgError(new Error(`notification_feed_v2:${reason}`));
+        setError(previous => current() ? error : previous);
+        settle();
+        if (retries++ === 0 && navigator.onLine !== false) retry = setTimeout(restart, FEED_RETRY_MS);
+      },
+    });
+    const offline = () => { if (current()) connection.controller?.timeout(); };
+    const rejoin = () => { if (current()) restart(); };
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", rejoin);
+    window.addEventListener(CONNECTION_REVIVED_EVENT, rejoin);
+    return () => {
+      cancelled = true; clearTimeout(handshake); clearTimeout(retry); settle();
+      connection.controller?.dispose();
+      if (feedRef.current === connection) feedRef.current = null;
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("online", rejoin);
+      window.removeEventListener(CONNECTION_REVIVED_EVENT, rejoin);
+    };
+  }, [userId, sessionId, accountEpoch, supabase, readOwner, isCurrentReadOwner]);
+
+  useEffect(() => {
+    if (!isCurrentReadOwner()) return;
+    const visible = normalizeRowsForDisplay([...alertRowsRef.current.rows.values()]);
+    setItems(previous => isCurrentReadOwner() ? visible : previous);
   }, [normalizeRowsForDisplay, isCurrentReadOwner]);
 
   const unreadCount = items.reduce((acc, n) => (n.user_id === userId && !n.read_at ? acc + 1 : acc), 0);
@@ -521,7 +494,6 @@ export function useNotifications() {
     unreadDesktopIdsRef.current.clear();
     trimmedDesktopIdsRef.current.clear();
     presentedDesktopIdsRef.current.clear();
-    desktopBaselineLoadedRef.current = false;
     void updateBrowserAppBadge(0);
   }, [userId]);
 
@@ -543,7 +515,7 @@ export function useNotifications() {
       const rpcError = await markChatMessageNotificationsRead(supabase, chatId, readUntil, undefined, current);
       if (!current()) return;
       if (!rpcError) {
-        await applyConfirmedReadRows(matchingIds, current);
+        await applyConfirmedReadRows(current);
         return;
       }
       if (!isMissingRpcError(rpcError)) { setError((prev) => current() ? mapPgError(rpcError) : prev); return; }
@@ -582,12 +554,10 @@ export function useNotifications() {
     };
     window.addEventListener(KUB_CHAT_NOTIFICATIONS_READ_EVENT, handleChatNotificationsRead);
     window.addEventListener("focus", handleFocus);
-    window.addEventListener("online", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener(KUB_CHAT_NOTIFICATIONS_READ_EVENT, handleChatNotificationsRead);
       window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("online", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [markMessageNotificationsForChatRead, refresh]);
@@ -596,16 +566,15 @@ export function useNotifications() {
     const generation = accountGenerationRef.current;
     const current = () => isCurrentReadOwner() && generation === accountGenerationRef.current;
     if (!current()) return;
-    const ids = items.filter((row) => row.user_id === readOwner.userId && !row.read_at).map((row) => row.id);
     try {
       const { error: rpcErr } = await supabase.rpc("notifications_mark_all_read");
       if (!current()) return;
       if (rpcErr) { setError((prev) => current() ? mapPgError(rpcErr) : prev); return; }
-      await applyConfirmedReadRows(ids, current);
+      await applyConfirmedReadRows(current);
     } catch (error) {
       if (current()) setError((prev) => current() ? mapPgError(error) : prev);
     }
-  }, [supabase, isCurrentReadOwner, items, readOwner, applyConfirmedReadRows]);
+  }, [supabase, isCurrentReadOwner, applyConfirmedReadRows]);
 
   return { items, unreadCount, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh };
 }

@@ -277,6 +277,7 @@ export interface Database {
           payload: Json
           read_at: string | null
           alert_suppressed_at: string | null
+          feed_revision: number
           alert_origin: Json | null
           created_at: string
         }
@@ -291,6 +292,18 @@ export interface Database {
             referencedColumns: ["id"]
           }
         ]
+      }
+      notification_feed_events_v2: {
+        Row: {
+          event_id: string
+          recipient_id: string
+          notification_id: string | null
+          event_kind: 'created' | 'changed' | 'removed' | 'invalidate'
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
       }
       media_variants: {
         Row: {
@@ -1508,6 +1521,18 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      notification_feed_page_v2: {
+        Args: { p_limit?: number; p_before_created_at?: string | null; p_before_id?: string | null }
+        Returns: Json
+      }
+      notification_feed_lookup_v2: {
+        Args: { p_ids: string[] }
+        Returns: Json
+      }
+      notification_feed_open_v2: {
+        Args: { p_limit?: number; p_held_ids?: string[] }
+        Returns: Json
+      }
       message_notification_alert_decisions: {
         Args: { p_notification_ids: string[] }
         Returns: Json
