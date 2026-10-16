@@ -12,6 +12,11 @@ let recheckStatus = "deliver";
 let claimToken;
 const rowId = "20000000-0000-4000-8000-000000000001";
 const deviceId = "30000000-0000-4000-8000-000000000001";
+const deviceOwner = "40000000-0000-4000-8000-000000000001";
+const descriptorFingerprints = {
+  fcm: "v1:257834ae6f721014aa3effc22a741d14c94dd2ebf60f2540668a21cc3ad91d05",
+  wns: "v1:811b9871501ac802812b71097c1fc5b4afb4bc92fa1d6718736435788e63422e",
+};
 const { privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
@@ -79,20 +84,25 @@ function configure(provider) {
       return Response.json([{ id: rowId, device_id: deviceId, payload: { kind: "message", title: "Fixture", body: "Photo" }, attempt_count: 0 }]);
     }
     if (url.pathname === "/rest/v1/user_push_devices") {
+      assert.equal(url.searchParams.get("select"), "id,user_id,platform,token,provider,enabled,revoked_at,app_version,session_id");
       return Response.json([{
         id: deviceId,
+        user_id: deviceOwner,
+        platform: provider === "fcm" ? "android" : "windows",
         token: provider === "fcm" ? "synthetic-registration" : "https://db5.notify.windows.com/?fixture=1",
         provider,
         enabled: true,
         revoked_at: null,
         app_version: "0.1.8",
+        session_id: null,
       }]);
     }
     if (url.hostname === "oauth2.googleapis.com" || url.hostname === "login.microsoftonline.com") {
       return Response.json({ access_token: "synthetic-oauth" });
     }
-    if (url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck") {
-      assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: claimToken });
+    if (url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck_bound") {
+      assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: claimToken,
+        p_device_id: deviceId, p_device_fingerprint: descriptorFingerprints[provider] });
       assert.equal(providerCalls.length, 0, "the RPC must precede the provider call");
       if (recheckStatus === "network_error") throw new Error("synthetic RPC network failure");
       return recheckStatus === "rpc_error"
@@ -113,7 +123,7 @@ function configure(provider) {
 }
 
 for (const provider of ["fcm", "wns"]) {
-  for (const status of ["read", "device_inactive", "claim_lost", "not_eligible", "rpc_error", "network_error", "unexpected"]) {
+  for (const status of ["read", "device_inactive", "device_changed", "claim_lost", "not_eligible", "rpc_error", "network_error", "unexpected"]) {
     test(`${provider} never reaches the provider after native recheck ${status}`, async () => {
       configure(provider);
       recheckStatus = status;
@@ -123,9 +133,9 @@ for (const provider of ["fcm", "wns"]) {
       assert.equal(result.native.sent, 0);
       assert.equal(result.native.pruned, status === "read" || status === "device_inactive" || status === "claim_lost" || status === "not_eligible" ? 1 : 0);
       assert.equal(result.native.failed, status === "rpc_error" || status === "network_error" || status === "unexpected" ? 1 : 0);
-      assert.equal(result.native.pending, status === "rpc_error" || status === "network_error" || status === "unexpected" ? 1 : 0);
+      assert.equal(result.native.pending, status === "rpc_error" || status === "network_error" || status === "unexpected" || status === "device_changed" ? 1 : 0);
       assert.equal(providerCalls.length, 0);
-      assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck").length, 1);
+      assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck_bound").length, 1);
       assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/notifications_native_push_outbox").length, 0);
     });
   }
@@ -137,7 +147,7 @@ for (const provider of ["fcm", "wns"]) {
     assert.equal(response.status, 200);
     assert.equal(result.native.sent, 1);
     assert.equal(providerCalls.length, 1);
-    const recheck = requests.findIndex((entry) => entry.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck");
+    const recheck = requests.findIndex((entry) => entry.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck_bound");
     const providerRequest = requests.findIndex((entry) => providerCalls.includes(entry.url));
     assert.ok(recheck >= 0 && recheck < providerRequest);
     assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/notifications_native_push_outbox").length, 1);

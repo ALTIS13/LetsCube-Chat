@@ -4,6 +4,8 @@ import { drainAlbumPush, type AlbumPushDependencies, type AlbumPushSummary } fro
 import { buildFcmMessage, isPermanentFcmTokenError } from "./fcm.ts";
 import { drainVoicePush, isVoiceRequestAuthorized, voiceSummary } from "./voice-dispatch.ts";
 import { snapshotWebPushDescriptor, webPushDescriptorFingerprint } from "./web-push-descriptor.ts";
+import { snapshotNativePushDescriptor, nativePushDescriptorFingerprint, nativePushRetirementUrl,
+  type NativePushDescriptor } from "./native-push-descriptor.ts";
 import {
   buildDeclarativeWebPushPayload,
   createWebPushTopic,
@@ -44,7 +46,7 @@ type WebPushDeliveryStatus =
   | "not_eligible"
   | "claim_lost";
 
-type NativePushDeliveryStatus = "deliver" | "read" | "device_inactive" | "not_eligible" | "claim_lost";
+type NativePushDeliveryStatus = "deliver" | "read" | "device_inactive" | "not_eligible" | "claim_lost" | "device_changed";
 
 type NativeOutboxRow = {
   id: string;
@@ -55,11 +57,14 @@ type NativeOutboxRow = {
 
 type PushDeviceRow = {
   id: string;
+  user_id: string;
+  platform: "android" | "ios" | "windows";
   token: string;
   provider: "fcm" | "apns" | "wns";
   enabled: boolean;
   revoked_at?: string | null;
   app_version?: string | null;
+  session_id: string | null;
 };
 
 type FcmConfig = {
@@ -190,7 +195,7 @@ async function dispatchAlbumPush(
       let native: { ok: boolean; data: AlbumDevice[] } = { ok: true, data: [] };
       if (deviceIds.length) {
         const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
-        url.searchParams.set("select", "id,user_id,token,provider,enabled,revoked_at,app_version");
+        url.searchParams.set("select", "id,user_id,platform,token,provider,enabled,revoked_at,app_version,session_id");
         url.searchParams.set("id", `in.(${deviceIds.join(",")})`);
         const response = await restFetch(url, secretKey);
         native = { ok: response.ok, data: response.ok ? await response.json() as AlbumDevice[] : [] };
@@ -201,11 +206,14 @@ async function dispatchAlbumPush(
       if (native.ok) for (const item of native.data) devices.set(item.id, item);
       return rows;
     },
-    recheck: async (id, claimToken) => {
-      const response = await restFetch(new URL("/rest/v1/rpc/album_push_recheck", supabaseUrl), secretKey, {
+    recheck: async (id, claimToken, binding) => {
+      // Unbound preflight obtains a payload for preparation, never delivery authority.
+      const response = await restFetch(new URL(binding ? "/rest/v1/rpc/album_push_recheck_bound" : "/rest/v1/rpc/album_push_recheck", supabaseUrl), secretKey, {
         method: "POST",
         headers: { prefer: "return=representation" },
-        body: JSON.stringify({ p_outbox_id: id, p_claim_token: claimToken }),
+        body: JSON.stringify({ p_outbox_id: id, p_claim_token: claimToken, ...(binding ? {
+          p_target_id: binding.targetId, p_target_fingerprint: binding.fingerprint,
+        } : {}) }),
       });
       if (!response.ok) throw new Error("album_recheck_failed");
       const rows = await response.json() as unknown;
@@ -225,8 +233,9 @@ async function dispatchAlbumPush(
         const descriptor = snapshotWebPushDescriptor(subscriptions.get(row.subscription_id));
         if (!descriptor) return { outcome: "release", error: "subscription_missing" };
         const tag = `message:chat:${payload.chatId}`;
+        const fingerprint = await webPushDescriptorFingerprint(descriptor);
         const topic = await createWebPushTopic(tag);
-        return { send: async freshPayload => {
+        return { binding: { targetId: descriptor.id, fingerprint }, send: async freshPayload => {
           const safe = safePayload({ ...freshPayload, tag });
           try {
             await webpush.sendNotification(
@@ -254,18 +263,17 @@ async function dispatchAlbumPush(
 
       if (deviceLookupFailed) return { outcome: "release", error: "device_query_failed" };
       const device = row.device_id ? devices.get(row.device_id) : undefined;
-      if (!device || device.provider !== "fcm" || typeof device.token !== "string" || !device.token ||
-        typeof device.user_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(device.user_id)) {
+      const descriptor = snapshotNativePushDescriptor(device);
+      if (!descriptor || descriptor.provider !== "fcm" || descriptor.platform !== "android") {
         return { outcome: "release", error: "device_missing" };
       }
-      const descriptor = Object.freeze({ id: device.id, user_id: device.user_id, token: device.token,
-        provider: device.provider, app_version: device.app_version ?? null });
       const config = readFcmConfig();
       if (!config) return { outcome: "release", error: "fcm_credentials_pending" };
       try {
+        const fingerprint = await nativePushDescriptorFingerprint(descriptor);
         fcmAccessToken ??= getGoogleAccessToken(config);
         const accessToken = await fcmAccessToken;
-        return { send: async freshPayload => {
+        return { binding: { targetId: descriptor.id, fingerprint }, send: async freshPayload => {
           try {
             const response = await fetch(
               `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`,
@@ -279,11 +287,7 @@ async function dispatchAlbumPush(
             if (response.ok) return { outcome: "sent" };
             const body = await readJson(response);
             if (isPermanentFcmTokenError(response.status, body)) {
-              const retirement = new URL("/rest/v1/user_push_devices", supabaseUrl);
-              for (const key of ["id", "user_id", "token", "provider"] as const) {
-                retirement.searchParams.set(key, `eq.${descriptor[key]}`);
-              }
-              retirement.searchParams.set("app_version", descriptor.app_version === null ? "is.null" : `eq.${descriptor.app_version}`);
+              const retirement = nativePushRetirementUrl(supabaseUrl, descriptor);
               await restFetch(retirement, secretKey, { method: "PATCH",
                 body: JSON.stringify({ enabled: false, revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() }) });
               return { outcome: "gone", error: `fcm:${response.status}` };
@@ -444,18 +448,21 @@ async function recheckNativePushDelivery(
   secretKey: string,
   outboxId: string,
   claimToken: string,
+  deviceId: string,
+  deviceFingerprint: string,
 ): Promise<{ ok: true; status: NativePushDeliveryStatus } | { ok: false }> {
   try {
-    const url = new URL("/rest/v1/rpc/native_push_outbox_delivery_recheck", supabaseUrl);
+    const url = new URL("/rest/v1/rpc/native_push_outbox_delivery_recheck_bound", supabaseUrl);
     const response = await restFetch(url, secretKey, {
       method: "POST",
       headers: { prefer: "return=representation" },
-      body: JSON.stringify({ p_outbox_id: outboxId, p_claim_token: claimToken }),
+      body: JSON.stringify({ p_outbox_id: outboxId, p_claim_token: claimToken,
+        p_device_id: deviceId, p_device_fingerprint: deviceFingerprint }),
     });
     if (!response.ok) return { ok: false };
 
     const status = await response.json() as unknown;
-    if (status !== "deliver" && status !== "read" && status !== "device_inactive" && status !== "not_eligible" && status !== "claim_lost") {
+    if (status !== "deliver" && status !== "read" && status !== "device_inactive" && status !== "not_eligible" && status !== "claim_lost" && status !== "device_changed") {
       return { ok: false };
     }
     return { ok: true, status };
@@ -467,7 +474,7 @@ async function recheckNativePushDelivery(
 async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: string[]) {
   if (ids.length === 0) return { ok: true as const, data: [] as PushDeviceRow[] };
   const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
-  url.searchParams.set("select", "id,token,provider,enabled,revoked_at,app_version");
+  url.searchParams.set("select", "id,user_id,platform,token,provider,enabled,revoked_at,app_version,session_id");
   url.searchParams.set("id", `in.(${ids.join(",")})`);
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: response.status };
@@ -503,17 +510,22 @@ async function dispatchNativePush(
   let authenticationFailed = false;
   for (const row of rows) {
     const device = byId.get(row.device_id);
-    if (!device || !device.enabled || device.revoked_at) {
-      await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
-        sent_at: new Date().toISOString(),
-        last_error: "device_missing",
-      });
-      pruned += 1;
+    const descriptor = snapshotNativePushDescriptor(device);
+    if (!descriptor) {
+      await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
+      pending += 1;
+      continue;
+    }
+    let fingerprint: string;
+    try { fingerprint = await nativePushDescriptorFingerprint(descriptor); }
+    catch {
+      await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
+      pending += 1;
       continue;
     }
 
-    let result: "sent" | "failed" | "pruned";
-    if (device.provider === "wns") {
+    let result: "sent" | "failed" | "pruned" | "pending";
+    if (descriptor.provider === "wns") {
       if (!wnsConfig) {
         await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
         pending += 1;
@@ -538,9 +550,9 @@ async function dispatchNativePush(
         claimToken,
         wnsAccessToken,
         row,
-        device,
+        descriptor, fingerprint,
       );
-    } else if (device.provider === "fcm") {
+    } else if (descriptor.provider === "fcm") {
       if (!fcmConfig) {
         await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
         pending += 1;
@@ -566,7 +578,7 @@ async function dispatchNativePush(
         fcmConfig.projectId,
         fcmAccessToken,
         row,
-        device,
+        descriptor, fingerprint,
       );
     } else {
       await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
@@ -576,6 +588,7 @@ async function dispatchNativePush(
 
     if (result === "sent") sent += 1;
     else if (result === "pruned") pruned += 1;
+    else if (result === "pending") pending += 1;
     else {
       failed += 1;
       pending += 1;
@@ -601,10 +614,13 @@ async function deliverFcm(
   projectId: string,
   accessToken: string,
   row: NativeOutboxRow,
-  device: PushDeviceRow,
-): Promise<"sent" | "failed" | "pruned"> {
-  const eligibility = await recheckNativePushDelivery(supabaseUrl, secretKey, row.id, claimToken);
+  device: NativePushDescriptor,
+  fingerprint: string,
+): Promise<"sent" | "failed" | "pruned" | "pending"> {
+  const bodyToSend = JSON.stringify(buildFcmMessage(row.payload, device.token, device.app_version));
+  const eligibility = await recheckNativePushDelivery(supabaseUrl, secretKey, row.id, claimToken, device.id, fingerprint);
   if (!eligibility.ok) return "failed";
+  if (eligibility.status === "device_changed") return "pending";
   if (eligibility.status !== "deliver") return "pruned";
 
   const response = await fetch(
@@ -615,7 +631,7 @@ async function deliverFcm(
         authorization: `Bearer ${accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(buildFcmMessage(row.payload, device.token, device.app_version)),
+      body: bodyToSend,
     },
   );
 
@@ -629,11 +645,11 @@ async function deliverFcm(
 
   const body = await readJson(response);
   if (isPermanentFcmTokenError(response.status, body)) {
-    await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
+    await restFetch(nativePushRetirementUrl(supabaseUrl, device), secretKey, { method: "PATCH", body: JSON.stringify({
       enabled: false,
       revoked_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    }) });
     await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: new Date().toISOString(),
       last_error: `gone:${response.status}`,
@@ -654,24 +670,18 @@ async function deliverWns(
   claimToken: string,
   accessToken: string,
   row: NativeOutboxRow,
-  device: PushDeviceRow,
-): Promise<"sent" | "failed" | "pruned"> {
+  device: NativePushDescriptor,
+  fingerprint: string,
+): Promise<"sent" | "failed" | "pruned" | "pending"> {
   if (!isAllowedWnsChannelUrl(device.token)) {
-    const revokedAt = new Date().toISOString();
-    await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
-      enabled: false,
-      revoked_at: revokedAt,
-      updated_at: revokedAt,
-    });
-    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
-      sent_at: revokedAt,
-      last_error: "invalid_channel",
-    });
-    return "pruned";
+    await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {});
+    return "pending";
   }
 
-  const eligibility = await recheckNativePushDelivery(supabaseUrl, secretKey, row.id, claimToken);
+  const bodyToSend = buildWnsToast(safePayload(row.payload));
+  const eligibility = await recheckNativePushDelivery(supabaseUrl, secretKey, row.id, claimToken, device.id, fingerprint);
   if (!eligibility.ok) return "failed";
+  if (eligibility.status === "device_changed") return "pending";
   if (eligibility.status !== "deliver") return "pruned";
 
   let response: Response;
@@ -685,7 +695,7 @@ async function deliverWns(
         "x-wns-requestforstatus": "true",
         "x-wns-type": "wns/toast",
       },
-      body: buildWnsToast(safePayload(row.payload)),
+      body: bodyToSend,
     });
   } catch {
     await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
@@ -706,11 +716,11 @@ async function deliverWns(
   const reason = readWnsResponseStatus(response);
   if (isPermanentWnsChannelError(response.status, reason)) {
     const revokedAt = new Date().toISOString();
-    await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
+    await restFetch(nativePushRetirementUrl(supabaseUrl, device), secretKey, { method: "PATCH", body: JSON.stringify({
       enabled: false,
       revoked_at: revokedAt,
       updated_at: revokedAt,
-    });
+    }) });
     await markNativeOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       sent_at: revokedAt,
       last_error: `gone:${response.status}:${reason}`.slice(0, 160),

@@ -7,17 +7,18 @@ type AlbumClaim = {
 
 type AlbumPayload = Record<string, unknown>;
 type AlbumRecheck = {
-  status: "deliver" | "read" | "target_inactive" | "foreground" | "not_eligible" | "claim_lost";
+  status: "deliver" | "read" | "target_inactive" | "foreground" | "not_eligible" | "claim_lost" | "target_changed";
   payload: AlbumPayload | null;
 };
 type AlbumSendResult = { outcome: "sent" | "retry" | "gone" | "release"; error?: string | null };
-type AlbumPreparedSend = { send: (payload: AlbumPayload) => Promise<AlbumSendResult> };
+type AlbumBinding = Readonly<{ targetId: string; fingerprint: string }>;
+type AlbumPreparedSend = { binding: AlbumBinding; send: (payload: AlbumPayload) => Promise<AlbumSendResult> };
 type AlbumPrepareFailure = { outcome: "retry" | "release"; error?: string | null };
 
 export type AlbumPushDependencies = {
   uuid: () => string;
   claim: (limit: number, token: string) => Promise<unknown>;
-  recheck: (id: string, token: string) => Promise<unknown>;
+  recheck: (id: string, token: string, binding?: AlbumBinding) => Promise<unknown>;
   prepare: (claim: AlbumClaim, payload: AlbumPayload) => Promise<AlbumPreparedSend | AlbumPrepareFailure>;
   ack: (id: string, token: string, outcome: AlbumSendResult["outcome"], error: string | null) => Promise<boolean>;
 };
@@ -57,7 +58,7 @@ function recheck(value: unknown): AlbumRecheck | null {
   if (
     value.status === "read" || value.status === "target_inactive" ||
     value.status === "foreground" || value.status === "not_eligible" ||
-    value.status === "claim_lost"
+    value.status === "claim_lost" || value.status === "target_changed"
   ) return { status: value.status, payload: null };
   return null;
 }
@@ -115,7 +116,7 @@ export async function drainAlbumPush(deps: AlbumPushDependencies, requestedLimit
       continue;
     }
     if (eligible.status !== "deliver") {
-      if (eligible.status === "foreground") summary.deferred += 1;
+      if (eligible.status === "foreground" || eligible.status === "target_changed") summary.deferred += 1;
       else if (eligible.status !== "claim_lost") summary.pruned += 1;
       continue;
     }
@@ -135,8 +136,18 @@ export async function drainAlbumPush(deps: AlbumPushDependencies, requestedLimit
     }
     let outcome: AlbumSendResult;
     if (record(prepared) && "send" in prepared && typeof prepared.send === "function") {
+      if (!record(prepared.binding) || prepared.binding.targetId !== (row.subscription_id ?? row.device_id) ||
+        typeof prepared.binding.fingerprint !== "string" || !/^v1:[0-9a-f]{64}$/.test(prepared.binding.fingerprint)) {
+        summary.failed += 1;
+        try {
+          if (!await deps.ack(row.id, token, "release", "invalid_binding")) summary.uncertain += 1;
+        } catch { summary.uncertain += 1; }
+        continue;
+      }
+      // Snapshot the port too: the final RPC and provider closure share one immutable descriptor.
+      const binding = Object.freeze({ targetId: prepared.binding.targetId, fingerprint: prepared.binding.fingerprint });
       let fresh: AlbumRecheck | null;
-      try { fresh = recheck(await deps.recheck(row.id, token)); }
+      try { fresh = recheck(await deps.recheck(row.id, token, binding)); }
       catch { fresh = null; }
       if (!fresh || (fresh.status === "deliver" && (!fresh.payload ||
         !neutralExactMessage(fresh.payload) || fresh.payload.chatId !== eligible.payload.chatId))) {
@@ -147,7 +158,7 @@ export async function drainAlbumPush(deps: AlbumPushDependencies, requestedLimit
         continue;
       }
       if (fresh.status !== "deliver") {
-        if (fresh.status === "foreground") summary.deferred += 1;
+        if (fresh.status === "foreground" || fresh.status === "target_changed") summary.deferred += 1;
         else if (fresh.status !== "claim_lost") summary.pruned += 1;
         continue;
       }

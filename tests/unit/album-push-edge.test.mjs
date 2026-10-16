@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { registerHooks, stripTypeScriptTypes } from "node:module";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -15,6 +15,14 @@ let currentFixture;
 let webDescriptors = [];
 let events = [];
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
+function fingerprint(target, web) {
+  const fields = web ? [target.id, target.user_id, target.endpoint, target.p256dh, target.auth]
+    : [target.id, target.user_id, target.platform, target.provider, target.token, target.app_version, target.session_id];
+  return "v1:" + createHash("sha256").update(Buffer.concat(fields.flatMap(value => {
+    if (value === null) return [Buffer.from("-1:")];
+    const bytes = Buffer.from(value, "utf8"); return [Buffer.from(`${bytes.length}:`), bytes];
+  }))).digest("hex");
+}
 function request() {
   return new Request("https://fixture.invalid/functions/v1/send-push-notifications", {
     method: "POST", headers: { "x-kub-push-token": "fixture-dispatch" }, body: "{}",
@@ -72,6 +80,7 @@ function configure(nextProvider, options = {}) {
       ...options.subscription },
     device: { id: deviceId, user_id: "70000000-0000-4000-8000-000000000001",
       token: "fixture-registration", provider: "fcm", enabled: true, revoked_at: null, app_version: "0.1.8",
+      platform: "android", session_id: null,
       ...options.device },
     payload: { kind: "message", title: "LETSCUBE", body: "Новое сообщение", chatId, messageId, notificationId,
       url: `/?chat=${chatId}&message=${messageId}`, tag: `message:chat:${chatId}` } };
@@ -112,14 +121,22 @@ function configure(nextProvider, options = {}) {
       const columns = url.searchParams.get("select").split(",");
       return Response.json(options.missing ? [] : [Object.fromEntries(Object.entries(target).filter(([key]) => columns.includes(key)))]);
     }
-    if (url.pathname === "/rest/v1/rpc/album_push_recheck") {
-      assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: claimToken });
+    if (url.pathname === "/rest/v1/rpc/album_push_recheck" || url.pathname === "/rest/v1/rpc/album_push_recheck_bound") {
+      const args = JSON.parse(init.body);
+      if (url.pathname.endsWith("_bound")) {
+        const cached = f.cachedTarget;
+        assert.deepEqual(args, { p_outbox_id: rowId, p_claim_token: claimToken, p_target_id: cached.id,
+          p_target_fingerprint: fingerprint(cached, provider === "web") });
+      } else assert.deepEqual(args, { p_outbox_id: rowId, p_claim_token: claimToken });
       assert.equal(webCalls.length + fcmCalls.length, 0);
       f.rechecks += 1;
       events.push("recheck");
       if (f.rechecks === 2 && options.finalError) return new Response("unavailable", { status: 503 });
       if (f.rechecks === 2 && options.finalThrow) throw Error("Fixture private content");
       if (f.rechecks === 2 && options.finalMalformed) return Response.json({ status: "deliver" });
+      if (url.pathname.endsWith("_bound") && args.p_target_fingerprint !== fingerprint(provider === "web" ? f.subscription : f.device, provider === "web")) {
+        return Response.json([{ status: "target_changed", payload: null }]);
+      }
       const status = f.liveActive ? f.status : "target_inactive";
       return Response.json([{ status, payload: status === "deliver" ? f.payload : null }]);
     }
@@ -144,15 +161,18 @@ function configure(nextProvider, options = {}) {
     }
     throw new Error(`unexpected fixture request to ${url.pathname}`);
   };
+  f.cachedTarget = structuredClone(provider === "web" ? f.subscription : f.device);
   return f;
 }
 
-async function heldPrepare(channel, change, assertion) {
+async function heldPrepare(channel, change, assertion, holdDigest = 1) {
   const f = configure(channel, { holdOAuth: channel === "fcm" });
   const original = crypto.subtle.digest;
+  let digests = 0;
   if (channel === "web") crypto.subtle.digest = async function (...args) {
     events.push("digest");
-    f.entered.resolve(); await f.release.promise; return original.apply(this, args);
+    if (++digests === holdDigest) { f.entered.resolve(); await f.release.promise; }
+    return original.apply(this, args);
   };
   try {
     const pending = handler(request());
@@ -161,6 +181,13 @@ async function heldPrepare(channel, change, assertion) {
   } finally { f.release.resolve(); crypto.subtle.digest = original; }
 }
 for (const channel of ["web", "fcm"]) {
+  test(`held ${channel} prepare descriptor A-to-B refuses old bytes before provider`, () => heldPrepare(channel,
+    f => { if (channel === "web") f.subscription.auth += "-B"; else f.device.session_id = "70000000-0000-4000-8000-000000000099"; },
+    result => {
+      assert.equal(webCalls.length + fcmCalls.length, 0, "bound album refuses replaced descriptor");
+      assert.equal(result.album.sent, 0);
+      assert.equal(requests.filter(r => r.path === "/rest/v1/rpc/album_push_recheck_bound").length, 1);
+    }));
   test(`held ${channel} prepare followed by denial never reaches provider`, () => heldPrepare(channel,
     f => { f.status = "not_eligible"; }, () => {
       assert.equal(webCalls.length + fcmCalls.length, 0, "revoked while preparing must not reach provider");
@@ -184,7 +211,8 @@ async function allowed(channel, options = {}) {
 for (const channel of ["web", "fcm"]) {
   test(`held ${channel} positive performs final RPC after prepare and before provider`, () => heldPrepare(channel,
     () => {}, (result, f) => {
-      assert.deepEqual(events, ["recheck", channel === "web" ? "digest" : "oauth", "recheck", "provider"]);
+      assert.deepEqual(events, channel === "web" ? ["recheck", "digest", "digest", "recheck", "provider"]
+        : ["recheck", "oauth", "recheck", "provider"]);
       assert.equal(result.album.sent, 1); assert.equal(f.acks.length, 1);
     }));
   for (const status of ["read", "target_inactive", "foreground", "claim_lost", "unexpected"]) {
@@ -237,7 +265,7 @@ for (const [channel, fields] of [["web", ["user_id", "endpoint", "p256dh", "auth
     assert.equal(channel === "web" ? f.subscription.is_active : f.device.enabled, false);
     const params = Object.fromEntries(f.writes[0].url.searchParams);
     assert.deepEqual(Object.keys(params).sort(), channel === "web"
-      ? ["auth", "endpoint", "id", "p256dh", "user_id"] : ["app_version", "id", "provider", "token", "user_id"]);
+      ? ["auth", "endpoint", "id", "p256dh", "user_id"] : ["app_version", "id", "platform", "provider", "session_id", "token", "user_id"]);
     assert.equal(params.user_id, "eq.70000000-0000-4000-8000-000000000001");
   });
 }
@@ -251,6 +279,7 @@ const indexUrl = new URL("../../supabase/functions/send-push-notifications/index
 const albumUrl = new URL("../../supabase/functions/send-push-notifications/album-dispatch.ts", import.meta.url);
 const indexSource = readFileSync(indexUrl, "utf8").replaceAll("\r\n", "\n");
 const albumSource = readFileSync(albumUrl, "utf8").replaceAll("\r\n", "\n");
+const nativeSource = readFileSync(new URL("./native-push-descriptor.ts", indexUrl), "utf8");
 const encoded = text => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(text)).toString("base64")}`;
 let mutationSequence = 0;
 function replaceOnce(text, needle, replacement) {
@@ -261,17 +290,18 @@ function albumBlock(transform) {
   const a = indexSource.indexOf("async function dispatchAlbumPush("), b = indexSource.indexOf("async function dispatchVoice(", a);
   return indexSource.slice(0, a) + transform(indexSource.slice(a, b)) + indexSource.slice(b);
 }
-async function mutated({ index = indexSource, album = albumSource }, scenario) {
+async function mutated({ index = indexSource, album = albumSource, native = nativeSource }, scenario) {
   let js = stripTypeScriptTypes(index);
   js = js.replace('"npm:web-push@3.6.7"', '"data:text/javascript,export default globalThis.__albumWebpush"');
-  js = js.replace(/"(\.\/[^"\n]+\.ts)"/g, (_match, path) => JSON.stringify(path === "./album-dispatch.ts" ? encoded(album) : new URL(path, indexUrl).href));
+  js = js.replace(/"(\.\/[^"\n]+\.ts)"/g, (_match, path) => JSON.stringify(path === "./album-dispatch.ts" ? encoded(album)
+    : path === "./native-push-descriptor.ts" ? encoded(native) : new URL(path, indexUrl).href));
   const original = handler;
   try { await import(`${encoded(js)}#album-${++mutationSequence}`); await scenario(); }
   finally { handler = original; }
 }
 const noSend = channel => () => heldPrepare(channel, f => { f.status = "not_eligible"; }, () => {
   assert.equal(webCalls.length + fcmCalls.length, 0, "revoked while preparing must not reach provider");
-});
+}, 2);
 const freshMember = channel => () => heldPrepare(channel, f => {
   const next = "50000000-0000-4000-8000-000000000099";
   f.payload = { ...f.payload, messageId: next, url: `/?chat=${chatId}&message=${next}` };
@@ -280,12 +310,13 @@ const freshMember = channel => () => heldPrepare(channel, f => {
 });
 for (const channel of ["web", "fcm"]) {
   for (const [label, input, scenario, message] of [
-    ["omit final RPC", () => ({ album: replaceOnce(albumSource, "fresh = recheck(await deps.recheck(row.id, token));", "fresh = eligible;") }),
+    ["omit final RPC", () => ({ album: replaceOnce(albumSource, "fresh = recheck(await deps.recheck(row.id, token, binding));", "fresh = eligible;") }),
       noSend(channel), "revoked while preparing must not reach provider"],
     ["send preflight payload", () => ({ album: replaceOnce(albumSource, "prepared.send(fresh.payload!)", "prepared.send(eligible.payload)") }),
       freshMember(channel), "provider must use final eligible member"],
-    ["retirement by id only", () => ({ index: albumBlock(text => replaceOnce(text,
-      channel === "web" ? '["id", "user_id", "endpoint", "p256dh", "auth"] as const' : '["id", "user_id", "token", "provider"] as const', '["id"] as const')) }),
+    ["retirement by id only", () => channel === "web"
+      ? ({ index: albumBlock(text => replaceOnce(text, '["id", "user_id", "endpoint", "p256dh", "auth"] as const', '["id"] as const')) })
+      : ({ native: replaceOnce(nativeSource, '["id", "user_id", "platform", "provider", "token", "app_version", "session_id"] as const', '["id"] as const') }),
       () => lateFailure(channel), "late permanent failure must preserve replacement descriptor"],
   ]) test(`compiled album ${channel} mutant rejected: ${label}`, async () => {
     await assert.rejects(mutated(input(), scenario), error => {
@@ -293,24 +324,35 @@ for (const channel of ["web", "fcm"]) {
       assert.equal(error.message.split("\n")[0], message); return true;
     });
   });
+  test(`compiled album ${channel} unbound final fallback sends replaced descriptor and is rejected`, async () => {
+    await assert.rejects(mutated({ album: replaceOnce(albumSource,
+      'deps.recheck(row.id, token, binding)', 'deps.recheck(row.id, token)') }, () => heldPrepare(channel,
+      f => { if (channel === "web") f.subscription.auth += "-B"; else f.device.token += "-B"; }, () => {
+        assert.equal(webCalls.length + fcmCalls.length, 0, "literal bound album denial");
+      })), error => {
+      assert.equal(error.code, "ERR_ASSERTION");
+      assert.equal(error.message.split("\n")[0], "literal bound album denial");
+      return true;
+    });
+  });
 }
 for (const [label, input, scenario, message] of [
   ["Web digest after final RPC", () => ({ index: albumBlock(text => replaceOnce(text,
-    'const topic = await createWebPushTopic(tag);\n        return { send: async freshPayload => {',
-    'return { send: async freshPayload => {\n          const topic = await createWebPushTopic(tag);')) }),
+    'const topic = await createWebPushTopic(tag);\n        return { binding: { targetId: descriptor.id, fingerprint }, send: async freshPayload => {',
+    'return { binding: { targetId: descriptor.id, fingerprint }, send: async freshPayload => {\n          const topic = await createWebPushTopic(tag);')) }),
     noSend("web"), "revoked while preparing must not reach provider"],
   ["OAuth await after final RPC", () => ({ index: albumBlock(text => replaceOnce(text,
-    'const accessToken = await fcmAccessToken;\n        return { send: async freshPayload => {',
-    'return { send: async freshPayload => {\n          const accessToken = await fcmAccessToken;')) }),
+    'const accessToken = await fcmAccessToken;\n        return { binding: { targetId: descriptor.id, fingerprint }, send: async freshPayload => {',
+    'return { binding: { targetId: descriptor.id, fingerprint }, send: async freshPayload => {\n          const accessToken = await fcmAccessToken;')) }),
     noSend("fcm"), "revoked while preparing must not reach provider"],
   ["restore cached Web inactive veto", () => ({ index: albumBlock(text => replaceOnce(text, 'if (!descriptor)',
     'if (!descriptor || subscriptions.get(row.subscription_id)?.is_active === false)')) }),
     () => allowed("web", { subscription: { is_active: false } }), "fresh album deliver must reach provider once"],
-  ["restore cached native inactive veto", () => ({ index: albumBlock(text => replaceOnce(text, 'if (!device || device.provider',
-    'if (!device || !device.enabled || device.revoked_at || device.provider')) }),
+  ["restore cached native inactive veto", () => ({ index: albumBlock(text => replaceOnce(text, 'if (!descriptor || descriptor.provider',
+    'if (!descriptor || !device?.enabled || device.revoked_at || descriptor.provider')) }),
     () => allowed("fcm", { device: { enabled: false } }), "fresh album deliver must reach provider once"],
   ["omit native owner projection", () => ({ index: albumBlock(text => replaceOnce(text,
-    '"id,user_id,token,provider,enabled,revoked_at,app_version"', '"id,token,provider,enabled,revoked_at,app_version"')) }),
+    '"id,user_id,platform,token,provider,enabled,revoked_at,app_version,session_id"', '"id,platform,token,provider,enabled,revoked_at,app_version,session_id"')) }),
     () => allowed("fcm"), "fresh album deliver must reach provider once"],
   ["omit final neutral payload guard", () => ({ album: replaceOnce(albumSource,
     "!neutralExactMessage(fresh.payload) || ", "") }),

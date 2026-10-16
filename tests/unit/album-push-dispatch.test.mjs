@@ -39,7 +39,8 @@ function fixture(overrides = {}) {
     },
     prepare: async (claim, preflightPayload) => {
       calls.push(["prepare", claim.id, preflightPayload]);
-      return { send: freshPayload => deps.send(claim, freshPayload) };
+      return { binding: { targetId: claim.subscription_id ?? claim.device_id, fingerprint: "v1:" + "a".repeat(64) },
+        send: freshPayload => deps.send(claim, freshPayload) };
     },
     ack: async (id, claimToken, outcome, error) => {
       calls.push(["ack", id, claimToken, outcome, error]);
@@ -63,6 +64,31 @@ test("album dispatch uses a freshly rechecked exact-message route and token-boun
     ["send", row.id, payload],
     ["ack", row.id, token, "sent", null],
   ]);
+});
+
+test("album prepared binding is required and the final port gets the exact target/hash", async () => {
+  const { deps } = fixture(); let reads = 0;
+  deps.recheck = async (_id, _token, binding) => {
+    if (++reads === 1) assert.equal(binding, undefined);
+    else assert.deepEqual(binding, { targetId: row.subscription_id, fingerprint: "v1:" + "a".repeat(64) });
+    return { status: "deliver", payload };
+  };
+  assert.equal((await drainAlbumPush(deps, 1)).sent, 1); assert.equal(reads, 2);
+});
+for (const binding of [undefined, null, { targetId: row.subscription_id, fingerprint: "bad" },
+  { targetId: "30000000-0000-4000-8000-000000000099", fingerprint: "v1:" + "a".repeat(64) }]) {
+  test(`invalid prepared binding ${JSON.stringify(binding)} never invokes provider`, async () => {
+    const { deps, calls } = fixture({ prepare: async () => ({ binding, send: async () => { assert.fail("provider must not run"); } }) });
+    const result = await drainAlbumPush(deps, 1); assert.equal(result.sent, 0);
+    assert.deepEqual(calls.at(-1), ["ack", row.id, token, "release", "invalid_binding"]);
+  });
+}
+test("final target_changed is a released lease, not suppression or a second ACK", async () => {
+  const { deps, calls } = fixture(); let reads = 0;
+  deps.recheck = async () => ++reads === 1 ? { status: "deliver", payload } : { status: "target_changed", payload: null };
+  const result = await drainAlbumPush(deps, 1);
+  assert.deepEqual([result.sent, result.pruned, result.deferred], [0, 0, 1]);
+  assert.equal(calls.some(([name]) => name === "send" || name === "ack"), false);
 });
 
 test("an unknown recheck status never reaches the provider", async () => {

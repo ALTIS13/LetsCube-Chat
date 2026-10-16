@@ -228,11 +228,13 @@ test("native cron claims an unread row and acknowledges only its own FCM lease",
       return Response.json([{ id: rowId, device_id: deviceId, payload: { title: "Fixture", body: "Message" }, attempt_count: 0 }]);
     }
     if (url.pathname === "/rest/v1/user_push_devices") return Response.json([
-      { id: deviceId, token: "synthetic-registration", provider: "fcm", enabled: true, app_version: "0.1.8" },
+      { id: deviceId, user_id: "40000000-0000-4000-8000-000000000001", platform: "android",
+        token: "synthetic-registration", provider: "fcm", enabled: true, app_version: "0.1.8", session_id: null },
     ]);
     if (url.hostname === "oauth2.googleapis.com") return Response.json({ access_token: "synthetic-oauth" });
-    if (url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck") {
-      assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: nativeClaimToken });
+    if (url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck_bound") {
+      assert.deepEqual(JSON.parse(init.body), { p_outbox_id: rowId, p_claim_token: nativeClaimToken,
+        p_device_id: deviceId, p_device_fingerprint: "v1:257834ae6f721014aa3effc22a741d14c94dd2ebf60f2540668a21cc3ad91d05" });
       return Response.json("deliver");
     }
     if (url.hostname === "fcm.googleapis.com") return Response.json({ name: "fixture-message" });
@@ -254,7 +256,7 @@ test("native cron claims an unread row and acknowledges only its own FCM lease",
   const body = await response.json();
   assert.equal(body.native.sent, 1);
   assert.equal(body.native.failed, 0);
-  assert.ok(requests.findIndex((item) => item.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck") <
+  assert.ok(requests.findIndex((item) => item.url.pathname === "/rest/v1/rpc/native_push_outbox_delivery_recheck_bound") <
     requests.findIndex((item) => item.url.hostname === "fcm.googleapis.com"));
   assert.equal(requests.filter((item) => item.url.hostname === "fcm.googleapis.com").length, 1);
 });
