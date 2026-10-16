@@ -70,6 +70,17 @@ real independent sessions. No full-dump restore or D-342 acceptance is inferred.
 
 ## Remaining Gates
 
+The legacy opt-in worker no longer selects raw pending rows and sends directly.
+Its actual source now uses maintained claims, a fresh literal-deliver recheck
+after the subscription await, and token-bound completion/retry. Unknown/error/
+lost-claim results refuse. Permanent errors deactivate the exact subscription
+binding instead of deleting it; logs omit backend/provider payloads. Default
+opt-in and limits are unchanged. RED2pass/27fail became41/41 with7 compiled
+omission controls; unchanged ownership2/2 and coordinator API build pass.
+Provider-accepted requests cannot be recalled; an unconfirmed ACK is delivery
+uncertainty, not permission for an immediate second send. This is source proof,
+not SQL/fullstack/OS acceptance. Edge and the rest of Task4 remain open.
+
 Task2 delivery coupling and Tasks3-7 remain open: terminal suppression across all
 dispatch paths; client ownership/sound/Windows without feed loss; actual
 fullstack/migration/rollback/native compatibility; then reachable UI and release.

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { logger } from "../lib/logger";
@@ -16,9 +17,8 @@ import { sanitizeLegacyWebPushFailure } from "./pushDispatcherConfig";
  * We use the service-role key so RLS is bypassed (the outbox table
  * has no permissive policies and is locked from every other role).
  *
- * On 404 / 410 from the push endpoint the subscription is permanently
- * gone (browser cleared it / user uninstalled the PWA), so we delete
- * it from `push_subscriptions` to stop the bleeding. Other errors
+ * The opt-in legacy consumer uses the same claim/recheck protocol as cron.
+ * On 404 / 410 the exact subscription binding is deactivated. Other errors
  * are recorded in `last_error` and the row is retried on the next
  * tick up to MAX_ATTEMPTS times.
  */
@@ -29,18 +29,18 @@ const TICK_MS = 5_000;
 
 interface OutboxRow {
   id: string;
-  notification_id: string;
   subscription_id: string;
-  user_id: string;
   payload: Record<string, unknown>;
   attempt_count: number;
 }
 
 interface SubscriptionRow {
   id: string;
+  user_id: string;
   endpoint: string;
   p256dh: string;
   auth: string;
+  is_active: boolean;
 }
 
 let started = false;
@@ -84,93 +84,140 @@ async function loop(supabase: SupabaseClient): Promise<void> {
   while (true) {
     try {
       await tick(supabase);
-    } catch (err) {
-      logger.error({ err }, "pushDispatcher tick failed");
+    } catch {
+      logger.error("pushDispatcher tick failed");
     }
     await sleep(TICK_MS);
   }
 }
 
 async function tick(supabase: SupabaseClient): Promise<void> {
+  const claimToken = randomUUID();
   const { data: rows, error } = await supabase
-    .from("notifications_push_outbox")
-    .select("id, notification_id, subscription_id, user_id, payload, attempt_count")
-    .is("sent_at", null)
-    .lt("attempt_count", MAX_ATTEMPTS)
-    .order("created_at", { ascending: true })
-    .limit(BATCH_SIZE);
+    .rpc("push_outbox_claim", { p_limit: BATCH_SIZE, p_claim_token: claimToken });
 
   if (error) {
-    logger.error({ err: error }, "pushDispatcher select failed");
+    logger.error("pushDispatcher claim failed");
     return;
   }
-  if (!rows || rows.length === 0) return;
+  if (!Array.isArray(rows) || !rows.every(validOutboxRow) ||
+      new Set(rows.map((row) => row.id)).size !== rows.length) {
+    logger.error("pushDispatcher invalid claim response");
+    return;
+  }
+  if (rows.length === 0) return;
 
   const subIds = Array.from(new Set(rows.map((r) => r.subscription_id as string)));
   const { data: subs, error: subErr } = await supabase
     .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth")
+    .select("id, user_id, endpoint, p256dh, auth, is_active")
     .in("id", subIds);
   if (subErr) {
-    logger.error({ err: subErr }, "pushDispatcher subs lookup failed");
+    logger.error("pushDispatcher subs lookup failed");
     return;
   }
   const subById = new Map<string, SubscriptionRow>();
   for (const s of (subs ?? []) as SubscriptionRow[]) subById.set(s.id, s);
 
   await Promise.all(
-    (rows as OutboxRow[]).map((row) => deliver(supabase, row, subById.get(row.subscription_id))),
+    (rows as OutboxRow[]).map((row) => deliver(supabase, claimToken, row, subById.get(row.subscription_id))),
   );
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function validOutboxRow(value: unknown): value is OutboxRow {
+  if (!value || typeof value !== "object") return false;
+  const row = value as OutboxRow;
+  return typeof row.id === "string" && UUID.test(row.id) &&
+    typeof row.subscription_id === "string" && UUID.test(row.subscription_id) &&
+    Number.isInteger(row.attempt_count) && row.attempt_count >= 0 && row.attempt_count < MAX_ATTEMPTS &&
+    Boolean(row.payload) && typeof row.payload === "object" && !Array.isArray(row.payload);
+}
+
+async function completeOutbox(
+  supabase: SupabaseClient, claimToken: string, id: string, patch: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const { data, error } = await supabase.from("notifications_push_outbox")
+      .update({ ...patch, claim_token: null, claimed_until: null })
+      .eq("id", id).eq("claim_token", claimToken).select("id");
+    if (error || !Array.isArray(data) || !data.some((row) => row.id === id)) {
+      logger.warn({ rowId: id }, "pushDispatcher completion unconfirmed");
+    }
+  } catch {
+    // Provider acceptance is uncertain after an ACK failure, not a new send failure.
+    logger.warn({ rowId: id }, "pushDispatcher completion unconfirmed");
+  }
 }
 
 async function deliver(
   supabase: SupabaseClient,
+  claimToken: string,
   row: OutboxRow,
   sub: SubscriptionRow | undefined,
 ): Promise<void> {
-  if (!sub) {
-    // Subscription was deleted between enqueue and delivery — drop
-    // the outbox row so it doesn't get retried.
-    await supabase
-      .from("notifications_push_outbox")
-      .update({ sent_at: new Date().toISOString(), last_error: "subscription_missing" })
-      .eq("id", row.id);
+  let payload: string;
+  try {
+    payload = JSON.stringify(row.payload);
+  } catch {
+    await completeOutbox(supabase, claimToken, row.id, {
+      attempt_count: row.attempt_count + 1, last_error: "webpush:unknown:invalid_payload",
+    });
+    return;
+  }
+  let status: unknown;
+  try {
+    // This RPC verifies current recipient/subscription binding and settles denied claims.
+    const result = await supabase.rpc("push_outbox_delivery_recheck", {
+      p_outbox_id: row.id, p_claim_token: claimToken,
+    });
+    if (result.error) return;
+    status = result.data;
+  } catch {
+    return;
+  }
+  if (status !== "deliver") return;
+  if (!sub || sub.id !== row.subscription_id || sub.is_active !== true ||
+      typeof sub.user_id !== "string" || !UUID.test(sub.user_id)) {
+    await completeOutbox(supabase, claimToken, row.id, {
+      suppressed_at: new Date().toISOString(), suppression_reason: "subscription_inactive",
+      last_error: "subscription_missing",
+    });
     return;
   }
   try {
     await webpush.sendNotification(
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-      JSON.stringify(row.payload),
+      payload,
       { TTL: 60 * 60 * 24 },
     );
-    await supabase
-      .from("notifications_push_outbox")
-      .update({ sent_at: new Date().toISOString(), last_error: null })
-      .eq("id", row.id);
   } catch (err: unknown) {
     const failure = sanitizeLegacyWebPushFailure(err);
     const status = failure.status ?? undefined;
     if (status === 404 || status === 410) {
-      // Permanent: prune the dead subscription. Outbox row stays
-      // marked with the error for observability.
-      await supabase.from("push_subscriptions").delete().eq("id", sub.id);
-      await supabase
-        .from("notifications_push_outbox")
-        .update({ sent_at: new Date().toISOString(), last_error: `gone:${status}` })
-        .eq("id", row.id);
+      try {
+        const { error } = await supabase.from("push_subscriptions")
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq("id", sub.id).eq("user_id", sub.user_id).eq("endpoint", sub.endpoint)
+          .eq("p256dh", sub.p256dh).eq("auth", sub.auth);
+        if (error) logger.warn({ rowId: row.id }, "pushDispatcher subscription deactivation unconfirmed");
+      } catch {
+        logger.warn({ rowId: row.id }, "pushDispatcher subscription deactivation unconfirmed");
+      }
+      await completeOutbox(supabase, claimToken, row.id, {
+        suppressed_at: new Date().toISOString(), suppression_reason: "subscription_inactive",
+        last_error: `gone:${status}:${failure.reason}`,
+      });
     } else {
-      // Advance attempt_count atomically so a permanently-broken
-      // endpoint eventually drops out of the SELECT filter.
-      await supabase
-        .from("notifications_push_outbox")
-        .update({
-          attempt_count: row.attempt_count + 1,
-          last_error: `webpush:${status ?? "unknown"}:${failure.reason}`,
-        })
-        .eq("id", row.id);
+      await completeOutbox(supabase, claimToken, row.id, {
+        attempt_count: row.attempt_count + 1,
+        last_error: `webpush:${status ?? "unknown"}:${failure.reason}`,
+      });
       logger.warn({ rowId: row.id, status, reason: failure.reason }, "push delivery failed");
     }
+    return;
   }
+  await completeOutbox(supabase, claimToken, row.id, { sent_at: new Date().toISOString(), last_error: null });
 }
 
 function sleep(ms: number): Promise<void> {
