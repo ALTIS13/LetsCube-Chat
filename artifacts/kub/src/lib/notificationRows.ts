@@ -2,6 +2,7 @@ type NotificationRow = {
   id: string;
   created_at: string;
   read_at: string | null;
+  alert_suppressed_at?: string | null;
 };
 
 export function mergeNotificationRows<T extends NotificationRow>(
@@ -15,9 +16,12 @@ export function mergeNotificationRows<T extends NotificationRow>(
     const existing = byId.get(row.id);
     if (!existing || existing.created_at <= row.created_at) {
       // A refresh can predate an optimistic mark-read write; reads only move forward.
-      byId.set(row.id, existing?.read_at && !row.read_at
+      const merged = existing?.read_at && !row.read_at
         ? { ...row, read_at: existing.read_at }
-        : row);
+        : row;
+      byId.set(row.id, existing?.alert_suppressed_at
+        ? { ...merged, alert_suppressed_at: existing.alert_suppressed_at }
+        : merged);
     }
   }
   return Array.from(byId.values())

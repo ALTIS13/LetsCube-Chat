@@ -80,6 +80,10 @@ function fixture({ hook = source, sync = syncSource, native = false, nativeResul
       }; return query;
     },
     rpc(fn, args) {
+      // Alert authority is a read-only port, not one of the read-state writes
+      // whose cardinality and ownership this fixture measures.
+      if (fn === "message_notification_alert_decisions") return Promise.resolve({error:null,
+        data:args.p_notification_ids.map(id=>({notification_id:id,allowed:true,scope_key:"general",revision:0}))});
       const owner = state.currentUser?.id; calls.push({ name: "rpc", fn, owner, args });
       return boundary(fn, { error: null }).then(result => {
         if (!result.error) for (const [id, row] of rows) {
@@ -107,6 +111,7 @@ function fixture({ hook = source, sync = syncSource, native = false, nativeResul
     "@/lib/notificationReadSync": compile(sync, {}), "@/lib/notificationRows": compile(read("lib/notificationRows.ts"), {}),
     "@/lib/rpcAvailability": compile(read("lib/rpcAvailability.ts"), {}, { console: { warn() {} } }),
     "@/lib/messageNotificationProjection": compile(read("lib/messageNotificationProjection.ts"), {}),
+    "@/lib/messageAlertDecisions": compile(read("lib/messageAlertDecisions.ts"), {}),
     "@/lib/browserNotificationPresentation": { notificationPresentationTag: row => row.kind.includes("message") ? `message:chat:${row.payload.chat_id}` : null,
       async closeBrowserNotification(tag) { closed.push(tag); }, async updateBrowserAppBadge() {} },
     "@/lib/platform/desktop": { isDesktopApp: () => false, getDesktopBridge: () => null },

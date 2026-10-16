@@ -23,6 +23,13 @@ test("a stale refresh cannot undo a local read receipt", () => {
   ]);
 });
 
+test("a terminal alert marker survives stale null and missing-field refreshes without changing unread state", () => {
+  const terminal = { ...unread, alert_suppressed_at: "2026-10-16T12:00:00Z" };
+  for (const incoming of [unread, {...unread,alert_suppressed_at:null}]) {
+    assert.deepEqual(mergeNotificationRows([terminal], [incoming], 30), [terminal]);
+  }
+});
+
 test("a server read receipt is accepted and rows remain newest first", () => {
   const readAt = "2026-09-24T10:01:00.000Z";
   const second = {

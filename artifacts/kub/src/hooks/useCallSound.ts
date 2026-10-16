@@ -86,17 +86,27 @@ export function playNotificationSoundFor(input: {
   readonly chatId: string | null;
   /** Whether the shell raised an operating-system notification for the same row. */
   readonly osToast: boolean;
+  readonly isCurrent?: () => boolean;
+  /** A fresh server decision, requested only after AudioContext.resume settles. */
+  readonly authorize?: () => Promise<boolean>;
 }): void {
-  const allowed = notificationSoundAllowed({
-    // «Не беспокоить» (tracker item 37): notifications come without a sound.
-    enabled: getAudioSettings().notificationSoundEnabled && ownAlertPolicySnapshot() === "allow",
-    ringing: playingCallSound(),
-    chatId: input.chatId,
-    openChatId: useAppStore.getState().selectedChatId,
-    documentHidden: typeof document !== "undefined" && document.hidden,
-    osToast: input.osToast,
-  });
-  if (allowed) void playNotificationSound();
+  const owner = useAppStore.getState();
+  const userId = owner.currentUser?.id;
+  const accountEpoch = owner.accountEpoch;
+  const allowed = () => {
+    const state = useAppStore.getState();
+    if (!userId || state.currentUser?.id !== userId || state.accountEpoch !== accountEpoch || input.isCurrent?.() === false) return false;
+    return notificationSoundAllowed({
+      // «Не беспокоить» (tracker item 37): notifications come without a sound.
+      enabled: getAudioSettings().notificationSoundEnabled && ownAlertPolicySnapshot() === "allow",
+      ringing: playingCallSound(),
+      chatId: input.chatId,
+      openChatId: state.selectedChatId,
+      documentHidden: typeof document !== "undefined" && document.hidden,
+      osToast: input.osToast,
+    });
+  };
+  if (allowed()) void playNotificationSound(allowed, input.authorize);
 }
 
 let lastMessageSentSoundAt = -Infinity;

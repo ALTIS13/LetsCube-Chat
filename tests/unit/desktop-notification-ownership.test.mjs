@@ -16,7 +16,10 @@ let bundle;
 // Only provider/irrelevant runtime boundaries are replaced; React, the hook,
 // adapter, projection, row merging and native identity calculation stay real.
 const stubs = new Map([
-  ["hooks/useCallSound.ts", "export function playNotificationSoundFor() {}"],
+  ["hooks/useCallSound.ts", `export function playNotificationSoundFor(input) {
+    const play=()=>{if(input.isCurrent?.()!==false) window.sounds.push({chatId:input.chatId,osToast:input.osToast});};
+    if(input.authorize) void input.authorize().then(allowed=>{if(allowed)play();}); else play();
+  }`],
   ["hooks/useOwnPresence.ts", `
     export function ownAlertPolicySnapshot(expected) {
       return window.state.currentUser?.id === expected ? 'allow' : 'wait';
@@ -25,7 +28,7 @@ const stubs = new Map([
   ["lib/supabase/client.ts", `
     const client = {
       from() { return {select() {return this;}, eq() {return this;}, order() {return this;},
-        async limit() {return {data:[], error:null};}}; },
+        async limit() {return {data:window.fetchedRows ?? [], error:null};}}; },
       channel() {
         const ch = {handlers:[], on(type, filter, callback) {
           this.handlers.push({filter, callback}); return this;
@@ -33,7 +36,17 @@ const stubs = new Map([
         window.channels.push(ch); return ch;
       },
       removeChannel(ch) {ch.active=false;},
-      async rpc() {window.serverWrites++; throw Error('server mutation forbidden');}
+      async rpc(name,args) {
+        if(name==='message_notification_alert_decisions') {
+          window.decisions.push(args.p_notification_ids);
+          const allowed=window.allowMessageAlerts!==false;
+          const held=window.nextDecision; window.nextDecision=null;
+          if(held) {await new Promise(resolve=>window.gates.set(held,resolve));window.gates.delete(held);}
+          return {data:window.decisionResponse ?? args.p_notification_ids.map(id=>({notification_id:id,allowed,scope_key:'general',revision:0})),error:null};
+        }
+        if(name==='notifications_mark_read' && window.allowReadWrites) return {data:null,error:null};
+        window.serverWrites++; throw Error('server mutation forbidden');
+      }
     };
     export function createClient() {return client;}
   `],
@@ -80,6 +93,7 @@ async function compile(change) {
       import {useNotifications} from './src/hooks/useNotifications.ts';
       window.state={currentUser:{id:'A'}, accountEpoch:1, mutedChatIds:[]}; window.channels=[];
       window.cards=new Map(); window.events=[]; window.gates=new Map(); window.serverWrites=0;
+      window.sounds=[]; window.decisions=[]; window.allowMessageAlerts=true;
       window.nextNotify=null; window.nextRemove=null; window.nextForeground=null;
       async function gate(name) {
         if (!name) return;
@@ -94,7 +108,10 @@ async function compile(change) {
         async notify(card) {
           const held=window.nextNotify; window.nextNotify=null;
           window.events.push({type:'notify-start', body:card.body});
-          if (window.rejectIcon && card.icon) throw Error("unknown field 'icon'");
+          if (window.rejectIcon && card.icon) {
+            if(window.denyAfterIcon) window.allowMessageAlerts=false;
+            throw Error("unknown field 'icon'");
+          }
           await gate(held);
           window.cards.set(identity(card), card);
           window.events.push({type:'notify-done', body:card.body}); return true;
@@ -121,6 +138,7 @@ async function compile(change) {
       const account=id => useAppStore.setState({currentUser:id ? {id} : null,
         accountEpoch:window.state.accountEpoch+(window.state.currentUser?.id!==id ? 1 : 0)});
       window.account=id => flushSync(() => account(id));
+      window.setMuted=ids=>flushSync(()=>useAppStore.setState({mutedChatIds:ids}));
       window.accountRoundTrip=() => {account(null); account('A');};
       window.deliver=(event, row) => flushSync(() => {
         for (const ch of window.channels.filter(ch => ch.active)) for (const h of ch.handlers)
@@ -139,7 +157,10 @@ test.before(async () => {
 });
 test.after(async () => { await browser?.close(); });
 
-function notice(id, owner = "A", extra = {}) {
+const notificationIds=new Map();
+function notice(label, owner = "A", extra = {}) {
+  if(!notificationIds.has(label)) notificationIds.set(label,`93000000-0000-4000-8000-${String(notificationIds.size+1).padStart(12,"0")}`);
+  const id=notificationIds.get(label);
   return { id, user_id: owner, kind: "message", read_at: null,
     created_at: "2026-10-05T00:00:00.000Z", payload: {
       chat_id: "synthetic-chat", message_id: id, sender_kind: "user", sender_id: "sender",
@@ -419,9 +440,9 @@ const mutants = [
     "const accountEpoch = useAppStore((s) => s.accountEpoch);",
     "const accountEpoch = useRef(useAppStore.getState().accountEpoch).current;",
   ], batchedCardRetirement, "account epoch retires the earlier session's card even if the user id did not render differently"],
-  ["omit the immediate epoch delivery fence", [
-    " || useAppStore.getState().accountEpoch !== accountEpoch", "",
-  ], beforeRenderGuard, "the final delivery boundary must check the authoritative session before React commits"],
+  // The old epoch-expression omission is now redundant with isCurrentReadOwner.
+  // beforeRenderGuard remains functional coverage; mutate the whole final
+  // eligibility boundary below rather than claim this duplicate is load-bearing.
   ["omit account retirement", [
     "if (!current.card || desktopCardOwners.has(current.card.owner)) return false;",
     "return false;",
@@ -448,8 +469,8 @@ const mutants = [
     "const operation = current.pending.then(() => action(current));",
     "const operation = current.pending.then(() => action(current)).catch(() => false);",
   ], legacyRetry, "unknown icon must reach the existing adapter retry"],
-  ["omit the last ownership check before notify", [
-    "if (!mayDeliver()) return false;", "",
+  ["omit the final eligibility boundary before notify", [
+    'if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, mayDeliver, supabase)) return false;\n          if (!mayDeliver()) return false;', "",
   ], foregroundGuard, "logged-out foreground work must not invoke notify"],
   ["reset serialization on hook remount", [
     "export function useNotifications() {",
@@ -469,3 +490,167 @@ for (const [name, change, scenario, message] of mutants) {
     } finally {await f.close();}
   });
 }
+
+test("topic authority denial keeps the feed and unread state without sound or desktop presentation",async()=>{
+  const f=await fixture();
+  try {
+    await f.page.evaluate(()=>{window.allowMessageAlerts=false;});
+    await f.insert(notice("topic-disabled"));await f.drain();
+    assert.deepEqual(await f.bodies(),[]);
+    assert.equal(await f.page.evaluate(()=>window.sounds.length),0);
+    assert.equal(await f.page.evaluate(()=>window.notices.unreadCount),1);
+    assert.equal(await f.page.evaluate(()=>window.notices.items.length),1);
+  } finally {await f.close();}
+});
+
+test("topic-enabled child of a muted parent remains in feed and can present",async()=>{
+  const f=await fixture();
+  try {
+    await f.page.evaluate(()=>window.setMuted(['synthetic-chat']));
+    await f.insert(notice("enabled-child"));await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.notices.items.length),1);
+    assert.equal(await f.page.evaluate(()=>window.notices.unreadCount),1);
+    assert.deepEqual(await f.bodies(),["A"]);
+  } finally {await f.close();}
+});
+
+test("topic authority is freshly checked after the native foreground await",async()=>{
+  const f=await fixture();
+  try {
+    await f.page.evaluate(()=>{window.nextForeground='topic-foreground';});
+    await f.insert(notice("foreground-topic"));await f.gated("topic-foreground");
+    await f.page.evaluate(()=>{window.allowMessageAlerts=false;});
+    await f.release("topic-foreground");await f.drain();
+    assert.deepEqual(await f.bodies(),[]);
+    assert.equal(await f.page.evaluate(()=>window.decisions.length),1);
+  } finally {await f.close();}
+});
+
+test("topic authority wait cannot present a locally confirmed read row",async()=>{
+  const f=await fixture(),row=notice("authority-read");
+  try {
+    await f.page.evaluate(()=>{window.nextDecision='topic-read';});
+    await f.insert(row);await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.gates.has('topic-read')),true,"actual final authority must be held");
+    await f.page.evaluate(row=>window.deliver("UPDATE",{...row,read_at:'2026-10-16T12:00:00Z'}),row);
+    await f.release("topic-read");await f.drain();
+    assert.deepEqual(await f.bodies(),[]);
+    assert.equal(await f.page.evaluate(()=>window.events.filter(e=>e.type==='notify-start').length),0);
+    assert.equal(await f.page.evaluate(()=>window.notices.unreadCount),0);
+  } finally {await f.close();}
+});
+
+test("topic authority wait also observes the hook's own mark-read acknowledgement",async()=>{
+  const f=await fixture(),row=notice("authority-own-read");
+  try {
+    await f.page.evaluate(()=>{window.nextDecision='topic-own-read';window.allowReadWrites=true;});
+    await f.insert(row);await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.gates.has('topic-own-read')),true);
+    await f.page.evaluate(id=>window.notices.markRead(id),row.id);await f.drain();
+    await f.release("topic-own-read");await f.drain();
+    assert.deepEqual(await f.bodies(),[]);
+    assert.equal(await f.page.evaluate(()=>window.events.filter(e=>e.type==='notify-start').length),0);
+    assert.equal(await f.page.evaluate(()=>window.notices.unreadCount),0);
+  } finally {await f.close();}
+});
+
+test("topic authority is checked again before an iconless compatibility retry",async()=>{
+  const f=await fixture(),row=notice("topic-icon");
+  row.payload.sender_avatar_url='https://app.letscube.ru/fictional-avatar.png';
+  try {
+    await f.page.evaluate(()=>{window.rejectIcon=true;window.denyAfterIcon=true;});
+    await f.insert(row);await f.drain();
+    assert.deepEqual(await f.bodies(),[]);
+    assert.equal(await f.page.evaluate(()=>window.events.filter(e=>e.type==='notify-start').length),1);
+    assert.equal(await f.page.evaluate(()=>window.decisions.length),2);
+  } finally {await f.close();}
+});
+
+test("topic authority gates foreground sound separately from desktop presentation",async()=>{
+  const f=await fixture();
+  try {
+    await f.page.evaluate(()=>{window.letscubeDesktop=null;window.allowMessageAlerts=false;});
+    await f.insert(notice("quiet-topic"));await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.sounds.length),0);
+    await f.page.evaluate(()=>{window.allowMessageAlerts=true;});
+    await f.insert(notice("sound-topic"));await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.sounds.length),1);
+    assert.equal(await f.page.evaluate(()=>window.notices.items.length),2);
+  } finally {await f.close();}
+});
+
+test("topic duplicate INSERT merges metadata but never plays a second foreground sound",async()=>{
+  const f=await fixture(),row=notice("duplicate-topic");
+  try {
+    await f.page.evaluate(()=>{window.letscubeDesktop=null;});
+    await f.insert(row);await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.sounds.length),1);
+    await f.insert({...row,payload:{...row.payload,preview:"Updated fictional metadata"}});await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.sounds.length),1,"one known INSERT must not alert twice");
+    assert.equal(await f.page.evaluate(()=>window.notices.items.length),1);
+    assert.equal(await f.page.evaluate(()=>window.notices.items[0].payload.preview),"Updated fictional metadata");
+  } finally {await f.close();}
+});
+
+test("topic unknown UPDATE cannot claim the later INSERT's alert admission",async()=>{
+  const f=await fixture(),row=notice("update-before-insert");
+  try {
+    await f.page.evaluate(()=>{window.letscubeDesktop=null;});
+    await f.page.evaluate(row=>window.deliver("UPDATE",row),row);await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.notices.items.length),0);
+    await f.insert(row);await f.drain();
+    assert.equal(await f.page.evaluate(()=>window.sounds.length),1,"an unknown UPDATE cannot consume a new INSERT");
+  } finally {await f.close();}
+});
+
+async function terminalWhileAuthorityWaits(f,{sound=false,evicted=false,staleRefresh=false}={}) {
+  const row=notice(`terminal-wait-${sound}-${evicted}-${staleRefresh}`);
+  if(sound) await f.page.evaluate(()=>{window.letscubeDesktop=null;});
+  await f.page.evaluate(()=>{window.nextDecision='terminal-wait';});
+  await f.insert(row);await f.gated('terminal-wait');
+  if(evicted) {
+    const rows=Array.from({length:30},(_,i)=>notice(`newer-${sound}-${i}`,'A',{
+      read_at:'2026-10-16T12:00:00Z',created_at:`2026-10-16T12:00:${String(i).padStart(2,'0')}Z`,
+    }));
+    await f.page.evaluate(async rows=>{window.fetchedRows=rows;await window.notices.refresh();},rows);
+  }
+  const update=evicted ? {...row,read_at:'2026-10-16T12:00:00Z'}
+    : {...row,alert_suppressed_at:'2026-10-16T12:00:00Z'};
+  await f.page.evaluate(row=>window.deliver('UPDATE',row),update);
+  if(staleRefresh) await f.page.evaluate(async row=>{
+    window.fetchedRows=[{...row,alert_suppressed_at:null}];await window.notices.refresh();
+  },row);
+  await f.release('terminal-wait');await f.drain();
+  assert.equal(await f.page.evaluate(()=>window.events.filter(e=>e.type==='notify-start').length),0,
+    'a terminal or evicted authority attempt must never enter native notify');
+  assert.equal(await f.page.evaluate(()=>window.sounds.length),0,
+    'a terminal or evicted authority attempt must never sound');
+}
+for(const sound of [false,true]) for(const variant of ['suppressed','evicted','stale-refresh']) {
+  test(`held ${sound?'sound':'desktop'} authority refuses ${variant} current snapshot`,async()=>{
+    const f=await fixture();
+    try {await terminalWhileAuthorityWaits(f,{sound,evicted:variant==='evicted',staleRefresh:variant==='stale-refresh'});}
+    finally {await f.close();}
+  });
+}
+
+for(const [label,needle,replacement,scenario,message] of [
+  ['desktop suppression','latest.read_at || latest.alert_suppressed_at ||','latest.read_at ||',
+    f=>terminalWhileAuthorityWaits(f),'a terminal or evicted authority attempt must never enter native notify'],
+  ['desktop eviction','if (!latest || latest.read_at || latest.alert_suppressed_at ||',
+    'if (latest?.read_at || latest?.alert_suppressed_at ||',
+    f=>terminalWhileAuthorityWaits(f,{evicted:true}),'a terminal or evicted authority attempt must never enter native notify'],
+  ['sound suppression','&& !latest?.read_at && !latest?.alert_suppressed_at','&& !latest?.read_at',
+    f=>terminalWhileAuthorityWaits(f,{sound:true}),'a terminal or evicted authority attempt must never sound'],
+  ['sound eviction','return current() && Boolean(latest) && !latest?.read_at',
+    'return current() && !latest?.read_at',
+    f=>terminalWhileAuthorityWaits(f,{sound:true,evicted:true}),'a terminal or evicted authority attempt must never sound'],
+]) test(`compiled pending alert omission rejected: ${label}`,async()=>{
+  const f=await fixture(await compile([needle,replacement]));
+  try {
+    await assert.rejects(()=>scenario(f),error=>{
+      assert.equal(error.code,'ERR_ASSERTION','a setup error cannot kill the pending-alert mutant');
+      assert.equal(error.message.split('\n')[0],message);return true;
+    });
+  } finally {await f.close();}
+});

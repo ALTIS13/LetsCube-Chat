@@ -27,6 +27,7 @@ import {
 } from "@/lib/platform/desktopNotifications";
 import type { Notification } from "@/types/database";
 import { isSelfMessageNotification } from "@/lib/messageNotificationProjection";
+import { currentMessageAlertAllowed } from "@/lib/messageAlertDecisions";
 
 const PAGE_SIZE = 30;
 const NATIVE_READ_RETRY_MS = 5000;
@@ -112,6 +113,8 @@ export function useNotifications() {
     readOwnerRef.current = { userId, accountEpoch, pending: new Set<string>() };
   }
   const readOwner = readOwnerRef.current;
+  const alertRowsRef = useRef({ owner: readOwner, rows: new Map<string, Notification>() });
+  if (alertRowsRef.current.owner !== readOwner) alertRowsRef.current = { owner: readOwner, rows: new Map() };
   const readMountedRef = useRef(false);
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
   const nativeReadPairsRef = useRef({ owner: readOwner, pairs: new Map<string, NativeReadPairState>() });
@@ -132,12 +135,20 @@ export function useNotifications() {
       && state.currentUser?.id === readOwner.userId && state.accountEpoch === readOwner.accountEpoch;
   }, [readOwner]);
 
+  const rememberAlertRows = useCallback((rows: Notification[]) => {
+    const snapshot = alertRowsRef.current;
+    if (snapshot.owner !== readOwner || !isCurrentReadOwner()) return;
+    snapshot.rows = new Map(mergeNotificationRows([...snapshot.rows.values()], rows, PAGE_SIZE).map(row => [row.id, row]));
+  }, [readOwner, isCurrentReadOwner]);
+
   const presentDesktopNotification = useCallback((row: Notification) => {
     if (!userId || row.user_id !== userId) return;
     const handled = presentedDesktopIdsRef.current;
     let quiet = false;
     const mayDeliver = () => {
-      if (handled !== presentedDesktopIdsRef.current || useAppStore.getState().accountEpoch !== accountEpoch) return false;
+      if (!isCurrentReadOwner() || handled !== presentedDesktopIdsRef.current || useAppStore.getState().accountEpoch !== accountEpoch) return false;
+      const latest = alertRowsRef.current.rows.get(row.id);
+      if (!latest || latest.read_at || latest.alert_suppressed_at || readOwner.pending.has(row.id)) return false;
       const policy = ownAlertPolicySnapshot(userId);
       if (policy === "quiet") quiet = true;
       return policy === "allow";
@@ -153,6 +164,7 @@ export function useNotifications() {
       return {
         // Foreground resolution above this boundary may have awaited a status/account change.
         sendNotification: (payload) => queueDesktopCard(desktopCardQueues, payload, async (queue) => {
+          if (row.kind === "message" && !await currentMessageAlertAllowed(row.id, mayDeliver, supabase)) return false;
           if (!mayDeliver()) return false;
           const delivered = await bridge.notify(payload);
           if (delivered) queue.card = { owner: handled, rowId: row.id };
@@ -162,7 +174,7 @@ export function useNotifications() {
     }).then((delivered) => {
       if (!delivered && !quiet) handled.delete(row.id);
     });
-  }, [userId, accountEpoch]);
+  }, [userId, accountEpoch, isCurrentReadOwner, readOwner, supabase]);
 
   const closeDesktopNotification = useCallback((row: Notification) => {
     const owner = presentedDesktopIdsRef.current;
@@ -230,6 +242,8 @@ export function useNotifications() {
             if (!options.silent) setError((prev) => current() ? mapPgError(rpcErr) : prev);
           } else {
             const nowIso = new Date().toISOString();
+            const confirmedRow = alertRowsRef.current.rows.get(id);
+            if (confirmedRow) rememberAlertRows([{ ...confirmedRow, read_at: nowIso }]);
             setItems((prev) => current() ? prev.map((row) =>
               row.id === id && row.user_id === readOwner.userId && !row.read_at
                 ? { ...row, read_at: nowIso } : row) : prev);
@@ -242,7 +256,7 @@ export function useNotifications() {
     } finally {
       for (const id of idsToMark) readOwner.pending.delete(id);
     }
-  }, [isCurrentReadOwner, readOwner, supabase]);
+  }, [isCurrentReadOwner, readOwner, supabase, rememberAlertRows]);
 
   const applyConfirmedReadRows = useCallback(async (ids: string[], current: () => boolean) => {
     if (!current() || !readOwner.userId || !ids.length) return;
@@ -253,11 +267,15 @@ export function useNotifications() {
     const requested = new Set(ids);
     const confirmed = new Map((data ?? []).filter((row) => requested.has(row.id) && row.read_at)
       .map((row) => [row.id, row.read_at as string]));
+    rememberAlertRows([...alertRowsRef.current.rows.values()].flatMap(row => {
+      const readAt = confirmed.get(row.id);
+      return readAt ? [{ ...row, read_at: readAt }] : [];
+    }));
     setItems((prev) => current() ? prev.map((row) => {
       const readAt = confirmed.get(row.id);
       return readAt && row.user_id === readOwner.userId && !row.read_at ? { ...row, read_at: readAt } : row;
     }) : prev);
-  }, [readOwner, supabase]);
+  }, [readOwner, supabase, rememberAlertRows]);
 
   const normalizeRowsForDisplay = useCallback((rows: Notification[]) => {
     const ownUnreadIds = rows
@@ -288,6 +306,7 @@ export function useNotifications() {
       }
       setError((prev) => current() ? null : prev);
       const nextRows = normalizeRowsForDisplay((data ?? []) as Notification[]);
+      rememberAlertRows(nextRows);
       if (isDesktopApp()) {
         if (!desktopBaselineLoadedRef.current) {
           for (const row of nextRows) presentedDesktopIdsRef.current.add(row.id);
@@ -307,7 +326,7 @@ export function useNotifications() {
       setLoading((prev) => current() ? false : prev);
       setError((prev) => current() ? mapPgError(error) : prev);
     }
-  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification, isCurrentReadOwner]);
+  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification, isCurrentReadOwner, rememberAlertRows]);
 
   useEffect(() => {
     if (!userId) {
@@ -334,6 +353,8 @@ export function useNotifications() {
         (payload) => {
           if (!current()) return;
           const row = payload.new as Notification;
+          const alreadyKnown = alertRowsRef.current.rows.has(row.id);
+          rememberAlertRows([row]);
           if (row.kind === "chat_added" || row.kind === "group_invite") {
             dispatchChatsRefresh({
               reason: "chat-notification",
@@ -345,21 +366,24 @@ export function useNotifications() {
             return;
           }
           if (isMutedNotification(row, mutedChatIds)) return;
-          // After the two refusals above and before anything is drawn: a
-          // notification that is this reader's own echo, or one from a muted
-          // conversation, must not make a sound either — and both have already
-          // returned. Whether this one does is `notificationSoundAllowed`'s,
-          // which also refuses a ping over a ringtone and a ping for the
-          // conversation being read right now.
-          //
-          // `osToast` is the same condition the desktop branch below runs on,
-          // written once and read twice rather than guessed: the Windows
-          // application raises a real toast for this row and Windows sounds it,
-          // so a second sound from here would be two for one message.
+          // Feed/read state is independent of alert eligibility. Windows owns
+          // its own sound; foreground audio keeps its existing live guards.
           const osToast =
             isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id);
-          playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast });
           setItems((prev) => current() ? mergeNotificationRows(prev, [row], PAGE_SIZE) : prev);
+          if (row.kind === "message" && alreadyKnown) return;
+          const sound = () => playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast });
+          if (row.kind !== "message") sound();
+          else if (!osToast) {
+            const maySound = () => {
+              const latest = alertRowsRef.current.rows.get(row.id);
+              return current() && Boolean(latest) && !latest?.read_at && !latest?.alert_suppressed_at
+                && !readOwner.pending.has(row.id);
+            };
+            playNotificationSoundFor({ chatId: payloadString(row.payload, "chat_id") ?? null, osToast: false,
+              isCurrent: maySound, authorize: () => currentMessageAlertAllowed(row.id, maySound, supabase),
+            });
+          }
           if (osToast) {
             presentDesktopNotification(row);
           }
@@ -371,6 +395,7 @@ export function useNotifications() {
         (payload) => {
           if (!current()) return;
           const row = payload.new as Notification;
+          if (alertRowsRef.current.rows.has(row.id)) rememberAlertRows([row]);
           setItems((prev) => current() ? prev.map((n) =>
             (n.id === row.id ? mergeNotificationRows([n], [row], 1)[0] : n)) : prev);
         },
@@ -387,7 +412,7 @@ export function useNotifications() {
       supabase.removeChannel(ch);
       unregisterChannel(channelName);
     };
-  }, [userId, supabase, mutedChatIds, refresh, presentDesktopNotification, isCurrentReadOwner]);
+  }, [userId, supabase, mutedChatIds, refresh, presentDesktopNotification, isCurrentReadOwner, rememberAlertRows, readOwner]);
 
   useEffect(() => {
     setItems((prev) => isCurrentReadOwner() ? normalizeRowsForDisplay(prev) : prev);
@@ -603,7 +628,7 @@ function filterRowsForDisplay(
 
 function isMutedNotification(item: Notification, mutedChatIds: string[]): boolean {
   const chatId = payloadString(item.payload, "chat_id");
-  return Boolean(chatId && mutedChatIds.includes(chatId));
+  return item.kind !== "message" && Boolean(chatId && mutedChatIds.includes(chatId));
 }
 
 function isMessageNotification(item: Notification): boolean {

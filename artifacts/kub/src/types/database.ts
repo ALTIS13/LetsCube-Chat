@@ -276,6 +276,8 @@ export interface Database {
           kind: string
           payload: Json
           read_at: string | null
+          alert_suppressed_at: string | null
+          alert_origin: Json | null
           created_at: string
         }
         Insert: never
@@ -1506,6 +1508,10 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      message_notification_alert_decisions: {
+        Args: { p_notification_ids: string[] }
+        Returns: Json
+      }
       topic_notification_preferences_read: {
         Args: { p_chat_id: string }
         Returns: Json

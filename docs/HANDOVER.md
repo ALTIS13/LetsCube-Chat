@@ -1,13 +1,13 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-16,item77:** coordinator; main-based worktree
+**Current resume,2026-10-17,item77:** coordinator; main-based worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, last checkpoint ba80d760. Task2 CAS/RLS draft
-and actual PG17 concurrency pass; Task3 real producer baseline reproduces
-single/partial-album replay. Preference-state slice155/155 and typecheck pass.
-Uncommitted work is owned/disjoint: coordinator presentation/audio/types;
-Leibniz Task3 delivery SQL/fixture; Hume bound Web/legacy dispatcher and tests.
-Next: integrate those server/client contracts, fullstack and safe migration,
+`codex/topic-alerts-20261016`, base05f72b25. Task2 CAS/RLS draft and PG17
+concurrency pass; Task5 state155/155 and reviewed presentation181/181/typecheck
+pass. Task3 is NOT accepted: native50/52 plus three structural review P2s.
+Leibniz owns SQL/fixture repairs; Hume owns album final-check preparation;
+coordinator integrates, Kuhn prepares full-schema/PostgREST reuse read-only.
+Next: close actual SQL/album failures, fullstack and safe migration,
 then reachable control and supported-client release. No production SQL/main
 push/native publication in this item; current Stable22/D366 stay unchanged.
 Root is divergent; preserve its foreign sidebar/search and version paths;

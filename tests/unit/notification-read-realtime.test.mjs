@@ -22,10 +22,12 @@ const {mergeNotificationRows}=module.exports;
 function actualCallbacks(text) {
   const tree=ts.createSourceFile('useNotifications.ts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
   assert.equal(tree.parseDiagnostics.length,0);
-  const reads=[],updates=[];
+  const reads=[],updates=[],remembers=[];
   function visit(node) {
     if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text==='markReadIds'
       &&node.initializer&&ts.isCallExpression(node.initializer))reads.push(node.initializer.arguments[0]);
+    if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text==='rememberAlertRows'
+      &&node.initializer&&ts.isCallExpression(node.initializer))remembers.push(node.initializer.arguments[0]);
     if(ts.isCallExpression(node)&&ts.isPropertyAccessExpression(node.expression)&&node.expression.name.text==='on'
       &&node.arguments.length===3&&ts.isObjectLiteralExpression(node.arguments[1])) {
       const event=node.arguments[1].properties.find(p=>ts.isPropertyAssignment(p)&&p.name.getText(tree)==='event');
@@ -33,8 +35,8 @@ function actualCallbacks(text) {
     }
     ts.forEachChild(node,visit);
   }
-  visit(tree);assert.equal(reads.length,1);assert.equal(updates.length,1);
-  return {read:reads[0].getText(tree),update:updates[0].getText(tree)};
+  visit(tree);assert.equal(reads.length,1);assert.equal(updates.length,1);assert.equal(remembers.length,1);
+  return {read:reads[0].getText(tree),update:updates[0].getText(tree),remember:remembers[0].getText(tree)};
 }
 function notice(id='fictional-notice',createdAt='2026-10-12T11:00:00.000Z',readAt=null) {
   return {id,user_id:'fictional-owner',kind:'message',created_at:createdAt,read_at:readAt,
@@ -44,11 +46,13 @@ function consumer(rows=[notice()],text=source) {
   const callbacks=actualCallbacks(text),pending=[],rpcCalls=[];
   let items=rows,current=true,held;
   class FixedDate extends Date {constructor(...args){super(...(args.length?args:[READ_AT]));}}
-  const scope={mergeNotificationRows,Date:FixedDate,accountGenerationRef:{current:1},
+  const scope={mergeNotificationRows,Date:FixedDate,PAGE_SIZE:30,accountGenerationRef:{current:1},
     readOwner:{userId:'fictional-owner',pending:new Set()},current:()=>current,isCurrentReadOwner:()=>current,
     setItems:update=>pending.push(update),setError(){throw Error('UNEXPECTED_ERROR_PUBLICATION');},
     mapPgError(){throw Error('UNEXPECTED_ERROR_MAPPING');},supabase:{rpc(fn,args){rpcCalls.push({fn,args});return new Promise(resolve=>{held=resolve;});}}};
+  scope.alertRowsRef={current:{owner:scope.readOwner,rows:new Map(rows.map(row=>[row.id,row]))}};
   const compile=text=>vm.runInNewContext('(function(){'+javascript('const callback='+text+';')+'\nreturn callback;})()',scope);
+  scope.rememberAlertRows=compile(callbacks.remember);
   const read=compile(callbacks.read),update=compile(callbacks.update);
   const flush=()=>{while(pending.length)items=pending.shift()(items);};
   return {read,update,flush,rpcCalls,get items(){return plain(items);},retire(){current=false;},ack(){held({error:null});}};

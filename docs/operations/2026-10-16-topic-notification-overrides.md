@@ -1,8 +1,9 @@
 # Topic Notification Overrides: Execution
 
 Owner: coordinator. Branch:codex/topic-alerts-20261016, base05f72b25 in the
-main-based android-current worktree. Stage:Task2 CAS/RLS draft source accepted;
-Task3 terminal delivery suppression next. Item77 remains
+main-based android-current worktree. Stage:Task5 state/presentation source
+verified; Task3 candidate rejected pending structural repairs, Task4 integration
+continues. Item77 remains
 OPEN, no reachable control or released feature. No production SQL/native release.
 [Fullstack plan](../superpowers/plans/2026-10-16-topic-notification-overrides.md).
 
@@ -142,3 +143,59 @@ An old embedded/foreground client ignores new policy fields. A refused native
 preview can still produce generic fallback. Neither is solved by an RPC stub.
 Do not publish a resolver-only/local-toggle feature or claim old-client parity.
 Unrelated sidebar/search/version files and A063 remain untouched.
+
+## Reviewed Client Slice, 2026-10-17
+
+Final affected client integration:181/181, zero skipped; full kub typecheck
+passes. This includes actual React/hooks, row merge, Windows serialized adapter
+and actual compiled sound scheduling with controlled provider/audio ports.
+The stale DND fixture lacked voiceCallSnapshot; only its irrelevant idle-call
+boundary was repaired. No production requests, microphone or OS audio proof.
+
+Independent review found two further P2 races. A server decision already in
+flight could ignore a received alert_suppressed_at update; eviction from the
+30-row snapshot could fall back to the original unread INSERT. Six actual
+held sound/desktop cases were RED, then GREEN: terminal update, eviction/read,
+and a stale null/missing-field refresh after terminalization. Missing current
+snapshot now denies; read and terminal markers remain monotonic. Four compiled
+guard omissions fail the literal zero-notify/zero-sound assertions. Delta review
+found no further actionable issue. Logs:output/topic-alert-client-reviewed.log,
+topic-alert-terminal-client-red.log and topic-alert-terminal-client-green.log.
+
+Message alerts obtain an exact own-ID decision after native foreground/audio
+resume awaits, then recheck owner, session epoch, read/pending state, DND/audio,
+open chat and context lifetime immediately before presentation. Feed/unread data
+is separate. A failed/unknown RPC never grants permission. The preference cache
+is display-only. These consumers REQUIRE the additive SQL; do not deploy this
+client checkpoint alone or relabel it as old-client/native acceptance.
+
+## Server Review Still Open
+
+The Task3 native run was50 pass/2 fail/0 skip, NOT clean acceptance. All three
+bound/setter interleavings passed, including a real deadlock control; two marker
+guard cases failed in a SELECT-only test-driver DML setup, before the guard.
+An earlier all-case setup refusal was caused by fixture ALTER-target ownership.
+Those failures remain recorded and must not count as guard coverage.
+
+Independent source review rejected the candidate for three P2s: source topic
+row -> parent-chat lock inversion against actual FK CASCADE; absent topic INSERT
+terminalization; and O(history+all album groups) work on ordinary alert paths,
+including repeated no-op updates of already terminal groups. Repair must separate
+targeted alert reconciliation from rare scope changes, preserve a safe source
+lock order, and prove archived-general insert/delete cannot revive admission.
+Membership loss/rejoin is also being checked against retained pending alerts.
+Task3 source remains draft; no canonical migration or production apply.
+
+Single Web/legacy delivery now binds immutable descriptor bytes through a
+versioned UTF8-length-framed SHA256 and additive service-only bound recheck.
+Missing/unknown RPC fails closed. Cached inactive state cannot override current
+server allow. Coordinator reproduced a second Web bug: a permanent failure for
+old descriptor A could deactivate replacement B with the same ID. Retirement
+now matches ID, owner, endpoint and both key fields; two RED cases became GREEN,
+and removing those filters kills a compiled omission. Affected single/worker/
+album source controls98/98, followed by Edge+updated voice fixture60/60; API
+build passes. This is not album/native descriptor-binding acceptance.
+
+Album async preparation/final-check ordering remains in progress. Full-schema
+restore, authenticated PostgREST, actual provider/OS and old foreground/native
+compatibility remain Task6 gates. Current Stable22 and D366 are unchanged.

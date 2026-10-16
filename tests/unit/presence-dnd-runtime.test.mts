@@ -54,6 +54,7 @@ test.before(async () => {
       plugin.onLoad({ filter: /hooks[\\/]useVoiceCall\.ts$/ }, () => ({ loader: "ts", contents: `
         export const voiceSelfIdSnapshot = () => null;
         export const voiceSpeakersSnapshot = () => [];
+        export const voiceCallSnapshot = () => ({phase:'idle'});
       ` }));
       plugin.onLoad({ filter: /hooks[\\/]useVoiceRing\.ts$/ }, () => ({ loader: "ts", contents: `
         import {useSyncExternalStore} from 'react';
