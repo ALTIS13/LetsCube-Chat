@@ -25722,3 +25722,17 @@ database settings on that copy; then require full DDL/role/raw-ACL readback.
 Separately review the backup/recovery procedure and durable coverage before its
 own reversible deployment. Application-row/media/provider/native actions remain
 outside this task. [Source-observation record](operations/2026-10-04-avatar-source-observation.md).
+
+## D-366 `[~]` Voice/video recorder switch feedback displaces the conversation
+
+Owner report2026-10-16; medium visual/usability. Shipping MessageInput inserted
+a temporary full-width row: actual dock66→109.328125px at1440/390, both themes,
+also changing history's bottom inset. Regression failed before the repair.
+
+Reviewed candidate: compact glass status outside layout flow, selected-mode
+copy and matching nonshrinking icon, wrapping, shared motion/reduced-motion,
+latest timer, pointer transparency and no media acquisition. An intermediate
+1120px² jump-button overlap was reproduced and removed by reserving its space.
+Browser/adjacent tests, typecheck/build pass; publication and actual native
+package acceptance are distinct, not inferred from this source result.
+[Evidence and remaining scope](operations/2026-10-16-recorder-mode-feedback.md).

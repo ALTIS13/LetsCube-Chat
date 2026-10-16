@@ -40,11 +40,11 @@ test.describe("KUB video recorders", () => {
 
     await recorder.click({ button: "right" });
     await expect(recorder).toHaveAttribute("data-recorder-mode", "video");
-    await expect(page.getByText("Режим: видеосообщение")).toBeVisible();
+    await expect(page.getByTestId("recorder-mode-feedback")).toHaveText("Видеосообщение");
 
     await recorder.click({ button: "right" });
     await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
-    await expect(page.getByText("Режим: голосовое")).toBeVisible();
+    await expect(page.getByTestId("recorder-mode-feedback")).toHaveText("Голосовое сообщение");
   });
 
   // Two cases that drove the rectangular recorder stood here, skipped since

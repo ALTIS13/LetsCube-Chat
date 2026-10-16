@@ -693,6 +693,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 17. `[~]` Build the unauthenticated public app/download home with theme-safe product previews, verified Windows/Android Stable downloads, a compact Stable changelog and shared motion feedback. Preserve native-shell routing, `/privacy`, `/support`, authentication callbacks and iPhone/iPad PWA ownership boundaries.
 18. `[~]` Interface audit and polish stage. Requested by the user on 2026-09-01 and deliberately scheduled **after** the public home plan closes, so it does not interleave with an approved in-flight plan. The goal is a measurably better interface, not a restyling: find the accumulated visual defects, make the interface more responsive, and give actions real feedback. It has two halves that must not be merged into one undisciplined sweep.
 
+    Owner follow-up2026-10-16: deepen everyday microinteraction quality under
+    this existing stage, preserving the current Liquid Glass design and actual
+    dated client references. Recorder voice/video feedback is D-366/item105;
+    its scoped fix does not close the remaining interface audit.
+
     - **Half A - audit first, then fix.** Enumerate defects before changing anything. Sweep the six release viewports (`3840x2160`, `1920x1080`, `1440x900`, `412x915`, `390x844`, `360x800`), both themes, and all three shells (browser, Windows Tauri WebView2, Android APK WebView). Record every finding with a reproduction, the exact surface, a screenshot and a severity, then fix in scoped batches with a regression test proportional to the risk. Do not "polish by eye": a change without a recorded defect or an explicit design decision is out of scope. `360x800` was added on 2026-09-06: the matrix used to stop at 390, and three of the five findings of the first Android walk (D-058, D-060, D-061) came from below it, on the 360-wide phone the product is installed on. Expect findings in layout overflow and clipping, inconsistent spacing and control heights, focus and hover states, contrast in both themes, scrollbar and safe-area behaviour, keyboard insets on Android, long-content and long-name truncation, empty and error states, and loading placeholders that shift layout.
     - **Half B - execute the already approved motion plan.** `docs/superpowers/plans/2026-08-30-shared-motion-feedback.md` already specifies the response and action animations: semantic timing tokens (90/140/220/320 ms and a ~2.4 s transient success), a bounded global action-feedback controller, consistent copy/save feedback, standardized loading/modal/save transitions, and cross-platform visual QA. It is 5 tasks and 33 steps, none started. Execute that plan rather than inventing a parallel animation system.
 
@@ -4395,6 +4400,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     independent-review P2 fix pass and narrow59f1fe8b runtime/rollback/smoke pass.
     Android Stable21 predates this source; no new native acceptance is inferred.
     [Evidence](operations/2026-10-15-media-position-lifetime.md).
+
+105. `[~]` Voice/video recorder mode feedback, **D-366**. In-flow row measured
+    dock66→109.328px; reviewed floating status preserves dock/list geometry,
+    labels the selected mode and leaves the jump control free. Chromium10/10,
+    WebKit final delta1/1 plus reused9/9, adjacent105/105, typecheck/build pass.
+    Await exact shared-web rollout acceptance; embedded/native packages remain
+    a separate release boundary. [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
 

@@ -58,6 +58,7 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 import { forwardDraftTitle } from "@/lib/messageActions";
 import { CAPSULE_CONTROL_GLASS, CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
+import { feedbackDuration } from "@/lib/motion";
 import { BotCommandMenu } from "./BotCommandMenu";
 import {
   addressTypedBotCommand,
@@ -236,7 +237,7 @@ export function MessageInput({
   const [videoAutoAddOnStop, setVideoAutoAddOnStop] = useState(false);
   const [videoStopSignal, setVideoStopSignal] = useState(0);
   const [recorderMode, setRecorderMode] = useState<"voice" | "video">("voice");
-  const [modeFeedback, setModeFeedback] = useState<string | null>(null);
+  const [modeFeedback, setModeFeedback] = useState<RecordingMode | null>(null);
   const [voiceHoldActive, setVoiceHoldActive] = useState(false);
   const [holdRecorderState, setHoldRecorderState] = useState<{
     mode: RecordingMode;
@@ -527,18 +528,16 @@ export function MessageInput({
 
   const showRecorderModeFeedback = useCallback((mode: "voice" | "video") => {
     if (modeFeedbackTimerRef.current) clearTimeout(modeFeedbackTimerRef.current);
-    setModeFeedback(mode === "voice" ? "Режим: голосовое" : "Режим: видеосообщение");
-    modeFeedbackTimerRef.current = setTimeout(() => setModeFeedback(null), 1600);
+    setModeFeedback(mode);
+    modeFeedbackTimerRef.current = setTimeout(() => setModeFeedback(null), feedbackDuration("info"));
   }, []);
 
   const toggleRecorderMode = useCallback(() => {
     if (voiceHoldActiveRef.current || videoHoldActiveRef.current) return;
-    setRecorderMode((current) => {
-      const next = current === "voice" ? "video" : "voice";
-      showRecorderModeFeedback(next);
-      return next;
-    });
-  }, [showRecorderModeFeedback]);
+    const next = recorderMode === "voice" ? "video" : "voice";
+    setRecorderMode(next);
+    showRecorderModeFeedback(next);
+  }, [recorderMode, showRecorderModeFeedback]);
 
   const setActiveHoldRecorder = useCallback((mode: RecordingMode) => {
     const next = { mode, phase: "holding" as const };
@@ -1227,7 +1226,7 @@ export function MessageInput({
 
   // The round button has a second mode and nothing on screen says so. Its
   // `aria-label` and `title` name the mode it is **in** — «Голосовое» — and
-  // «Режим: видеосообщение» arrives only after the switch, which is feedback
+  // «Видеосообщение» arrives only after the switch, which is feedback
   // rather than discovery. `shouldOfferRecorderModeHint` holds every condition,
   // including the two device ones that keep this plate from ever sharing a
   // screen with the sidebar's search hint.
@@ -1583,16 +1582,24 @@ export function MessageInput({
           </div>
         )}
 
-        {/* The recording itself is the composer's row now, not a card above it
-            (R3); what is left here is the mode's own feedback and the hint a
-            press too short to be a recording leaves behind (R7). */}
+        {/* Transient feedback must not change the measured dock or the list's
+            bottom inset. It never takes focus or intercepts a message tap. */}
         {(modeFeedback || shortHint) && !holdRecorderState && (
-          <div
-            data-testid={shortHint ? "composer-short-press-hint" : "recorder-mode-feedback"}
-            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
-          >
-            <KubIcon name={shortHint ? "microphone" : "info"} size={14} tone="muted" />
-            <span className="font-medium text-[color:var(--kub-text)]">{shortHint ?? modeFeedback}</span>
+          <div className={cn(
+            "pointer-events-none absolute inset-x-3 bottom-full z-20 flex justify-end pb-2 md:inset-x-4",
+            jumpControlOnScreen && "pr-14",
+          )}>
+            <div
+              data-testid={shortHint ? "composer-short-press-hint" : "recorder-mode-feedback"}
+              role="status"
+              aria-atomic="true"
+              className="kub-glass-strong kub-menu-in flex w-fit max-w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm leading-5 text-[color:var(--kub-text)]"
+            >
+              <KubIcon name={(modeFeedback ?? recorderMode) === "video" ? "video" : "microphone"} size={16} className="shrink-0" />
+              <span className="min-w-0 break-words font-medium">
+                {shortHint ?? (modeFeedback === "video" ? "Видеосообщение" : "Голосовое сообщение")}
+              </span>
+            </div>
           </div>
         )}
 

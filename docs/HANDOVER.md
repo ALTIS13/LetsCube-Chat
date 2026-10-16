@@ -1,5 +1,15 @@
 # LETSCUBE — handover
 
+**Current resume,2026-10-16, D-366:** coordinator; isolated main-based recorder
+feedback candidate reviewed. In-flow dock66→109.328px is repaired by a compact
+pointer-transparent glass status; shared motion, fixed icon/text alignment,
+latest-mode timing and jump-control space are verified. Browser/adjacent unit,
+typecheck and actual build pass. Next: narrow web publication with exact image,
+old/new marker, public/container JS+SW and retained rollback readback. No SQL or
+native republish; Android Stable22 is unchanged. Preserve foreign root
+sidebar/search paths and private version overlay; A063 excluded.
+[Cause, evidence and boundaries](operations/2026-10-16-recorder-mode-feedback.md).
+
 **Current resume, 2026-10-16:** coordinator; Android0.1.21/build22 is published
 Stable,mandatory=false; product main/web75096aa3 is healthy with public/container
 JS+SW parity and rollback retained. Actual isolated Realme confirms ordinary

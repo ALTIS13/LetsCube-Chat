@@ -3,6 +3,18 @@
 Written 2026-09-20. Read this before writing «Discord does X» or «Telegram does
 Y» anywhere in this repository.
 
+## Recorder mode: Telegram Android source,2026-10-16
+
+SOURCE-OBSERVED, not a device measurement: official moving master,
+[ChatActivityEnterView.java](https://raw.githubusercontent.com/DrKLO/Telegram/master/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java)
+and [ChatActivity.java](https://raw.githubusercontent.com/DrKLO/Telegram/master/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java).
+Switching mode before recording cancels the deferred start, changes VOICE/VIDEO
+button state/content description and provides haptic/accessibility feedback.
+showVoiceHint(false, video) is separate from preparation/start of recording.
+Exact hint words, geometry and duration were not established. No iOS or Discord
+behaviour is inferred. LETSCUBE's short selected-mode label and floating geometry
+are our implementation decision, not a claim of pixel equality with Telegram.
+
 ## Outgoing sound: Telegram Android source,2026-10-05
 
 SOURCE-OBSERVED, not a device measurement: official Android
