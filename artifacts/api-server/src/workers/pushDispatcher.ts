@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { logger } from "../lib/logger";
@@ -156,6 +156,17 @@ async function deliver(
   row: OutboxRow,
   sub: SubscriptionRow | undefined,
 ): Promise<void> {
+  if (!sub || sub.id !== row.subscription_id || typeof sub.user_id !== "string" || !UUID.test(sub.user_id) ||
+      typeof sub.endpoint !== "string" || typeof sub.p256dh !== "string" || typeof sub.auth !== "string") return;
+  // Hash and send the same immutable strings, never a second subscription read.
+  const descriptor = Object.freeze({ id: sub.id.toLowerCase(), user_id: sub.user_id.toLowerCase(),
+    endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth });
+  const hash = createHash("sha256");
+  for (const field of [descriptor.id, descriptor.user_id, descriptor.endpoint, descriptor.p256dh, descriptor.auth]) {
+    const bytes = Buffer.from(field, "utf8");
+    hash.update(`${bytes.length}:`); hash.update(bytes);
+  }
+  const descriptorFingerprint = `v1:${hash.digest("hex")}`;
   let payload: string;
   try {
     payload = JSON.stringify(row.payload);
@@ -167,9 +178,10 @@ async function deliver(
   }
   let status: unknown;
   try {
-    // This RPC verifies current recipient/subscription binding and settles denied claims.
-    const result = await supabase.rpc("push_outbox_delivery_recheck", {
+    // Requires the additive bound RPC; a missing migration must fail closed.
+    const result = await supabase.rpc("push_outbox_delivery_recheck_bound", {
       p_outbox_id: row.id, p_claim_token: claimToken,
+      p_subscription_id: sub.id, p_subscription_fingerprint: descriptorFingerprint,
     });
     if (result.error) return;
     status = result.data;
@@ -177,17 +189,9 @@ async function deliver(
     return;
   }
   if (status !== "deliver") return;
-  if (!sub || sub.id !== row.subscription_id || sub.is_active !== true ||
-      typeof sub.user_id !== "string" || !UUID.test(sub.user_id)) {
-    await completeOutbox(supabase, claimToken, row.id, {
-      suppressed_at: new Date().toISOString(), suppression_reason: "subscription_inactive",
-      last_error: "subscription_missing",
-    });
-    return;
-  }
   try {
     await webpush.sendNotification(
-      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+      { endpoint: descriptor.endpoint, keys: { p256dh: descriptor.p256dh, auth: descriptor.auth } },
       payload,
       { TTL: 60 * 60 * 24 },
     );
@@ -198,8 +202,8 @@ async function deliver(
       try {
         const { error } = await supabase.from("push_subscriptions")
           .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq("id", sub.id).eq("user_id", sub.user_id).eq("endpoint", sub.endpoint)
-          .eq("p256dh", sub.p256dh).eq("auth", sub.auth);
+          .eq("id", descriptor.id).eq("user_id", descriptor.user_id).eq("endpoint", descriptor.endpoint)
+          .eq("p256dh", descriptor.p256dh).eq("auth", descriptor.auth);
         if (error) logger.warn({ rowId: row.id }, "pushDispatcher subscription deactivation unconfirmed");
       } catch {
         logger.warn({ rowId: row.id }, "pushDispatcher subscription deactivation unconfirmed");

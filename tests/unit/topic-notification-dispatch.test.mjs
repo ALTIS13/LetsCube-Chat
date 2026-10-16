@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
@@ -13,6 +13,12 @@ const SUB = "20000000-0000-4000-8000-000000000001";
 const USER = "30000000-0000-4000-8000-000000000001";
 const OTHER = "30000000-0000-4000-8000-000000000002";
 const plain = value => JSON.parse(JSON.stringify(value));
+function fingerprint(descriptor) {
+  const fields = [descriptor.id.toLowerCase(), descriptor.user_id.toLowerCase(), descriptor.endpoint, descriptor.p256dh, descriptor.auth];
+  return "v1:" + createHash("sha256").update(Buffer.concat(fields.flatMap(value => {
+    const bytes = Buffer.from(value, "utf8"); return [Buffer.from(`${bytes.length}:`), bytes];
+  }))).digest("hex");
+}
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
 function compile(text, imports) {
   const module = { exports: {} };
@@ -21,7 +27,7 @@ function compile(text, imports) {
   assert.equal(result.diagnostics.filter(d => d.category === ts.DiagnosticCategory.Error).length, 0);
   vm.runInNewContext(result.outputText, { module, exports: module.exports,
     require(name) { assert.ok(Object.hasOwn(imports, name), `unexpected dependency ${name}`); return imports[name]; },
-    setTimeout, process: { env: {} }, crypto: { randomUUID }, Date });
+    setTimeout, process: { env: {} }, crypto: { randomUUID }, Buffer, Date });
   return module.exports;
 }
 
@@ -42,11 +48,20 @@ function fixture(text = source, options = {}) {
         return options.claimError ? { data: [row], error: { message: subscription.endpoint } }
           : { data: Object.hasOwn(options, "claimRows") ? options.claimRows : [row], error: null };
       }
-      assert.equal(name, "push_outbox_delivery_recheck");
-      assert.deepEqual(plain(args), { p_outbox_id: ROW, p_claim_token: token });
+      assert.ok(["push_outbox_delivery_recheck", "push_outbox_delivery_recheck_bound"].includes(name));
+      if (name === "push_outbox_delivery_recheck_bound") {
+        assert.deepEqual(Object.keys(args).sort(), ["p_claim_token", "p_outbox_id", "p_subscription_fingerprint", "p_subscription_id"]);
+        assert.equal(args.p_outbox_id, ROW); assert.equal(args.p_claim_token, token);
+        assert.equal(args.p_subscription_id, row.subscription_id);
+        if (options.boundMissing) return { data: null, error: { code: "PGRST202" } };
+        if (args.p_subscription_fingerprint !== fingerprint(subscription)) {
+          stored.claim_token = null; return { data: "subscription_changed", error: null };
+        }
+      } else assert.deepEqual(plain(args), { p_outbox_id: ROW, p_claim_token: token });
       if (options.recheckThrow) throw new Error(subscription.endpoint);
       if (options.recheckError) return { data: "deliver", error: { message: subscription.endpoint } };
-      const status = Object.hasOwn(options, "status") ? options.status : (eligible ? "deliver" : "not_eligible");
+      const status = Object.hasOwn(options, "status") ? options.status
+        : (!subscription.is_active ? "subscription_inactive" : eligible ? "deliver" : "not_eligible");
       if (["read", "not_eligible", "subscription_inactive"].includes(status)) {
         stored.suppressed_at = "terminal"; stored.claim_token = null;
       }
@@ -75,9 +90,10 @@ function fixture(text = source, options = {}) {
               return done({ data: matches ? [{ id: table === "notifications_push_outbox" ? ROW : SUB }] : [], error: null });
             }
             if (table === "notifications_push_outbox") return done({ data: [row], error: null });
-            assert.equal(table, "push_subscriptions"); events.push("subscriptions"); entered.resolve();
+            assert.equal(table, "push_subscriptions"); const snapshot = plain(subscription);
+            events.push("subscriptions"); entered.resolve();
             if (options.holdSubscriptions) await release.promise;
-            return done({ data: options.subError ? null : options.missingSubscription ? [] : [plain(subscription)],
+            return done({ data: options.subError ? null : options.missingSubscription ? [] : [snapshot],
               error: options.subError ? { message: subscription.endpoint } : null });
           } catch (error) { return fail(error); }
         },
@@ -87,7 +103,7 @@ function fixture(text = source, options = {}) {
   const logger = Object.fromEntries(["error", "warn", "info"].map(level => [level, (...args) => logs.push([level, ...args])]));
   const worker = compile(text + "\nexport { tick as runTick };", {
     "@supabase/supabase-js": { createClient() { throw Error("startup forbidden"); } },
-    "node:crypto": { randomUUID },
+    "node:crypto": { createHash, randomUUID },
     "web-push": { default: { async sendNotification(...args) {
       sends.push(plain(args)); events.push("provider"); providerEntered.resolve();
       if (options.holdProvider) await providerRelease.promise;
@@ -97,7 +113,10 @@ function fixture(text = source, options = {}) {
   });
   return { run: () => worker.runTick(client), events, sends, writes, logs, rpcs, entered, release, providerEntered, providerRelease,
     disable() { eligible = false; }, replaceClaim() { stored.claim_token = OTHER; },
-    rebindSubscription() { subscription.user_id = OTHER; }, get subscription() { return subscription; },
+    rebindSubscription() { subscription.user_id = OTHER; },
+    activateSubscription() { subscription.is_active = true; },
+    changeDescriptor() { subscription.endpoint = "https://provider.invalid/B"; subscription.p256dh = "key-B"; subscription.auth = "auth-B"; },
+    get subscription() { return subscription; },
     get stored() { return stored; }, get token() { return token; } };
 }
 
@@ -115,7 +134,7 @@ test("unchanged allowed positive control reaches the provider once", async () =>
 });
 async function allowed(text = source) {
   const f = fixture(text); await f.run();
-  assert.deepEqual(f.events.slice(0, 4), ["push_outbox_claim", "subscriptions", "push_outbox_delivery_recheck", "provider"], "fresh recheck is the last async boundary before send");
+  assert.deepEqual(f.events.slice(0, 4), ["push_outbox_claim", "subscriptions", "push_outbox_delivery_recheck_bound", "provider"], "fresh recheck is the last async boundary before send");
   assert.equal(f.rpcs[0].args.p_limit, 50);
   assert.match(f.token, /^[0-9a-f-]{36}$/);
   const [ack] = f.writes; assert.equal(f.writes.length, 1);
@@ -125,7 +144,7 @@ async function allowed(text = source) {
   return f;
 }
 test("allowed delivery claims, freshly rechecks and completes only its token", () => allowed());
-for (const status of ["read", "subscription_inactive", "not_eligible", "foreground", "claim_lost", "unexpected", null, { status: "deliver" }]) {
+for (const status of ["read", "subscription_inactive", "subscription_changed", "not_eligible", "foreground", "claim_lost", "unexpected", null, { status: "deliver" }]) {
   test(`refused recheck ${JSON.stringify(status)} neither sends nor overwrites SQL settlement`, async () => {
     const f = fixture(source, { status }); await f.run();
     assert.equal(f.sends.length, 0, "only literal deliver may send"); assert.equal(f.writes.length, 0);
@@ -156,13 +175,20 @@ for (const flag of ["ackError", "ackThrow"]) {
     assert.equal(f.stored.attempt_count, 0); assert.equal(JSON.stringify(f.logs).includes("provider.invalid"), false);
   });
 }
-for (const options of [{ missingSubscription: true }, { subscription: { is_active: false } }]) {
-  test(`unusable subscription ${JSON.stringify(options)} settles only its exact outbox lease`, async () => {
-    const f = fixture(source, options); await f.run(); assert.equal(f.sends.length, 0);
-    const [ack] = f.writes; assert.equal(ack.patch.suppression_reason, "subscription_inactive");
-    assert.deepEqual(ack.predicates, [["id", ROW], ["claim_token", f.token]]);
-  });
+test("live inactive subscription is settled by RPC, not by cached caller state", async () => {
+  const f = fixture(source, { subscription: { is_active: false } }); await f.run();
+  assert.equal(f.sends.length, 0); assert.equal(f.writes.length, 0);
+  assert.equal(f.stored.suppressed_at, "terminal"); assert.equal(f.stored.claim_token, null);
+});
+async function reactivated(text = source) {
+  const f = fixture(text, { subscription: { is_active: false }, holdSubscriptions: true });
+  const pending = f.run();
+  await f.entered.promise; f.activateSubscription(); f.release.resolve(); await pending;
+  assert.equal(f.sends.length, 1, "fresh server deliver must override stale cached inactive flag");
+  assert.equal(f.stored.suppressed_at, null); assert.equal(f.writes.length, 1);
+  assert.ok(f.stored.sent_at);
 }
+test("reactivated descriptor is sent despite a cached inactive snapshot", () => reactivated());
 test("transient provider error consumes one attempt and releases exactly its claim", async () => {
   const f = fixture(source, { providerError: { statusCode: 503, body: '{"reason":"Busy"}', endpoint: "DO_NOT_LOG" } });
   await f.run(); const [ack] = f.writes;
@@ -211,7 +237,7 @@ async function refusal(text, options) {
   assert.equal(f.sends.length, 0, "refused authority must not send");
 }
 const mutations = [
-  ["omit fresh RPC", 'const result = await supabase.rpc("push_outbox_delivery_recheck", {\n      p_outbox_id: row.id, p_claim_token: claimToken,\n    });',
+  ["omit fresh RPC", 'const result = await supabase.rpc("push_outbox_delivery_recheck_bound", {\n      p_outbox_id: row.id, p_claim_token: claimToken,\n      p_subscription_id: sub.id, p_subscription_fingerprint: descriptorFingerprint,\n    });',
     'const result = { data: "deliver", error: null };', heldDisable, "disabled during lookup must never reach provider"],
   ["allow unknown status", 'if (status !== "deliver") return;', 'if (status === "claim_lost") return;',
     text => refusal(text, { status: "unexpected" }), "refused authority must not send"],
@@ -219,13 +245,20 @@ const mutations = [
     lateAck, "late ACK must not clear a replacement lease"],
   ["raise attempt ceiling", "const MAX_ATTEMPTS = 5;", "const MAX_ATTEMPTS = 6;",
     text => invalidClaim(text, { attempt_count: 5 }), "invalid or exhausted claim must not send"],
-  ["omit subscription owner fence", '.eq("id", sub.id).eq("user_id", sub.user_id).eq("endpoint", sub.endpoint)',
-    '.eq("id", sub.id).eq("endpoint", sub.endpoint)', reboundSubscription,
+  ["omit subscription owner fence", '.eq("id", descriptor.id).eq("user_id", descriptor.user_id).eq("endpoint", descriptor.endpoint)',
+    '.eq("id", descriptor.id).eq("endpoint", descriptor.endpoint)', reboundSubscription,
     "late provider failure must not deactivate another recipient binding"],
-  ["omit inactive subscription refusal", 'sub.is_active !== true ||', "",
-    text => refusal(text, { subscription: { is_active: false } }), "refused authority must not send"],
+  ["restore stale cached inactive veto", 'if (status !== "deliver") return;',
+    'if (status !== "deliver") return;\n  if (sub.is_active !== true) return;',
+    reactivated, "fresh server deliver must override stale cached inactive flag"],
   ["ignore RPC error", "if (result.error) return;", "",
     text => refusal(text, { recheckError: true }), "refused authority must not send"],
+  ["use old unbound ABI", 'const result = await supabase.rpc("push_outbox_delivery_recheck_bound", {\n      p_outbox_id: row.id, p_claim_token: claimToken,\n      p_subscription_id: sub.id, p_subscription_fingerprint: descriptorFingerprint,\n    });',
+    'const result = await supabase.rpc("push_outbox_delivery_recheck", { p_outbox_id: row.id, p_claim_token: claimToken });',
+    descriptorChanged, "same-id same-owner descriptor replacement must refuse stale provider bytes"],
+  ["send different endpoint than fingerprinted", '{ endpoint: descriptor.endpoint, keys: { p256dh: descriptor.p256dh, auth: descriptor.auth } },',
+    '{ endpoint: "https://provider.invalid/different", keys: { p256dh: descriptor.p256dh, auth: descriptor.auth } },',
+    boundUnicode, "provider bytes must match bound fingerprint"],
 ];
 for (const [name, needle, replacement, scenario, message] of mutations) {
   test(`actual compiled omission is rejected: ${name}`, async () => {
@@ -236,3 +269,34 @@ for (const [name, needle, replacement, scenario, message] of mutations) {
     });
   });
 }
+
+async function descriptorChanged(text = source) {
+  const f = fixture(text, { holdSubscriptions: true }); const pending = f.run();
+  await f.entered.promise; f.changeDescriptor(); f.release.resolve(); await pending;
+  assert.equal(f.sends.length, 0, "same-id same-owner descriptor replacement must refuse stale provider bytes");
+  return f;
+}
+test("cached descriptor A cannot send after same S/UID changes to B before final check", () => descriptorChanged());
+test("bound RPC missing fails closed without falling back to old ABI", async () => {
+  const f = fixture(source, { boundMissing: true }); await f.run();
+  assert.equal(f.sends.length, 0, "missing bound RPC must never use unbound fallback");
+  assert.equal(f.rpcs.filter(call => call.name === "push_outbox_delivery_recheck").length, 0);
+});
+test("missing cached descriptor refuses without unbound fallback or unverified suppression", async () => {
+  const f = fixture(source, { missingSubscription: true }); await f.run();
+  assert.equal(f.sends.length, 0); assert.equal(f.writes.length, 0); assert.equal(f.rpcs.length, 1);
+});
+async function boundUnicode(text = source) {
+  const sid = "70000000-0000-4000-8000-000000000050", uid = "70000000-0000-4000-8000-000000000001";
+  const f = fixture(text, { row: { subscription_id: sid }, subscription: { id: sid, user_id: uid,
+    endpoint: "https://provider.invalid/\u00e9/\u{1f9ca}?x=1#f", p256dh: "a\u{1f9ca}:bc", auth: "auth:\u00e9" } });
+  await f.run(); assert.equal(f.sends.length, 1);
+  const [sent] = f.sends; const check = f.rpcs.find(call => call.name === "push_outbox_delivery_recheck_bound");
+  assert.ok(check, "descriptor-bound RPC must execute");
+  assert.equal(check.args.p_subscription_fingerprint, "v1:31a3586636684d806e71ae039a72c602302f7be949c8a4de4b491d7e4cd16f29");
+  assert.equal(check.args.p_subscription_fingerprint, fingerprint({ id: sid, user_id: uid,
+    endpoint: sent[0].endpoint, p256dh: sent[0].keys.p256dh, auth: sent[0].keys.auth }), "provider bytes must match bound fingerprint");
+  assert.equal(JSON.stringify(check.args).includes("provider.invalid"), false);
+  assert.equal(JSON.stringify(check.args).includes("auth:"), false);
+}
+test("bound fingerprint is of the exact descriptor bytes passed to provider", () => boundUnicode());
