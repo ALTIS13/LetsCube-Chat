@@ -6,6 +6,13 @@ Realme Settings cycle is accepted; do not use it as a reason to repeat the case.
 Item76/D-335 remains first. Ordinary production caller/protocol1 stays disabled
 until the connections and real-system checks below exist.
 
+**Current progress:** cuts1/2 have source and actual isolated two-process Realme
+storage/credential evidence. They are not ordinary lifecycle integration or
+publication authority. Continue at cut3: adopt the authenticated generation and
+revision into the single owner, repair legacy MarkerIO descriptor ownership,
+then connect Auth and confirmed choice. Do not redo the accepted primitive or
+Settings checks. [Exact results and limits](2026-10-16-native-preview-existing-vault.md).
+
 ## Ordered Work
 
 1. **Load an existing authenticated committed vault.** `JournalIO.read()` and

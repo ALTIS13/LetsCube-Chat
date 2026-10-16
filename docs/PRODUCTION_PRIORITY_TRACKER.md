@@ -11,11 +11,13 @@ AndroidTest now passes actual isolated Realme Settings none -> sender -> message
 -> none and logout/native retirement; independent server retirement, exact cleanup
 and protected state/power restoration pass. Current-card final publication ordering
 is source-accepted26/26 and reviewed. Inactive native card renderer now passes
-combined292/292, actual SDK34s and independent review. Next: existing-vault load,
-credential consumption, ordinary Auth/choice lifecycle and connected receiver/OS
-acceptance. Keep SDK13-field/identity12 calibration and original r1 receipts; do
+combined292/292, actual SDK34s and independent review. Existing-vault load and native
+credential consumption now have source36/134 and affected173 accepted cases, plus
+actual isolated two-process Realme11+18 checks, FD106 ->106, exact cleanup and
+protected primary20/test/users. Next: ordinary Auth/choice lifecycle and connected
+receiver/OS acceptance. Keep SDK13-field/identity12 calibration and original r1 receipts; do
 not replay passing Settings or unchanged transport tests.
-[Current evidence](operations/2026-10-16-native-preview-publisher.md) and
+[Current evidence](operations/2026-10-16-native-preview-existing-vault.md) and
 [ordered remaining connections](operations/2026-10-16-native-preview-runtime-next.md).
 
 **Active priority, 2026-10-15 19:56 UTC:** the owner's instruction puts Nikita's

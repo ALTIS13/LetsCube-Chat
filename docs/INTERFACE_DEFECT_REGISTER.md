@@ -24889,6 +24889,16 @@ held; do not repeat the web fix. [Wave record](operations/2026-10-02-presence-pu
 
 ## D-335 `[ ]` System chat notification previews lack useful sender/message context
 
+**2026-10-16 existing-vault continuation:** native load-only snapshot reader and
+borrowed credential consumer pass source36/134 and affected173 accepted checks.
+Review's Android borrowed-FD leak is reproduced and repaired. Actual isolated
+SDK/QA APK and two-process Realme11+18 checks pass;20 reads keep FD106 ->106,
+exact test removal and primary20/test/users are unchanged. This is native storage
+and credential evidence, not ordinary lifecycle or notification delivery. Next:
+authenticated-head adoption, legacy MarkerIO FD ownership, ordinary Auth/choice,
+then initial receiver publication and actual OS proof. Protocol0/richfalse and
+D-335 OPEN remain. [Evidence](operations/2026-10-16-native-preview-existing-vault.md).
+
 **2026-10-16 renderer continuation:** inactive native current-card renderer now
 passes combined292/292, actual isolated SDK34s and independent frozen review.
 Exact parsed recipient/card tuple, original PendingIntent/generation/channel/time,

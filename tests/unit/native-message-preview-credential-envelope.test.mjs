@@ -18,7 +18,8 @@ const probe = resolve(root,'tests/android/MessagePreviewCredentialEnvelopeProbe.
 const bin = name => resolve('C:/Program Files/Android/Android Studio/jbr/bin',name+'.exe');
 const prefix = 'letscube-credential-envelope-';
 const dependencies = Object.freeze({
-  MessagePreviewVerificationState:'0b16484c9fcdf57a7f944660a2689ce22ab20d4dfc36b8804a0a68713f3bd73b',
+  // Committed producer-permit revision 3924d35a; uuid/safe codec helpers are unchanged.
+  MessagePreviewVerificationState:'4717a02b955143ac9b16f9cf4de4b8ef29d7ca3be64542933d4d799041b23178',
   MessagePreviewVaultFence:'0dfcc1664b9d513cb0e524a2eaade4fa595de5000429a2c6130bd59fe6ff853b',
   MessagePreviewMetadataEnvelope:'eb1b585e237bff3326b74185aeb1378e3082ea45f6e728fe917e74de3a2f416b',
 });
@@ -62,7 +63,7 @@ for(const scenario of cases)test('actual credential codec: '+scenario,()=>health
 const mutations = [
   ...['recipient','session','device'].map(field=>[field+' comparison',[[`&& ${field}.equals(expectedOwner.${field})`,'']], 'match-'+field, 'MATCH_'+field.toUpperCase()]),
   ['accountEpoch comparison',[['&& accountEpoch == expectedOwner.accountEpoch','']], 'match-epoch','MATCH_EPOCH'],
-  ['access comparison',[['&& MessageDigest.isEqual(decodedAccess, expected)','']], 'match-access','MATCH_ACCESS'],
+  ['access comparison',[['&& MessageDigest.isEqual(decodedAccess, comparison)','']], 'match-access','MATCH_ACCESS'],
   ['expiry comparison pair',[['&& a.expiresWallMillis == b.expiresWallMillis',''],['&& expiry == expectedExpiry','']], 'match-expiry','MATCH_EXPIRY'],
   ['AAD version literal',[['output.putInt(1); text(output, h.installation);','output.putInt(2); text(output, h.installation);']], 'external','EXTERNAL_AAD_AUTH'],
   ['AAD installation',[['text(output, h.installation);','text(output, "00000000000000000000000000000000");']], 'external','EXTERNAL_AAD_AUTH'],
@@ -75,8 +76,8 @@ const mutations = [
   ['AAD base',[['output.putLong(h.baseGeneration)','output.putLong(0)']], 'external','EXTERNAL_AAD_AUTH'],
   ['AAD revision',[['.putLong(h.vaultRevision);','.putLong(0);']], 'external','EXTERNAL_AAD_AUTH'],
   ['AAD domain',[['LETSCUBE-NMPV-CREDENTIAL-v1','LETSCUBE-NMPV-CREDENTIAL-v0']], 'external','EXTERNAL_AAD_AUTH'],
-  ['authentication before success',[['plaintext = cipher.doFinal(blob, IV_BYTES, blob.length - IV_BYTES);',
-    'if (blob.length > 0) return true;\n            plaintext = cipher.doFinal(blob, IV_BYTES, blob.length - IV_BYTES);']], 'tamper-tag','AUTHENTICATION_MUST_REFUSE'],
+  ['authentication before native callback',[['plaintext = cipher.doFinal(blob, IV_BYTES, blob.length - IV_BYTES);',
+    'if (blob.length > 0) { consumer.accept(new MessagePreviewVaultFence.Owner("11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222", "33333333-3333-3333-3333-333333333333", 4), "fictional.access-only".getBytes(StandardCharsets.US_ASCII), 123456789L); return; }\n                plaintext = cipher.doFinal(blob, IV_BYTES, blob.length - IV_BYTES);']], 'tamper-tag','AUTHENTICATION_MUST_REFUSE'],
   ['access bound before crypto',[['&& access.length() <= MAX_ACCESS','']], 'early-access','EARLY_BOUND_BEFORE_PROVIDER'],
   ['nonempty access before crypto',[['&& access.length() > 0','']], 'early-empty','EARLY_INPUT_MUST_REFUSE'],
   ['provider IV validation',[['iv = cipher.getIV(); parameters(cipher, iv);','iv = cipher.getIV();']], 'provider-iv','PROVIDER_PARAMETERS_MUST_REFUSE'],

@@ -111,35 +111,74 @@ final class MessagePreviewCredentialEnvelope {
         } finally { clear(bytes); }
     }
 
+    interface Consumer {
+        void accept(MessagePreviewVaultFence.Owner owner, byte[] borrowedAccess, long expiry);
+    }
+
+    /**
+     * Native-only borrowed scope: access bytes must not escape the synchronous callback.
+     * They are scrubbed even when it throws; callback failures propagate unchanged.
+     * The caller owns current-head, wall-time and retirement checks, not this codec.
+     */
+    static void consume(MessagePreviewMetadataEnvelope.Record authenticatedRecord,
+            MessagePreviewMetadataEnvelope.Header expectedHeader, SecretKey suppliedCredentialKey,
+            Consumer consumer) throws Unavailable {
+        require(consumer != null && authenticatedRecord != null);
+        header(expectedHeader); header(authenticatedRecord.header);
+        require(sameHeader(authenticatedRecord.header, expectedHeader));
+        decoded(authenticatedRecord, suppliedCredentialKey, consumer);
+    }
+
     static boolean verifyMatch(MessagePreviewMetadataEnvelope.Record authenticatedRecord,
             MessagePreviewMetadataEnvelope.Header expectedHeader, MessagePreviewVaultFence.Owner expectedOwner,
             String expectedAccess, long expectedExpiry, SecretKey suppliedCredentialKey) throws Unavailable {
-        byte[] blob = null, plaintext = null, aad = null, iv = null, decodedAccess = null, expected = null;
+        byte[] expected = null;
         try {
             inputs(expectedHeader, expectedOwner, expectedAccess, expectedExpiry, suppliedCredentialKey);
-            require(authenticatedRecord != null); header(authenticatedRecord.header);
-            blob = authenticatedRecord.credentialBytes(); require(blob.length >= 161 && blob.length <= MAX_BLOB);
-            aad = aad(authenticatedRecord.header); iv = Arrays.copyOfRange(blob, 0, IV_BYTES);
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, suppliedCredentialKey, new GCMParameterSpec(128, iv));
-            parameters(cipher, iv); cipher.updateAAD(DOMAIN); cipher.updateAAD(aad);
-            plaintext = cipher.doFinal(blob, IV_BYTES, blob.length - IV_BYTES);
-            require(plaintext.length >= 133 && plaintext.length <= 8324);
-            ByteBuffer input = ByteBuffer.wrap(plaintext); require(input.getInt() == 1);
-            int accessLength = input.getInt();
-            require(accessLength >= 1 && accessLength <= MAX_ACCESS && plaintext.length == PLAIN_OVERHEAD + accessLength);
-            decodedAccess = new byte[accessLength]; input.get(decodedAccess);
-            for (byte value : decodedAccess) require(value >= 33 && value <= 126);
-            String recipient = decodedUuid(input), session = decodedUuid(input), device = decodedUuid(input);
-            long accountEpoch = input.getLong(), expiry = input.getLong();
-            require(!input.hasRemaining() && MessagePreviewVerificationState.safe(accountEpoch)
-                && MessagePreviewVerificationState.safe(expiry) && expiry > 0 && expiry == authenticatedRecord.header.expiresWallMillis);
             expected = expectedAccess.getBytes(StandardCharsets.US_ASCII);
-            return sameHeader(authenticatedRecord.header, expectedHeader) && recipient.equals(expectedOwner.recipient)
-                && session.equals(expectedOwner.session) && device.equals(expectedOwner.device)
-                && accountEpoch == expectedOwner.accountEpoch && expiry == expectedExpiry
-                && MessageDigest.isEqual(decodedAccess, expected);
-        } catch (GeneralSecurityException | RuntimeException refused) { throw new Unavailable(); }
-        finally { clear(blob); clear(plaintext); clear(aad); clear(iv); clear(decodedAccess); clear(expected); }
+            byte[] comparison = expected;
+            boolean[] matched = {false};
+            decoded(authenticatedRecord, suppliedCredentialKey, (owner, decodedAccess, expiry) -> {
+                String recipient = owner.recipient, session = owner.session, device = owner.device;
+                long accountEpoch = owner.accountEpoch;
+                matched[0] = sameHeader(authenticatedRecord.header, expectedHeader) && recipient.equals(expectedOwner.recipient)
+                    && session.equals(expectedOwner.session) && device.equals(expectedOwner.device)
+                    && accountEpoch == expectedOwner.accountEpoch && expiry == expectedExpiry
+                    && MessageDigest.isEqual(decodedAccess, comparison);
+            });
+            return matched[0];
+        } catch (RuntimeException refused) { throw new Unavailable(); }
+        finally { clear(expected); }
+    }
+
+    private static void decoded(MessagePreviewMetadataEnvelope.Record authenticatedRecord,
+            SecretKey suppliedCredentialKey, Consumer consumer) throws Unavailable {
+        byte[] blob = null, plaintext = null, aad = null, iv = null, decodedAccess = null;
+        try {
+            MessagePreviewVaultFence.Owner owner;
+            long expiry;
+            try {
+                require(authenticatedRecord != null); header(authenticatedRecord.header);
+                require(suppliedCredentialKey != null && "AES".equals(suppliedCredentialKey.getAlgorithm()));
+                blob = authenticatedRecord.credentialBytes(); require(blob.length >= 161 && blob.length <= MAX_BLOB);
+                aad = aad(authenticatedRecord.header); iv = Arrays.copyOfRange(blob, 0, IV_BYTES);
+                Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                cipher.init(Cipher.DECRYPT_MODE, suppliedCredentialKey, new GCMParameterSpec(128, iv));
+                parameters(cipher, iv); cipher.updateAAD(DOMAIN); cipher.updateAAD(aad);
+                plaintext = cipher.doFinal(blob, IV_BYTES, blob.length - IV_BYTES);
+                require(plaintext.length >= 133 && plaintext.length <= 8324);
+                ByteBuffer input = ByteBuffer.wrap(plaintext); require(input.getInt() == 1);
+                int accessLength = input.getInt();
+                require(accessLength >= 1 && accessLength <= MAX_ACCESS && plaintext.length == PLAIN_OVERHEAD + accessLength);
+                decodedAccess = new byte[accessLength]; input.get(decodedAccess);
+                for (byte value : decodedAccess) require(value >= 33 && value <= 126);
+                String recipient = decodedUuid(input), session = decodedUuid(input), device = decodedUuid(input);
+                long accountEpoch = input.getLong(); expiry = input.getLong();
+                require(!input.hasRemaining() && MessagePreviewVerificationState.safe(accountEpoch)
+                    && MessagePreviewVerificationState.safe(expiry) && expiry > 0 && expiry == authenticatedRecord.header.expiresWallMillis);
+                owner = new MessagePreviewVaultFence.Owner(recipient, session, device, accountEpoch);
+            } catch (GeneralSecurityException | RuntimeException refused) { throw new Unavailable(); }
+            consumer.accept(owner, decodedAccess, expiry);
+        } finally { clear(blob); clear(plaintext); clear(aad); clear(iv); clear(decodedAccess); }
     }
 }

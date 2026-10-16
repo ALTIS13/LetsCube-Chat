@@ -1,20 +1,21 @@
 # LETSCUBE — handover
 
 **Current resume, 2026-10-16:** coordinator; item76/D-335 readable notifications
-remain first. Updated actual SDK17s/Javac/signature/DEX test passes the real Realme
-Settings cycle none -> sender -> message -> none, native retirement and logout.
-Independent server retirement, exact three-package absence, primary20/test/users
-and original power restoration pass. This is automated PERSON_CHOICE_NOT_PROVEN,
-not readable OS-card acceptance. Current-card final publication ordering is
-source-accepted26/26 and reviewed; durable/cache divergence and read-retirement
-races refuse. Native readable-card renderer is now source/SDK accepted: final
-combined292/292, actual SDK34s and independent review; no runtime caller. Next:
-load existing vault/consume credential, ordinary Auth/choice lifecycle, then
-reserve-before-lookup initial delivery and actual OS acceptance. Do not replay passing
-Settings, lookup251/251 or unchanged transport checks. Keep SDK13/identity12 and
-original r1 records immutable. Protocol0/generic/richfalse remain; no release,
-provider, migration or deployment change. Preserve foreign sidebar/search and
-private Android overlay. [Current evidence](operations/2026-10-16-native-preview-publisher.md)
+remain first. Existing-vault snapshot reader and synchronous native credential
+consumer are source-accepted36/134 with affected provisioning/producer173 accepted
+cases (172 reused plus one corrected stale mutation anchor). Independent review's
+Android borrowed-FD issue is fixed RED-to-GREEN using Os.read/explicit close.
+Actual isolated SDK/QA-signed APK and two-process Realme checks pass11+18, with
+20 repeated loads retaining FD106 ->106; exact QA removal and primary20/test/users
+preservation pass. Not FCM/card/choice acceptance. Next: ordinary Auth/producer/
+choice lifecycle and reserve-before-lookup initial delivery. The
+initializer must adopt the authenticated head/revision, not reset G0; legacy
+create-only MarkerIO FD ownership also needs correction before lifecycle reuse.
+Do not replay accepted Settings, renderer292/292 or unchanged transport checks.
+Keep SDK13/identity12 and original r1 records immutable. Protocol0/generic/richfalse
+remain; no release, provider, migration or deployment change. Preserve foreign
+sidebar/search and private Android overlay.
+[Current evidence](operations/2026-10-16-native-preview-existing-vault.md)
 and [ordered next connections](operations/2026-10-16-native-preview-runtime-next.md).
 
 **Current resume, 2026-10-15 20:50 UTC:** coordinator; D-365 actual native and

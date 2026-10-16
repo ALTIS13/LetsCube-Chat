@@ -70,7 +70,7 @@ const ownerName = 'MessagePreviewPristineInitializer';
 const custodyName = 'MessagePreviewCredentialKeyCustody';
 const mutations = [
   ['exact verification identity', moduleName, 'identity == expected && access.equals(input)', 'access.equals(input)', 'foreign-verification', 'REFUSAL_NO_COMMIT_ACK'],
-  ['fresh verification invocation', moduleName, 'authority.verify(work.identity, access, verifyDeadline)',
+  ['fresh verification invocation', moduleName, 'authority.verify(work.identity, access, verifyDeadline, current)',
     'new Verification(work.identity, access, System.currentTimeMillis()+60000)', 'verify-timeout', 'REFUSAL_NO_COMMIT_ACK'],
   ['validated expiry at each current boundary', moduleName, 'work.validatedExpiry=expiry;', '', 'expiry-before-mint', 'NO_MINT_AFTER_BAD_VERIFICATION_OR_DEADLINE'],
   ['allocation predecessor not phase head', moduleName, 'request(custody, work.original, work.checked)',
