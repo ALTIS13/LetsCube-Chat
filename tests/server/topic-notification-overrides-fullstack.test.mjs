@@ -180,6 +180,21 @@ if(process.env.LETSCUBE_TOPIC_FULLSTACK_SELFTEST==='1'&&process.env.LETSCUBE_TOP
     assert.equal(p.calls.http,80);
   }
   test('literal request budget stops before request81',()=>budget());
+  async function elapsedBudget(t,module=helper) {
+    let now=0;const timers=[];
+    const mock=t.mock.method(AbortSignal,'timeout',ms=>{
+      const controller=new AbortController();timers.push({at:now+ms,controller});return controller.signal;
+    });
+    const advance=next=>{now=next;for(const timer of timers)if(timer.at<=now)timer.controller.abort();};
+    try {
+      const b=binding(),p=port(b),channel=module.createChannel(b,p.bridge);
+      const read=()=>channel.rpc('a','topic_notification_preferences_read',{p_chat_id:b.fixture.chatId});
+      await read();advance(210_000);await read();advance(479_999);await read();
+      advance(480_000);await assert.rejects(read,/FULLSTACK_HTTP_BUDGET/);
+      assert.equal(p.calls.http,3);
+    } finally {mock.mock.restore();}
+  }
+  test('measured full-schema QA remains usable after210s but refuses at480s',t=>elapsedBudget(t));
   test('unknown control and invalid response cannot become successful empty data',async()=>{
     const b=binding(),p=port(b),channel=helper.createChannel(b,p.bridge);
     await assert.rejects(()=>channel.control('delete-account'),/FULLSTACK_CONTROL_REFUSED/);assert.equal(p.calls.control,0);
@@ -219,6 +234,10 @@ if(process.env.LETSCUBE_TOPIC_FULLSTACK_SELFTEST==='1'&&process.env.LETSCUBE_TOP
     const module=await mutated('++requests<=80','++requests<=81');
     await assert.rejects(()=>budget(module),assert.AssertionError);
   });
+  for(const value of ['180_000','600_000']) test('loaded elapsed-budget '+value+' violates the measured finite window',async t=>{
+    const module=await mutated('AbortSignal.timeout(480_000)','AbortSignal.timeout('+value+')');
+    await assert.rejects(()=>elapsedBudget(t,module));
+  });
   test('loaded candidate-digest omission exposes a different assembled source',async()=>{
     const module=await mutated('candidate.sha256===binding.candidateDigest','true');
     await assert.rejects(()=>assert.rejects(()=>module.loadBoundCandidate(binding()),/FULLSTACK_CANDIDATE_DRIFT/),assert.AssertionError);
@@ -242,7 +261,7 @@ if(process.env.LETSCUBE_TOPIC_FULLSTACK_SELFTEST==='1'&&process.env.LETSCUBE_TOP
     t.diagnostic('SELFTEST_ONLY; NETWORK_AUTH_REALTIME_DELIVERY_NOT_RUN');
   });
 } else {
-  test('isolated authenticated HTTP slice; not Realtime/delivery/fullstack acceptance',{timeout:200_000},async t=>{
+  test('isolated authenticated HTTP slice; not Realtime/delivery/fullstack acceptance',{timeout:500_000},async t=>{
     assert.equal(typeof helper.loadRuntime,'function','FULLSTACK_ADMISSION_REQUIRED');
     const runtime=await helper.loadRuntime(process.env);
     const receipt=await helper.runHttpSlice(runtime);

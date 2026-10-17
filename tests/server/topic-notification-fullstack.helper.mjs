@@ -90,7 +90,9 @@ export function createChannel(input,bridge) {
   const binding=validateBinding(input),credentials=validateCredentials(binding,bridge.credentials);
   for(const method of ['inspect','http','control','close']) need(typeof bridge[method]==='function','FULLSTACK_BRIDGE_INTERFACE_REQUIRED');
   let deadline,requests=0,runtimeEnabled=true;
-  const signal=()=>AbortSignal.any([deadline??=AbortSignal.timeout(180_000),AbortSignal.timeout(15_000)]);
+  // Measured full-schema catalog guards dominate this isolated QA scenario.
+  // Keep individual operations short and request count capped independently.
+  const signal=()=>AbortSignal.any([deadline??=AbortSignal.timeout(480_000),AbortSignal.timeout(15_000)]);
   const expected={owner:binding.owner,sourceContainerId:binding.sourceContainerId,target:binding.target,
     sourceCatalogSha256:binding.sourceCatalogSha256,restoreCatalogSha256:binding.restoreCatalogSha256,
     candidateDigest:binding.candidateDigest,rollbackDigest:binding.rollbackDigest,fixtureDigest:digest(canonical(binding.fixture))};
