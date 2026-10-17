@@ -3957,8 +3957,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     logical catalog, ALL14 schema ACLs, data, sequences and controls. Three DDL
     files transferred byte-identically, but local RESTORE2_SCHEMA_AST_DIFFERENCE
     still refuses final acceptance; owned network-none clone held for diagnosis.
-    Verified recovery is NOT established. HTTP seed/transport source work is
-    independent preparation, not execution or delivery acceptance.
+    Calibrated comment recovery and reviewed post-dump raw-catalog closure now
+    pass18/18 source controls and actual finalization/DDL transfer. Combined
+    logical recovery VERIFIED, receiptc6ec1775...1b2ee3,768 constraint ASTs equal;
+    unfiltered SQL ASTs differ, exact ACL catalogs and disjoint default-ACL
+    ordering are proved separately. This is not feature/delivery acceptance.
+    HTTP transport17/17, seed21/21 and initial-prepare17/17 remain source evidence;
+    actual clone requires legitimate synthetic invitations. New invite seed22/22
+    and fail-off prepare15/15 pass; actual CLONE candidate/seed/enable COMMITs
+    PASSa098eeb4. No PostgREST/HTTP acceptance yet. Reviewed PostgREST DB-epoch/
+    flag fixes, HTTP/Realtime/delivery/rollback/launch remain open.
     Full-schema/PostgREST/Realtime, old-client compatibility and rollout stay open.
     No production migration/UI/native release or feature completion inferred.
     [Evidence and current checkpoint](operations/2026-10-16-topic-notification-overrides.md).

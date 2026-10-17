@@ -2,18 +2,26 @@
 
 **Current resume,2026-10-17,item77:** coordinator; worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, source0e2463f1 (not main/deployed). Accepted source
+`codex/topic-alerts-20261016`, checkpoint6d9778a6 (not main/deployed). Accepted source
 418/418, PG17/dispatcher170/220, SQL assembly32/32 and HTTP selftest48/48 stand;
 the compact UI is not mounted. Task6: immutable R4 capture and source/archive
 4817-statement AST equality pass. Reviewed restorer2 (15/15) recovered ALL14
 schema ACLs and passed actual logical catalog/data/sequence/control comparison.
 Its three DDL files transferred byte-identically; local verification refuses
-RESTORE2_SCHEMA_AST_DIFFERENCE. Verified recovery is NOT established. Hume owns
-read-only local difference classification; frozen generators/capture/receipts
-must not change or be replayed. Exact owned restore2 clone remains network-none
-for bounded diagnosis and subsequent HTTP use. Leibniz owns synthetic seed source;
-Kuhn owns HTTP transport source, neither may execute remote changes. Next: resolve
-the actual schema difference, then real HTTP/Realtime/rollback/delivery gates.
+RESTORE2_SCHEMA_AST_DIFFERENCE was resolved by calibrated metadata recovery,
+exact schema ACL catalogs and proved disjoint default-ACL ordering, not a generic
+ignore. Finalizer3acd96db4 passed18/18 after reviewed post-dump ACL race repair;
+actual phase/data/control/DDL transfer and combined recovery verification PASS,
+receiptc6ec1775...1b2ee3,768 constraints equal. Unfiltered SQL ASTs differ; the
+receipt names the precise combined proof. Original capture remains immutable.
+Exact owned restore2 clone stays network-none for HTTP acceptance. Transport17/17
+and initial seed/prepare21/17 source checks stand; actual clone requires invites.
+Legitimate invite seed22/22 and prepare15/15 pass; independent review found no new
+seed defects. Actual CLONE candidate/seed/enable three COMMITs PASS, initial
+stagea098eeb4...bc35ee. Do NOT rerun restore/finalizer/baseline checks against this
+now-modified clone or reapply candidate SQL. Hume owns PostgREST reviewed DB-epoch/
+flag fixes and bounded bridge source. Actual PostgREST/HTTP are not accepted yet.
+Next: private loopback API/CAS/session/rollback, then Realtime/delivery/launch.
 Physical backup remains hard-refused. No application SQL/HBA reload/main push/
 native publication; Stable22/D366 unchanged. Root divergent; preserve foreign
 sidebar/search/version paths, A063 excluded.

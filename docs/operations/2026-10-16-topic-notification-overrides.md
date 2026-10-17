@@ -715,3 +715,109 @@ with exact catalog coverage may replace a raw representation comparison; any
 uncovered structural/ACL difference must still refuse. In parallel, bounded
 synthetic seed and HTTP transport source work may proceed, but may not attach,
 apply SQL or claim actual Auth/HTTP/Realtime/delivery acceptance.
+
+## Exact Comment Calibration and HTTP Preparation
+
+Local diagnosis established eight additional schema GRANT statements, one schema
+comment and thirty default-ACL statement position changes, not just GRANT drift.
+All768 constraint witnesses independently match actual PG17 AST. Default ACLs
+contain the same78 statements:18 inversions are disjoint GRANT/GRANT operations;
+all78 per-recipient subsequences, including privileges/options, match. The full
+defaultACL catalog remains strict. No generic sorting or ignoring comments is a
+valid recovery proof.
+
+One bounded calibration ran inside the owned network-none clone in a NEW empty
+database, using the exact binary/options for default/NULL/custom schema comments.
+The temporary database was removed; only three tiny DDL controls and the captured
+ALL14 schema ACL/defaultACL projection plus two direct extension schema names
+were downloaded, byte-pinned in private storage. Probe receipt a7280875...319847.
+Review found its before/after logical comparator omitted constraint definitions;
+the original probe stayed frozen. A separate raw comparator went RED on actual
+CHECK expression drift, then GREEN; an actual READ-ONLY full raw-catalog match
+against the saved restore2 reference passed, including definitions and incarnation.
+Raw receipt fa7b39d4...babaac. No calibration was replayed to repair that proof.
+
+New finalizer3 source initially passed15/15 with seven loaded omissions. It models
+all twelve non-extension schema comments from the actual dump/calibration, leaves
+the two unknown direct-extension schemas untouched, and requires combined exact
+ACL/catalog/data/sequence/control proof plus schema/constraint AST. Its initial
+local plan was preserved as superseded, never executed. Independent review found
+an ACL change could occur between the catalog read and final schema dump; Hume
+owns a held-case RED/GREEN fix and post-dump raw-catalog closure before first run.
+Verified recovery and application SQL acceptance remain open.
+
+HTTP transport source passed17/17 including actual bounded loopback/subprocess
+abort and three omissions; no live HTTP call occurred. Initial seed21/21 uses
+captured DDL and four real trigger functions in PGlite; prepare17/17 covers ports,
+three explicit COMMIT boundaries and incarnation, not PostgREST startup. Those
+do not substitute for full restored PG17 execution. An actual READ-ONLY clone
+input check found invitations ARE required (receipt9e1c3bf1...c088af). The original
+seed correctly refuses; Leibniz owns a distinct legitimate synthetic-invitation
+variant, using real consume hooks, not disabled RLS/triggers, policy changes or
+another person's admin account. PostgREST/JWT/attach and real HTTP remain separate.
+
+Checkpoint6d9778a6 is pushed only to codex/topic-alerts-20261016. No main push,
+production application SQL, HBA reload, native publication or paid-device
+allocation occurred; Stable22/D366 remain unchanged.
+
+## Combined Recovery Accepted
+
+The review's ACL race was reproduced using the actual generated phase: a grant
+option changed during the final schema capture. New post-dump exact raw-catalog
+comparison refuses that case; its loaded omission reintroduces the false proof.
+Final sourceacd96db4/tests919abdf2 pass18/18, zero skips. The superseded local plan
+was retained; the current plan is04477a26...33a0b9. No old generator/capture or
+intermediate refusal receipt was rewritten.
+
+One actual finalization ran only on the existing owned network-none clone and
+passed catalog, ALL14 schema ACLs, calibrated twelve non-extension schema comments,
+default ACLs, data, sequences, extension controls and post-dump raw-catalog closure.
+Phase proofaeab668b...49c467 remained AST pending. Its final schema downloaded
+byte-identically:1900000 bytes, SHA230d0cdf...342d623.
+
+Actual local final verification now passes: receiptc6ec17759f967e24e5b4d261ea18b826ef745b08332d83529bac89d3171b2ee3,
+scope logical-recovery-effective-acl-calibrated-comments-disjoint-default-order.
+Unfiltered AST equality is explicitly FALSE (4817/4825 statements): the eight
+additional schema GRANT statements are covered by exact owner/ACL/grantor/grant
+option catalog equality.18 default-ACL inversions are proved disjoint grants,
+with unchanged exact statement/subsequence sets and final defaultACL catalog.
+All other structural ASTs match; all768 complete constraint ASTs match. Unknown
+direct-extension schema comments were not rewritten. This is a concrete combined
+recovery proof, not a claim that pg_dump text/ASTs are identical in all respects.
+
+Next: actual clone-only candidate transaction and legitimate synthetic invitation
+fixture, followed by exact PostgREST/JWT startup and HTTP acceptance. The original
+seed correctly refuses the actual invite-required policy; its new variant must
+use the real consume hooks. No application candidate, synthetic-account seed,
+PostgREST start, real HTTP/Realtime/provider acceptance, production SQL or native
+publication has occurred. Item77 remains open; the clone stays bounded to Task6.
+
+## Actual Candidate and Invitation Fixture
+
+New immutable invite seed11f14aee/tests0ef7e620 passed22/22 PGlite/source checks,
+including real captured consume hooks, exact two uses, ordinary-user-only roles,
+expiry/revocation/collision refusals and three loaded omissions. New prepare
+012cac86/testsa81a960a passed15/15 kernel controls after a held post-enable-failure
+repair. A best-effort runtime OFF is permitted only under the same CID/DB epoch;
+unknown incarnation/ACK remains UNKNOWN and forbids adoption/retry. Failure
+intent survives before compensation. Old seed/prepare artifacts remain immutable.
+
+Independent review found no new material seed/prepare-invite defects. The
+coordinator first generated the actual-proof-bound inert plan7debf588...e3304182
+(251507 bytes), then executed it ONCE only on the existing owned network-none
+clone. Candidate4dacb35b, invitation/accounts/sessions/chat/topics and initial
+enable all returned their three explicit COMMITs; the full restored PG17 trigger
+chain and seed self-checks passed in7.5s. No policy/GUC/RLS or trigger bypass was
+used. Initial-stage bytes are privately pinned at
+a098eeb470eb5d0444e0ff6f0513ba982047de79c894c829659a7c8b17bc35ee.
+
+This clone is NOW modified by the candidate: do not replay baseline restore,
+finalizer or candidate application against it. Future attachment uses the actual
+initial-stage/catalog/fixture pins. No PostgREST or real HTTP acceptance yet.
+The first PostgREST source15/15 gained failed-prepare marker guards (17/17).
+Independent review additionally reproduced a DB restart after the first SQL guard
+and loss of false/retired flags in private credential reads; Hume owns that one
+fix pass before first startup. A source-pinned inert starter builds successfully;
+JWT issuance/startup is intentionally delayed until the finite HTTP bridge is
+ready, avoiding credential expiry while source is prepared. Production and native
+packages remain unchanged; no private credentials are printed or committed.
