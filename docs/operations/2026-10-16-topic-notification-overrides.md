@@ -1645,3 +1645,54 @@ inertly through the existing PG17 transaction composer:501b1f32,141992bytes,
 195 statements, exactly one top-level BEGIN/COMMIT. This is not canonical
 registration, a full combined rehearsal or application. Fresh origin/main still
 matches05f72b25; no unseen remote main commits. Public Stable22/D366 unchanged.
+
+## Actual Armed94f Result And Namespace Assumption
+
+The single94f execution refused before any client intent/CID/process, at
+CLIENT/OtherError170127ms; raw server proof84d24e02 is retained. Initial
+checkpointc660fda8 passes. The NEW230 lease committed with receiptc6c363b9;
+all12 current session full-row hashes match its eight retained plus four new
+rows. Never append/renew them or replay the consumed230 lifetime/94f intent.
+Original857 remains unexecuted preparation. No client result, CAS, message phase,
+provider or OS acceptance exists.
+
+Fresh readonly postmortemb4f82de0 binds private backup28523c72/28703bytes,
+raw service result82298979, actual owned service CID/name absence with positive
+PG control, env absence, exact PostgREST PID absence/closed port and Perl probe
+absence/closed port. Validator/client containers are absent. Catalog and PG
+incarnation are unchanged; tenant1+extension1 remain unusable, migrations0,
+slots0. No tenant-retirement attempt is assumed complete. Encrypted rows stay
+private; the first OtherError and later cleanup cause were not retained with
+sufficient class/function detail, so neither is guessed from the last READY RPC.
+
+A new scoped measurement54aef084 proves an invalid binding assumption:
+host readlink('/proc/<exact R5 PG PID>/ns/net') raises PermissionError13 while
+host self readlink succeeds. parent_binding necessarily uses that unavailable
+operation. Exact-owned inside-PG Perl readlink succeeds (4d0b1f9f), with Docker
+identity/network-none rechecked before/after and no host capabilities, permission,
+configuration or routing changes. This supplies a viable narrow replacement,
+not an accepted RT/client lifetime. Kuhn is analysing captured producer shapes
+and abort-closure validation before a new explicit known-COMMIT continuation;
+Leib owns only new exact94 metadata capture/ROLLBACK retirement rehearsal, not
+COMMIT. Keep all spent evidence and old application/history/session state.
+
+## Coordinated Source Migration Registration
+
+Supabase CLI2.98.2 generated
+`supabase/migrations/20261017104253_coordinated_notification_release.sql`.
+Its byte-identical mirror is registered under
+`.migration-backup/supabase/migrations/` with the same basename. SHA25627f6be34,
+145510bytes. The forward body is exactly the prepared501b1f32 seven-proposal
+assembly; the header contains the complete atomic compatibility rollback,
+SHA256cc426c9e, composed from the two reviewed rollback proposals. PG17 grammar
+confirms195 forward statements and exactly one top-level BEGIN/COMMIT; the
+commented rollback adds no executed statements. No database was contacted by
+registration. Combined real rehearsal, production prestate/backup/restore/apply,
+activation and delivery gates remain open. Do not apply six-part plus combined
+again, or mistake source registration for a committed migration.
+
+Exact pinned RT-image own-namespace capability also passes37875300: a bounded
+read-only, cap-drop-all/no-new-privileges64MiB child shares only the owned R5
+network namespace, `/usr/bin/readlink /proc/self/ns/net` matches fresh inside-PG
+Perl reads. Exact ID/name cleanup is REMOVED; no DB or configuration changed.
+Use this measured absolute command, not host ptrace access or guessed RPC output.

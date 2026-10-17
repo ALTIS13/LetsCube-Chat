@@ -16,8 +16,15 @@ NEW phased armed HOST/leaf diagnostics and NEW230..233 session fixture, then
 actual same-client CAS/rollback acceptance; not another blind replay. Kuhn owns
 source implementation, coordinator owns live execution. Armeda870/forward68e
 passes23; runner9081 passes5 after two review P2 RED/GREEN fixes. NEW94f99762a6a5
-programc5655ed8 is dispatched ONCE and awaiting result; do not replay/adopt
-UNKNOWN. Old857 is preparation only. Topic menu/raw snapshot/cache
+programc5655ed8 REFUSED at CLIENT/OtherError170127ms, raw proof84d24e02.
+No client artifacts/CAS/app phase; exact postmortemb4f82de0 confirms owned
+processes/env absent, tenant1/extension1/slots0,12 session rows exactly match
+known230 COMMITc6c363b9, catalog/epoch unchanged. No replay/append/renew/reset.
+Readonly54aef084 proves host /proc/PGPID/ns/net PermissionError13; inside-owned
+read4d0b1f9f succeeds without permission/config changes. Current binding always
+uses that unavailable host operation; Kuhn owns captured-ABI/root-cause/abort
+closure analysis before a new explicit known-COMMIT continuation. Old857 is
+preparation only. Topic menu/raw snapshot/cache
 fixes pass36, six loaded omissions and the adjacent refusal check; two review
 P2s are fixed by actual-hook/menu RED/GREEN. Final typecheck/build6afb0ffb77fda7b5/
 46.79s pass. Exact1440/390 light/dark Inter renders are diagnostic only until
@@ -25,7 +32,8 @@ Task6, not launch acceptance. MobileNext cloud inventory is available again;
 physical iPhone16/iOS18.6.2 canary is prepared, no paid allocation yet.
 Actual fullstack/provider/iPhone canary and coordinated
 migration/release remain open. Android source is reserved0.1.22/build23 (not built
-or published); public Stable22/D366 and foreign root sidebar/search/
+or published). Common migration20261017104253/27f6be34 is CLI-registered and
+mirrored, NOT applied/rehearsed as a combined production unit. Public Stable22/D366 and foreign root sidebar/search/
 Android overlay are unchanged; A063 excluded. Follow the linked report/ledger,
 not the historical checkpoints below. [Topic evidence](operations/2026-10-16-topic-notification-overrides.md),
 [iPhone evidence](operations/2026-10-17-iphone-message-preview-audit.md).
