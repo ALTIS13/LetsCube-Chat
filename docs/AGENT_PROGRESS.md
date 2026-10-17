@@ -23,6 +23,7 @@
 - Successor-провод запускался на том же контейнере, не родительский прогон 330. Миграция уведомлений применена только внутри изолированной базы. В production она не применялась.
 - Первый прогон отказал за 616 мс: `chat_members.role` — enum, скрипт передал text. Причина исправлена явным приведением к `chat_member_role`.
 - Повторный прогон, один, отказал за 717 мс: `topic_delivery_source_isolation_unavailable`. `private.topic_alert_source_lock` требует `transaction_isolation = read committed`, а провод шёл в `REPEATABLE READ`. Транзакция откатилась. Fastguard оба раза: `WITHIN_BUDGET`, inspect не стартовал. Принятием это не записано.
+- D-084: карточка обратной связи сведена в одну строку и больше не закрывает верх листа пересылки. Тест `tests/unit/feedback-card-line.test.mjs` был красным на `items-start` и стал зелёным. Runtime уведомлений не включался, Android 23 в каталог не публиковался.
 
 ## Не сделано
 
