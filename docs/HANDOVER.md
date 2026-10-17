@@ -1,6 +1,30 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-17:** coordinator, item77 Task6 plus SAME-release
+**Current resume,2026-10-17 12:08Z:** coordinator; item77 Task6 and SAME-release
+iPhone text previews, branch `codex/topic-alerts-20261016` in the canonical
+worktree below. Product source/migration/native candidate is `c6c67368`;
+subsequent checkpoint edits are documentation only. Android0.1.22/build23 is
+built and verified (APK13fc9b7d/AABfd3523a2, original signer, Firebase4 values,
+release flags/assets parity), NOT published/installed. Actual fresh logical
+backup and isolated recovery3b4692b2 pass, including768 constraints. Exact
+coordinated migration27f6be34 passes whole PG17 ROLLBACKfd5baacf:173 tables,
+10 sequences, catalog/data/epoch unchanged. Production SQL is NOT applied;
+web remains05f72b25 at the12:04Z observation. Last Android catalog observation
+is Stable22; Windows shell0.2.14 needs no rebuild for remote renderer changes.
+Actuald8abc52cba93 fails BrokenPipe afterCLIENT_READY; proof249e26f7 confirms
+all4 processes removed, tenant retired, initial checkpoint only. It does NOT
+prove whether client or validator failed. PUBLIC-only Docker client gap probe
+f023d907 passes; its exact temporary containers are removed. No lease230 renewal,
+reset or replay. NEW purpose-owned330..333 fixture/backup/driver and diagnostic
+parent are source preparation only, preserving all124 old sessions. Next: real
+330 finite wire/CAS/rollback with per-frame timings, Web-grant HTTP, coordinated
+install with runtimes OFF, bound consumers, activation/provider/iPhone canary,
+then Stable publication. No paid device allocated; A063 excluded. Foreign root
+sidebar/search and Android overlay hashes remain unchanged. Follow
+[current release evidence](operations/2026-10-17-coordinated-notification-release.md)
+and the private ledger, not the historical records below.
+
+**Earlier resume,2026-10-17:** coordinator, item77 Task6 plus SAME-release
 iPhone text previews; canonical worktree below, branch `codex/topic-alerts-20261016`,
 PWA source `17f1129c` (feature only, not production). DB50/browser30/worker25/
 ownership64/legacy53, exact settings1440/390 both themes, final source review,
