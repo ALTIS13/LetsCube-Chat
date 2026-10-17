@@ -11,10 +11,13 @@ finite QA budget is 480 s; per-op 15 s, cap80 and all fresh guards remain.
 Clone now has oldA retired, runtime enabled and A/B fenced. Do not replay/reset/
 reseed or rewrite original recovery/server/lease evidence. Readonly Realtime
 preflight passes (`04ad8b76...4c56540`): actual image 2.102.3, required publications
-present, but clone WAL is replica, not logical. Next: reviewed clone-only
-data-preserving WAL/epoch transition with backup and new append-only proof, then
-real legacy WS/REST on a new owned fixture. Hume owns inert transition source;
-no restart/config change yet. Client/provider/native/launch remain open; UI is not mounted.
+present, but clone WAL is replica, not logical. Exact-version source also shows
+Realtime startup/connect creates metadata/partitions. Next: a separately owned
+logical-WAL RT clone from the SAME immutable capture, reusing accepted recovery
+algorithms with new target proofs. Existing HTTP clone/data/evidence stay intact.
+Hume owns inert new-clone source, Kuhn readonly history/component checks; no new
+allocation/restart yet. Legacy WS/REST/client/provider/native/launch remain open;
+UI is not mounted.
 Reuse accepted source418/PG170/dispatch220/assembler32/selftest51. No production
 SQL/HBA/main push/native publication/paid allocation. Stable22/D366 unchanged by
 our actions. Preserve foreign sidebar/search/version paths; A063 excluded.

@@ -23,15 +23,18 @@ full requirements; cross-task requirements remain open until their consumers pas
 | 3 | Terminal suppression and structural lock repair source accepted,30d8dd80; final integrated PG17 suite170/170 includes the changed source and native/album binding. Full-schema/runtime remains open. |
 | 4 | Native/album bindingbdb346f4 plus prior maintained single/legacy/preparation reviewed; affected dispatcher220/220 and integrated PG17 suite170/170, zero skips. Actual provider/OS release gates remain open. |
 | 5 | State8016c799 and reviewed presentation4fc8e3af verified,155/155 and181/181; source requires the additive SQL, not a standalone release. |
-| 6 | Combined logical recovery VERIFIEDc6ec1775; actual network-none CLONE candidate/invite seed/enable PASSa098eeb4. No recovery/candidate replay. Actual PostgREST forward recovery PASSe0054b53 retains failed evidence. Batch38/corrected lease19 pass; measured catalog cost justifies finite480s TEST budget, per-op15s/cap80 unchanged, selftest51/review accepted. Actual HTTP48 PASS313158ms, receiptb7b31942: device/account CAS, real producers, terminal suppression, old-session refusal and retained-history rollback/resume. Clone now oldA retired/runtime enabled/A+B fenced: do not reset/replay. Next readonly Realtime preflight and actual legacy WS/REST on new owned fixture; client/provider/native/production gates remain open. Physical path hard-refused; accepted418/PG170/dispatcher220/assembler32 evidence reused. |
+| 6 | Logical recovery, candidate/invitation seed and PostgREST accepted. Actual HTTP48 PASS in 313158 ms, receipt b7b31942: account/device CAS, real producers, terminal suppression, old-session refusal and retained-history rollback. Readonly RT preflight passes; actual image 2.102.3, but current clone WAL is replica. Prepare a separate logical-WAL RT target from the same immutable capture with new proofs; preserve old clone/fences/evidence. Source selftest51/lease19/batch38 pass; earlier418/PG170/dispatch220/assembler32 reused. Actual RT/old-client/provider/native/production launch remain open. |
 | 7 | Compact componentf5e44185 passed25/25 and fictional20-state1440/390 light/dark pixels. No header mount, fullstack visual acceptance, reachable production toggle or native release for item77. Full Task6 gate still precedes release acceptance. |
 
 Next Task6 gate: actual readonly Realtime preflight passes (`04ad8b76`), image
 2.102.3 pinned, publications present. Clone `wal_level=replica` prevents logical
-replication. Prepare a reviewed clone-only data-preserving WAL/epoch transition,
-with verified QA backup and a new receipt; do not reset/reseed or rewrite the old
-HTTP/server proof. No restart/configuration change yet. Migration-history, fresh
-unfenced fixture, actual old/new WS/REST and delivery acceptance remain open.
+replication. Exact-version startup/connect also creates metadata/partitions.
+Prepare a separate RT-owned target from the same immutable capture, with logical
+WAL from first boot, accepted recovery algorithms and new target proofs. Preserve
+the original HTTP clone/data/evidence; no old replay/reset or new source dump.
+Capacity and source/clone migration-history compatibility precede allocation.
+No allocation/restart/configuration change yet. Fresh unfenced fixture, actual
+old/new WS/REST and delivery acceptance remain open.
 
 Detailed failures, evidence and limitations: [execution record](../../operations/2026-10-16-topic-notification-overrides.md).
 

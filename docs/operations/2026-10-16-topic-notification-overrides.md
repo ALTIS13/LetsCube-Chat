@@ -960,3 +960,36 @@ Do not restart the container, rewrite old initial/ready proofs, reset A/B fences
 or restore/reapply the accepted candidate. No such restart/configuration change
 has occurred. Actual Realtime startup, migration-history compatibility, fresh
 unfenced fixture and SDK/old/new consumer checks remain open. Production is unchanged.
+
+## Realtime Startup Boundary and Target Choice
+
+The exact public tag resolves to `cd952f26787d764b357eec01568f680137756293`;
+this pins source research, not proof of the image build's provenance. Its
+[entrypoint](https://github.com/supabase/realtime/blob/cd952f26787d764b357eec01568f680137756293/run.sh)
+always runs metadata migrations. Self-host seeding additionally replaces the
+matching tenant and performs maintenance; it is not appropriate for preserving
+the restored fixture. First tenant connect also runs migration reconciliation,
+partition creation and broadcast replication even when that entrypoint is bypassed.
+[Connection source](https://github.com/supabase/realtime/blob/cd952f26787d764b357eec01568f680137756293/lib/realtime/tenants/connect.ex).
+Exact history sets matter: 31 metadata and 72 tenant migration versions are in
+this source; neither their presence in the clone nor a no-DDL startup is proved.
+Do not forge migration history, copy real tenant secrets or blindly seed/upsert.
+
+Ruling after inspecting the existing supervisor/restorer: a separate RT-owned
+clone from the SAME immutable capture is less risky than extending the accepted
+HTTP target through a PG restart and subsequent Realtime DDL. The supervisor can
+survive a PG-only restart, but that would need backup/argv/epoch/rollback handoff
+and still lose the frozen catalog boundary during RT startup. The new target
+instead boots with complete socket-only/cron-off/net-disabled options plus
+logical WAL, under a new owner/root/intents/proofs/cleanup scope. Capacity for
+the additional bounded clone and RT process must be checked first. Capture
+owner/root/pins remain distinct readonly inputs; changing a name or relabelling
+an old receipt is not sufficient.
+
+Accepted recovery/ACL/comment/constraint/data algorithms are reused, not rerun
+as work on the old target. Applying the candidate and a fresh unfenced fixture
+once on the new target is a new Realtime stage, not another HTTP48 replay.
+The existing HTTP clone, data, fences and all original proofs stay unchanged.
+Hume owns the inert adaptation, Kuhn readonly source/clone history/component/
+plugin/role/tool metadata, and Leibniz independent review. No new allocation,
+PG restart, configuration change, migration-history write or RT startup occurred.

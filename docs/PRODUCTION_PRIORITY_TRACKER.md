@@ -3972,9 +3972,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     account/device CAS, real producers, terminal suppression, retired session,
     retained-history rollback/resume. Clone now A/B fenced, oldA retired/runtime
     enabled; no reset/replay. Readonly Realtime preflight passes: image 2.102.3,
-    publications present, but clone WAL is replica. Next reviewed clone-only
-    data-preserving WAL/epoch transition with backup/new proof, then actual legacy
-    WS/REST using new owned fixture. No restart/configuration change yet.
+    publications present, but clone WAL is replica. Exact-version startup also
+    changes metadata/partitions. Next: separate RT-owned logical-WAL target from
+    the same immutable capture, accepted algorithms and new proofs; preserve the
+    accepted HTTP target. Capacity/history checks precede allocation, then actual
+    legacy WS/REST with a fresh fixture. No allocation/restart/config change yet.
     Realtime/delivery/launch remain open.
     Full delivery/Realtime, old-client compatibility and rollout stay open.
     No production migration/UI/native release or feature completion inferred.
