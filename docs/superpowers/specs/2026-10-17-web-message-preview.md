@@ -1,8 +1,10 @@
 # Web message preview DB/client contract
 
-2026-10-17. Owner: DB sidecar. Stage: API fixed, SQL/tests in progress. Source-only; no live apply or iPhone acceptance. Same planned release as Android readable previews; Android/native and topic implementations unchanged.
+2026-10-17. Owner: DB sidecar. Stage: DB source complete, ABI frozen, 50/50 owned-fixture tests PASS. Source-only; no live apply or iPhone acceptance. Same planned release as Android readable previews; Android/native and topic implementations unchanged.
 
 ## Stable RPC ABI
+
+ABI FREEZE: browser-generated 32-byte secret / hash-only authenticated enroll. This supersedes the provisional server-generated-secret draft circulated during planning; feature checkpoint `dee61a13` already contains the hash-only signature. No further field/signature changes without a coordinated contract update to both client and worker owners.
 
 PostgREST RPCs return `TABLE`: JSON array, exactly one row on success, `[]` on unavailable/refused lookup/context. No arbitrary Map root. Names below are final for client preparation.
 
@@ -60,4 +62,10 @@ Proposed provider selector for coordinator-owned wiring: `web_preview: {preview_
 
 ## Checkpoint
 
-Owner changed the provisional server-issued-secret ABI to client-generated/hash-enroll before client integration: enroll signature now has `p_grant_hash`, no secret response, common DTO remains exactly 10 keys; content unchanged. Next: finish real SQL owned-fixture verification and omission controls. No production/clone SQL, provider calls, shared source edits, or commits. Client/module work may target this ABI now; lifecycle/worker storage and physical iPhone proof remain separate same-release work.
+The coordinator selected client-generated/hash-enroll under the delegated implementation authority: enroll signature has `p_grant_hash`, no secret response, common DTO exactly 10 keys; content unchanged. Hume and Leib both received the exact frozen ABI directly.
+
+Source: `docs/proposals/2026-10-17-web-message-preview.sql`, companion `.rollback.sql`, `tests/server/web-message-preview-db.test.mjs`. Runtime installs **OFF**. The proposal adds only private state, four public Web RPCs, internal descriptor/retirement helpers and two retirement triggers; no native/topic function replacement.
+
+Verification: `node --test tests/server/web-message-preview-db.test.mjs` -> **50 PASS / 0 FAIL / 0 SKIP**, 33.92 seconds. Genuine RED: missing browser RPC; new hash-enroll signature; enrolling JWT expiring during a real SQL wait; unchanged helper body with changed definer search path. All GREEN. Five compiled omission controls expose actual content despite denied read/session-owner/choice-ABA/descriptor/delivery state; a sixth RLS omission raises and rolls back all feature objects. Single/album and another own installation are checked against real captured producer/visibility/topic SQL. Web-only revoke leaves native SQL preview/account choice unchanged.
+
+Limits: PGlite executes actual SQL, with explicitly synthetic Auth/role/schema boundaries; this does not verify JWT signatures, real PG17 concurrency/PostgREST ACL transport, provider delivery or iPhone behavior. Dependency pins are source/fixture bindings, not a new live catalog observation. Actual guarded PG17/prestate and HTTP checks, registered/mirrored migration plus verified backup, client/worker lifecycle and physical iPhone canary remain coordinator-owned same-release work. No production/clone SQL, provider calls, shared product edits, Git writes or private artifact changes occurred. Next: independent source review and coordinator's bounded real-system verification; no automatic apply/enabling/replay.

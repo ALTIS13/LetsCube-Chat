@@ -29,19 +29,24 @@ are unchanged after ROLLBACK. Do not repeat accepted metadata work. The original
 QA sessions aged naturally; never extend their expiry or weaken old checks.
 Append-only lease b4e2/checkpoint0414 pass9 source cases and independent review;
 create NEW sessions only just before an admitted run, retaining all old rows.
-Parent/HOST source29 coordinator checks pass; review's validator budget P2 is
-fixed1687 with genuine boundary proof. Actual97c failed before intent (missing
-outer signal import); corrected no-injected-import test passes. Changed5c2d
-fails at lease readiness; validator is removed, four old sessions/zero new.
-Only profile-name/invite-label literals were copied from R4 instead of pinned
-R5 forward2. Leib owns that narrow lease fix, then Hume repins HOST. Retain both
-failed attempts; do not retry them, weaken checks, reset or reseed.
+Parent/HOST source29 checks and exact1687 validator-budget control pass. Original
+97c/5c2d failures are retained, import/fixture-literal causes fixed. Lease150
+passes actual pristine SQL6ca7 plus source12; HOST4ee is a pin-only update.
+Actual b83 creates and verifies the NEW lease16bfd2d8, then refuses during
+PostgREST startup; validator/PostgREST/Perl are removed, no RT/tenant/client.
+R5 now retains old4+new4 sessions: do not append again, renew, reset or reseed.
+Kuhn owns source-only explicit known-COMMIT continuation around frozen4ee,
+including fresh custody and new owned process/receipt paths. Aggregate15s
+startup timeout is under investigation, not proven by a later successful SQL.
 Latest owner requirement: readable message text in iPhone PWA push must ship
 in this same release, preserving preview/privacy choices. New plan/spec are
 published. Kuhn owns additive grant DB/tests, Hume browser lifecycle/settings,
 Leib worker after lease repair, coordinator Edge selector/final assembly.
 Single/album selector transport RED/GREEN and114 affected tests pass; generic
-fallback remains safe. Worker/DB/physical iPhone and common release remain open.
+fallback remains safe. Web-grant proposal/rollback and fixed hash-only enroll
+ABI pass50 coordinator PGlite tests; no PG17/apply/physical delivery claim.
+Hume browser UI/lifecycle and Leib worker remain WIP. Cloud catalog timed out;
+no paid allocation. Physical iPhone and common release gates remain open.
 No live relay/HTTP/RT, tenant or JWT.
 Next: finite composed service/SDK controller and actual delivery with fresh
 phase-aware guards. Provider/native/launch gates remain open; UI is unmounted.

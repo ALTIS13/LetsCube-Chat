@@ -46,3 +46,16 @@ Declarative WebPush может показать fallback без worker; дост
 ## Handoff
 
 Owner: bounded audit sidecar. Stage: source cause/scope ready. Evidence: перечисленные текущие файлы и primary docs; существующие suites не запускались повторно. Blocker: Web preview binding/content/lifecycle пока отсутствуют, physical iPhone delivery не доказана. Next: coordinator назначает эти additive изменения в общий release scope; provider/SW исходники этим audit не изменены. Создан только этот отчёт; Android, frozen guard и private artifacts не затронуты.
+
+## Implementation Follow-Up
+
+The source-only DB proposal/rollback now exists and passes50 coordinator
+PGlite cases, with genuine denial/omission tests and runtime OFF. The frozen
+spec uses a browser-generated secret and hash-only authenticated enrollment;
+no raw secret is generated/returned by enroll. Actual single/album Edge paths
+now carry selectors only;114 affected tests and the focused loaded-omission
+checks pass while both display fallbacks remain generic. This is not a deployed
+feature. Browser settings/lifecycle and worker implementation are in progress.
+Real PG17/HTTP, safe migration and physical iPhone canary remain same-release
+requirements. MobileNext local inventory works; its cloud catalog request
+timed out, with no device reservation or paid minutes consumed.
