@@ -3965,9 +3965,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     HTTP transport17/17, seed21/21 and initial-prepare17/17 remain source evidence;
     actual clone requires legitimate synthetic invitations. New invite seed22/22
     and fail-off prepare15/15 pass; actual CLONE candidate/seed/enable COMMITs
-    PASSa098eeb4. No PostgREST/HTTP acceptance yet. Reviewed PostgREST DB-epoch/
-    flag fixes, HTTP/Realtime/delivery/rollback/launch remain open.
-    Full-schema/PostgREST/Realtime, old-client compatibility and rollout stay open.
+    PASSa098eeb4. Actual PostgREST forward recovery PASSe0054b53 preserves failed
+    startup artifacts. Batch38/corrected lease19 source pass; measured catalog
+    cost justifies480s finite TEST budget, per-op15s/cap80 preserved, selftest51
+    and independent review accepted. Actual HTTP48 PASS313158ms, receiptb7b31942:
+    account/device CAS, real producers, terminal suppression, retired session,
+    retained-history rollback/resume. Clone now A/B fenced, oldA retired/runtime
+    enabled; no reset/replay. Readonly Realtime preflight passes: image 2.102.3,
+    publications present, but clone WAL is replica. Next reviewed clone-only
+    data-preserving WAL/epoch transition with backup/new proof, then actual legacy
+    WS/REST using new owned fixture. No restart/configuration change yet.
+    Realtime/delivery/launch remain open.
+    Full delivery/Realtime, old-client compatibility and rollout stay open.
     No production migration/UI/native release or feature completion inferred.
     [Evidence and current checkpoint](operations/2026-10-16-topic-notification-overrides.md).
     Same voice note: silence a busy parent chat while explicitly enabling one

@@ -1,30 +1,23 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-17,item77:** coordinator; worktree
+**Current resume, 2026-10-17, item77:** coordinator; worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, checkpoint6d9778a6 (not main/deployed). Accepted source
-418/418, PG17/dispatcher170/220, SQL assembly32/32 and HTTP selftest48/48 stand;
-the compact UI is not mounted. Task6: immutable R4 capture and source/archive
-4817-statement AST equality pass. Reviewed restorer2 (15/15) recovered ALL14
-schema ACLs and passed actual logical catalog/data/sequence/control comparison.
-Its three DDL files transferred byte-identically; local verification refuses
-RESTORE2_SCHEMA_AST_DIFFERENCE was resolved by calibrated metadata recovery,
-exact schema ACL catalogs and proved disjoint default-ACL ordering, not a generic
-ignore. Finalizer3acd96db4 passed18/18 after reviewed post-dump ACL race repair;
-actual phase/data/control/DDL transfer and combined recovery verification PASS,
-receiptc6ec1775...1b2ee3,768 constraints equal. Unfiltered SQL ASTs differ; the
-receipt names the precise combined proof. Original capture remains immutable.
-Exact owned restore2 clone stays network-none for HTTP acceptance. Transport17/17
-and initial seed/prepare21/17 source checks stand; actual clone requires invites.
-Legitimate invite seed22/22 and prepare15/15 pass; independent review found no new
-seed defects. Actual CLONE candidate/seed/enable three COMMITs PASS, initial
-stagea098eeb4...bc35ee. Do NOT rerun restore/finalizer/baseline checks against this
-now-modified clone or reapply candidate SQL. Hume owns PostgREST reviewed DB-epoch/
-flag fixes and bounded bridge source. Actual PostgREST/HTTP are not accepted yet.
-Next: private loopback API/CAS/session/rollback, then Realtime/delivery/launch.
-Physical backup remains hard-refused. No application SQL/HBA reload/main push/
-native publication; Stable22/D366 unchanged. Root divergent; preserve foreign
-sidebar/search/version paths, A063 excluded.
+`codex/topic-alerts-20261016`, checkpoint `ede0024c` (not main/deployed).
+Task6 logical recovery, actual candidate/invitation seed and PostgREST forward
+recovery pass. Actual HTTP48 passes in 313158 ms: account/device CAS, real
+producers, terminal suppression, retired-session refusal and retained-history
+rollback/resume; receipt `b7b31942...8055150`, not fullstack acceptance. Reviewed
+finite QA budget is 480 s; per-op 15 s, cap80 and all fresh guards remain.
+Clone now has oldA retired, runtime enabled and A/B fenced. Do not replay/reset/
+reseed or rewrite original recovery/server/lease evidence. Readonly Realtime
+preflight passes (`04ad8b76...4c56540`): actual image 2.102.3, required publications
+present, but clone WAL is replica, not logical. Next: reviewed clone-only
+data-preserving WAL/epoch transition with backup and new append-only proof, then
+real legacy WS/REST on a new owned fixture. Hume owns inert transition source;
+no restart/config change yet. Client/provider/native/launch remain open; UI is not mounted.
+Reuse accepted source418/PG170/dispatch220/assembler32/selftest51. No production
+SQL/HBA/main push/native publication/paid allocation. Stable22/D366 unchanged by
+our actions. Preserve foreign sidebar/search/version paths; A063 excluded.
 [Detailed evidence and limits](operations/2026-10-16-topic-notification-overrides.md).
 
 **Accepted prior web release,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is

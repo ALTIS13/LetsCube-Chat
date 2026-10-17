@@ -821,3 +821,142 @@ fix pass before first startup. A source-pinned inert starter builds successfully
 JWT issuance/startup is intentionally delayed until the finite HTTP bridge is
 ready, avoiding credential expiry while source is prepared. Production and native
 packages remain unchanged; no private credentials are printed or committed.
+
+## PostgREST Runtime and Fresh Guard Batching
+
+The first actual startup refused before HTTP: the PostgreSQL-only binary path
+was incorrectly reused for env/timeout/cat. The clone remained alive, unchanged
+incarnation, no restart/OOM. Exact runtime paths and bounded timeout were
+calibrated on that clone; the binary itself reported PostgREST14.12. One reviewed
+explicit forward recovery archived the failed payloads and retained the original
+intent byte-identically before starting the service. Ready metadata is pinned at
+e0054b530cdf484b7b0952b2819dee6cfb556dd3cea3e2ffceac21a94872aceb.
+Original failed artifacts and forward/archive proof are separate, not rewritten.
+
+A Windows child-process minimal environment then prevented SSH attachment. A
+safe true-command differential isolated that environment contract; only the new
+bridge's local spawn adapter inherits process.env. Frozen PG/transport/server
+ready were not changed. Actual readonly attach and three guards passed, zero
+HTTP requests: attach9222ms, checks4252/4081/4256ms. This is not HTTP acceptance.
+Roughly155 SSH calls would exceed the unchanged public180s scenario deadline.
+
+The correction batches the same fresh Docker/process/key/config/role/fixture/
+runtime/full-catalog/DB-epoch checks, rather than caching results or raising the
+deadline. Original service evidence is kept distinct from short-lived client
+credentials: a new900s lease uses the existing isolated key and fresh actual
+session validation, with a new private proof/pack, never a rewritten old ready.
+Fast source38/38 and lease source15/15 passed together53/53, zero skips. Independent
+review found one P2: the inherited QA issuer omitted is_anonymous=false required
+by the real SQL identity function, while the frozen driver accepted exactly the
+old seven claims. Hume owns one focused new-lease issuer/compiled-validator fix
+with a token-to-actual-SQL RED/GREEN control. No old lease was issued and no real
+HTTP/CAS request has been sent. Actual speed and HTTP48 acceptance remain open;
+Realtime/provider/client/native/production acceptance is still separate.
+
+## Old Consumer Compatibility Boundary
+
+Readonly source analysis confirms the candidate already fences the legacy feed
+account-wide in the same transaction as the first successful explicit enabled/
+disabled preference. The restrictive SELECT policy and private fence do not
+depend on a document's ACK, heartbeat, session list or package version. Old and
+new tabs can share a JWT/session, so a new per-session capability registry would
+not solve that boundary. The v2 reader retains own visible history/read state;
+the current hook has no legacy fallback. Returning to inherit or runtime rollback
+does not erase the fence or terminal alert suppression.
+
+This is a deliberate old-client upgrade cost, not feed-row deletion. Actual
+legacy REST before/after activation, an already-subscribed WebSocket, same-JWT
+old/new consumers and Windows focus refresh remain required runtime checks.
+Already-authorized queued frames/callbacks and provider-accepted cards cannot be
+claimed recalled merely because future SELECT/alert admission now refuses.
+No separate capability schema or unchanged-old-client compatibility is inferred.
+
+## Corrected QA Identity and Measured Budget
+
+The review P2 went genuinely RED at both boundaries, then GREEN: new lease
+691937cd/tests7b870920 pass19/19. It adds literal is_anonymous=false and recomputes
+HMAC; the new compiled validator accepts exactly eight claims and boolean false.
+The actual SQL identity gate is exercised with ordinary/anonymous/missing claim,
+expired/foreign session and ban cases. Frozen PG/transport/bridge/server evidence
+was not rewritten. One actual http-r2 QA lease was issued, metadata-only proof
+e4f47a71918ab1f36f3591c7379adde9cedf2b924fa7670bfca1ecd75958ae1e. Its bound driver
+d2a2bb7a0935f91c47372c38b9874ce05c6adc542095291f6b7adddc35524033 attached in1941ms;
+three fresh guards took2013/1928/2198ms, with zero HTTP requests.
+
+A single-SSH readonly timing control then located the cost: server4223.562ms of
+host5382ms, three fresh guards1426.271/1390.188/1347.747ms. Each batch took1261-
+1318ms; Docker inspections took38-63ms. Nine Docker calls, no HTTP or lease issue.
+That disproves the earlier dominant-SSH hypothesis. Persistent SSH alone would
+still exceed180s, so its unexecuted prototype was stopped and retained.
+
+Ruling: the original180s TEST budget had no measured basis. Keep every fresh
+catalog/identity/epoch/role/fixture/lease guard,15s individual operation and80 HTTP
+cap, but allow a finite480s total (500s runner wrapper), below the900s QA JWT TTL.
+This is not a production timeout or permission change. The literal virtual-clock
+case went RED after210s against the old helper, then GREEN through479999ms and
+refused at480000ms; loaded180s/600s mutations are detected. Selftest51/51, zero
+skips, independent focused review accepted. Current helper140fe16a/tests1ff27bff.
+
+The actual48-request HTTP/CAS/session/rollback scenario has now started ONCE on
+that owned clone. Its attempt marker is durable; completion is not yet known.
+Do not retry or reseed after an interruption/unknown commit. Realtime, provider,
+client/native, old-consumer and production launch acceptance remain open.
+
+## Actual HTTP Slice Accepted
+
+The single http-r2 attempt completed successfully in313158ms, under the measured
+finite480s limit. Receipt SHA256:
+b7b319422af1d6ad44eedad6ebabf009a9a9c2614328a4b9d75fe55a98055150.
+It records48 real authenticated HTTP requests, boundary
+HTTP_CAS_SESSION_ROLLBACK_ONLY and explicitly fullstackAccepted=false.
+
+Actual PostgREST/PG17 confirmed account-owned CAS/read across two A sessions,
+stale-revision conflict, independent B preferences, null/general alias collision,
+four real message producers and fresh alert decisions. Disable makes previous
+alerts terminal even after re-enable; the retired oldA JWT is refused for read
+and write. Runtime rollback refuses new preference writes/reads, preserves
+revision/history and suppression, and resume does not revive old alerts. A new
+post-resume message remains eligible under the newly confirmed preference.
+Feed payload/read/created history hashes and the terminal timestamp are retained.
+No policy/producer was mocked; no provider/OS acceptance follows from that fact.
+
+The clone now intentionally has oldA retired, runtime enabled, A topic revision5,
+general disabled revision1, second topic enabled revision1, B topic revision1,
+and account-wide legacy fences for A/B. Do not replay the completed slice,
+restore/reseed or erase fences to obtain preactivation controls. The original
+candidate/ready/archive/lease/attempt files remain intact. Test budget source is
+commitede0024c; no application-source change, production SQL/main push or native
+publication occurred. Next: readonly Realtime image/schema/replication preflight,
+then one actual legacy WS/REST compatibility slice using a separately owned fresh
+fixture. Real WebSocket/client/provider/native and launch gates remain open.
+
+## Actual Realtime Preflight
+
+New readonly metadata source passed 13/13 and independent review. Its first
+actual inventory refused at Docker's image-format contract; no metadata acceptance
+was claimed. A bounded diagnostic located the image-only formatter. An actual
+controlled pair kept all fields and changed only image .Id to .ID: the original
+refused, the latter passed. No raw image configuration or stderr was printed.
+The original generator/attempt stayed frozen; a minimal new wrapper went RED on
+the literal field, then 6/6 GREEN including generated selection and drift controls.
+
+Actual V2 preflight passed with clone/PG epoch checks before and after:
+receipt SHA256 04ad8b765b7a2c01943665b8596c1c84fcdfdaaa80661f88aad322c224c56540.
+The running service is supabase/realtime:v2.102.3, image/repository digest
+sha256:aa1c92c0cf326007563641730ec9da9c60478caa6853887775365fa2c097a471.
+Optional version/revision labels are absent, not invented from the tag.
+The clone has zero slots/senders, capacity10/10, and both realtime/_realtime
+schemas with schema_migrations(version bigint, inserted_at timestamp(0)).
+Migration-version rows, tenant data, service configuration and keys were NOT read.
+The 36-table supabase_realtime publication contains notifications and
+notification_feed_events_v2. This is metadata, not successful WAL delivery.
+
+Concrete next gate: clone wal_level is replica, not logical. Starting Realtime
+now cannot prove actual logical replication. Prepare a reviewed clone-only,
+data-preserving PostgreSQL epoch transition: verified owned QA backup, exact old
+process/arguments/settings, all catalog/data/sequence/role checks before/after,
+socket-only/cron-off/network isolation retained, and a new append-only receipt.
+Do not restart the container, rewrite old initial/ready proofs, reset A/B fences
+or restore/reapply the accepted candidate. No such restart/configuration change
+has occurred. Actual Realtime startup, migration-history compatibility, fresh
+unfenced fixture and SDK/old/new consumer checks remain open. Production is unchanged.
