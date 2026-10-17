@@ -2,21 +2,21 @@
 
 **Current resume,2026-10-17,item77:** coordinator; main-based worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, base05f72b25, sourcebdb346f4 (local only). Task3
-terminal/lock repair30d8dd80 and native/album bindingbdb346f4 passed independent
-review, full isolated PG17 suite170/170 and dispatcher220/220, zero skips.
-Task5 client181/181/typecheck/build549c202c7c1054a5 is unchanged. Exact synthetic
-container cleanup passed, including one orphan DB and zero open connections.
-Fresh verified full-schema backup exists; restore refused before first start:
-Docker pre-start tmpfs reporting and a destructive-to-tmpfs container restart
-need launcher repair. Kuhn owns that private launcher/test scope; coordinator
-integrates. Versioned-feed compatibility design is selected, not implemented.
-Next: bounded owned-clone recovery, full-schema/PostgREST and compatibility,
-safe migration,
-then reachable control and supported-client release. No production SQL/main
-push/native publication in this item; current Stable22/D366 stay unchanged.
-Root is divergent; preserve its foreign sidebar/search and version paths;
-A063 excluded. [Current source/evidence](operations/2026-10-16-topic-notification-overrides.md).
+`codex/topic-alerts-20261016`, sourcef5e44185 (not main/deployed). V2 feedc82104d2,
+monotone revisions and commit-time ownership passed320/320, SQL/producer9/9,
+typecheck and build4a7dbfc49a80fe21/12.78s. Prior PG17/dispatcher170/220 stands.
+Lifecyclef044e3ae passed73/73 and independent review. Task7 componentf5e44185
+passed25/25 and one20-state1440/390 light/dark fictional render batch; not mounted
+or fullstack-accepted UI. No new actionable lifecycle review findings remain.
+Blocker: logical restore lost real extension metadata. Exact obsolete R2 was
+cleaned; backup/failure receipts retained. Physical launcher43/43 now fences
+same-CID restart inside its worker. It remains preparation-only, hard-blocked
+before writes until safe no-pending-reload proof. Kuhn owns separate read-only
+parser/config diagnosis; other worker scopes are complete. Next: faithful full-schema
+restore, HTTP/Realtime/rollback/delivery gates, then safe launch. No production
+application SQL, HBA reload, main push or native publication. Stable22/D366 stay
+unchanged. Root divergent; preserve foreign sidebar/search/version, A063 excluded.
+[Detailed evidence and limits](operations/2026-10-16-topic-notification-overrides.md).
 
 **Accepted prior web release,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is
 deployed and accepted: single healthy exact image, old/new compiled markers,

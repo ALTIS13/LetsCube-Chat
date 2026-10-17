@@ -346,3 +346,166 @@ ownership; no blind restore/backup replay, shared state override or production
 service restart. Current r1 clone is stopped, not an accepted restored database.
 Full-schema authenticated HTTP, candidate/rollback, v2 transport/legacy fence,
 actual delivery/UI and platform rollout remain open. Stable22/D366 are unchanged.
+
+R1 follow-up: a retained actual running synthetic-container receipt also had
+Mounts=[], so the first34/34 recovery source was rejected before live use.
+Kernel-mount validation then passed36/36. Live one-shot recovery replaced only
+the exact CREATED/never-started CID and launched the supervisor, but correctly
+refused at clone-start before globals: Docker mounted /qa with default noexec.
+No copied production rows/globals/archive were restored. The exact failed clone
+was stopped/removed with source-target before/after identity unchanged; original
+R1 backup, CIDs and failure receipts remain. No images were pruned.
+
+Explicit exec is now declared only on /qa for the pinned PostgREST executable;
+/tmp remains noexec. Coordinator offline38/38 and compiled omission controls pass
+in the private fullstack-exec-final.log. Actual /qa exec and full restore/HTTP
+are not yet proven. Kuhn prepares a fixed R2 attempt which adopts the verified
+R1 artifacts with immutable provenance instead of taking another dump; no live
+R2 adoption/allocation has run. New v2 SQL/server tests and pure client/helper
+tests are in separate worker scopes; the existing hook is not yet changed.
+
+R2 follow-up: coordinator source controls38/38 plus adoption5/5 passed in two
+explicit runs (the first command accidentally selected only the38 existing
+tests, so it is not labelled a single43/43 run). Actual fixed R2 adoption passed,
+reusing the verified R1 archive with immutable provenance and no new dump. Actual
+restore completed globals/archive and preserved the container/tmpfs across
+pg_ctl restart, then refused at the strict compare stage. The exact network-none
+R2 clone remains running for bounded metadata-only diagnosis. There is no
+accepted restore/HTTP proof; no comparison was relaxed and no production SQL ran.
+
+V2 source checkpoint: coordinator server49/49 PGlite passed, but independent
+review found missing source/access invalidation for already read/terminal rows;
+membership loss could make lookup unavailable without signalling the live client.
+Leibniz repairs the new sidecar source emitters without rewriting history or
+reopening Task3. Empty-feed refresh also called a1..100-ID lookup with an empty
+array; the helper now skips only that empty lookup while retaining real page/
+owner authority. A fresh helper plus actual-SQL/parser cross run passes82/82
+(80 unit +2 contract), zero skips; log output/topic-alert-feed-v2-client-final.log.
+It is not PostgREST/Realtime wire proof. Existing hook remains unchanged.
+
+## Revision and Recovery Follow-Up
+
+The later frozen revision candidate passed one coordinator run205/205, zero
+skips/failures: server106, pure helper96 and actual-SQL/client-envelope cross3.
+Log: `output/topic-alert-feed-v2-revision-integrated.log`. The previous cross3
+RED is retained. This acceptance precedes the next independent finding: a lower
+revision could carry read-proof discarded by the higher-revision payload merge.
+Hume repairs that monotone overlay and integrates the real hook; the earlier
+client typecheck/build is not acceptance of this changed hook.
+
+The logical R2 copy lost real extension-owned search-path settings, schema ACLs
+and two indexes. It is not a faithful recovery copy; no drift allowance or
+hand-repair was applied. Existing PG17 tools support standard physical backup.
+An actual read-only replication `IDENTIFY_SYSTEM` attempt refused at HBA without
+creating a backup/slot or changing roles/configuration. Metadata confirms an
+existing replication-capable DB postgres and matching OS UID100, plus a writable
+exact HBA path. A narrowly scoped temporary local-peer recipe and its failure/CAS
+controls are being prepared privately for review. No config write/reload or
+physical backup has run. After diagnosis, exact owned R2 cleanup passed through
+the pinned launcher: container absent, source identity checked, private artifacts
+retained. No candidate SQL, PostgREST, Realtime wire or fullstack acceptance is
+claimed.
+
+Changed client coordinator verification passes163/163 (helper105, mounted-hook55,
+SQL-envelope cross3), zero skips/failures. Nine changed-helper SQL/producer/
+composition checks pass separately. Full kub typecheck and production build
+`f5fcce77b542808d`/11.98s pass. Existing sourcemap/mixed-import/chunk warnings remain;
+this is not an application deployment. Independent hook review and adaptation of
+the older raw-feed test ports remain open; the initial affected run61PASS/59FAIL
+is not relabelled as a clean suite.
+
+## Commit-Time Ownership Repair
+
+The migrated affected fixtures exposed a genuine queued React-state race:
+`QUEUED_V2_ROW_MUST_RETIRE` failed when a received read frame was queued, its
+owner retired, then React applied that frame. The earlier receive-time guard
+could not fence a later state commit. The coordinator reproduced the RED before
+repairing the actual hook with commit-time functional setters; adjacent loading,
+error and redisplay publications now use the same owner boundary. A compiled
+guard omission restores the literal failure. The minified wiring sensor follows
+the guarded setter and rejects disconnected row transforms/receivers.
+
+One coordinator affected run now passes320/320, zero skips/failures, in
+`output/topic-alert-feed-v2-commit-owner-final.log`. It includes the migrated
+read/Windows/DND/audio suites, helper, mounted hook and actual SQL-envelope/parser
+cross. The unchanged SQL-only106 and dispatcher/PG17 evidence are not rerun.
+The earlier215PASS/1FAIL and pre-repair build remain history, not current build
+acceptance. Independent whole-integration review was clean before this repair;
+the coordinator's genuine RED/GREEN and omission verify its narrow fix pass.
+
+Task7's compact component/behavioral source is being prepared independently while
+Task6 recovery gates remain open. No header mount, visual acceptance, production
+toggle or release is implied by that parallel preparation. The existing menu/
+Liquid Glass and canonical general aliases remain the design authority.
+
+The reviewed feed/actual-hook slice is committed locally as `c82104d2`.
+Final changed-source kub typecheck passes; actual build marker
+`4a7dbfc49a80fe21` completes in12.78s, retaining the known build warnings.
+The candidate is not pushed or deployed. Lifecycle supplement/worker coordinator
+verification passes73/73 (44unit +29server), zero skips/failures, in
+`output/topic-alert-feed-maintenance-final.log`; its independent review remains
+open. Default-off maintenance has no clients/timers/logs, and its actual logger
+receives only explicit counters/backlog/error codes. The SDK request has a30s
+abort deadline; already accepted database work is not recalled by that deadline.
+
+## Reviewed Preparation Checkpoint
+
+Lifecycle source is committed as `f044e3ae`; independent review found no new
+P1/P2. The coordinator API build passes and its startup consumer is present.
+Maintenance budgets are explicit: two100-row discovery windows, at most10
+accounts/pending IDs, at most1000 retention and1000 orphan event deletions per
+tick, plus at most10 fence deletions.24h is an eligibility cutoff, not a backlog
+SLA. No Auth/profile deletion trigger or activity-lock change was introduced.
+
+Task7's compact component is committed as `f5e44185`: actual React/preference-hook
+25/25 with7 behavioral omissions. A separate final-CSS render batch covers20
+fictional states across1440/390 and light/dark, including pending/conflict/error,
+long title, keyboard/radio behavior and44px targets. It has zero external
+requests/page errors. The first capture missed index.html's colorScheme setting;
+the corrected fixture now matches it, and only the affected visual batch was
+rerun. The coordinator inspected the contact sheet and individual final dark/
+light pixels. Impeccable detector returns an empty finding list. Evidence:
+`output/topic-notification-control-source-final.log`,
+`output/topic-notification-control-visual-final.log`,
+`output/topic-notification-control-contact-sheet.png`.
+This is not a header mount, a physical device, fullstack visual acceptance or a
+launched feature. Its optional visual harness is pinned to this exact compiled
+CSS artifact, not advertised as an arbitrary future-build visual suite.
+
+Private physical-backup source review found a same-CID restart gap: an outer
+Docker check plus unchanged cluster ID did not fence a later `docker exec`.
+The worker now requires boot/init/postmaster start identity before its effects;
+coordinator offline43/43 and restart-zero-write/reload omission controls pass.
+Source SHA256332f1754b03224dec930a84e64b9dd6596b892088f38738ba975d79444cb7672.
+Both public/generated backup entrypoints still refuse before I/O while reload
+equivalence is unproven. No actual HBA write/reload, physical backup or restore
+was performed. A separate read-only parser probe's initial positive control
+refused; classification/own invocation diagnosis is ongoing, not a production
+configuration-error conclusion. Unresolved external-key scope is not waived.
+
+Fresh origin/main remains05f72b25. Outgoing14-commit own-tree check parses74
+changed source/test files and resolves71 actual aliases in their own trees;
+comments/template strings are not counted as imports. Read-only Coolify metadata
+confirms all five repository applications use main. The candidate branch is not
+a Stable deployment or permission to bypass the remaining runtime gates.
+
+One final assembled-source run, explicitly QA0 and sequential across the changed
+boundaries, passes418/418, zero skips/failures,60657ms:
+`output/topic-alert-feed-assembled-source-final.log`. This combines current feed,
+hook, read/Windows/DND/audio, lifecycle and compact component checks; it does not
+replay the unchanged full PG17/dispatcher suites or establish real delivery.
+The four protected foreign sidebar/search/version hashes still match the saved
+prestate. No Android, iOS, Windows package or personal production screen was used
+for these source/fictional checks.
+
+The first parser refusal was a probe-environment defect, not a proven source
+configuration error: env clearing omitted the observed locale archive. A single
+corrected calibration and one read-only sweep now pass3/3 controls and43 raw GUC
+comparisons, with0 mismatches and20 explicitly unexamined settings.46 parser
+executions return0;11 files/61 config rows have stable metadata/load identity and
+zero parse errors/pending_restart. Load time predates both new backend starts.
+The20 gaps include12 extension GUCs,6 sensitive/command/connection GUCs, one
+session/role override and one file-only name. This is not reload authorization.
+Independent review additionally found a removed-include selection gap; a bounded
+coverage repair/applicability probe is assigned. No full sweep replay, reload or
+authentication change is authorized by the positive aggregate alone.

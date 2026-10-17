@@ -298,6 +298,27 @@ the header, recorded byte-identical in `.migration-backup/supabase/migrations/`,
 applied as `supabase_admin` where `postgres` does not own the objects. The
 delegation of design decisions does not relax this.
 
+**Archive integrity is not faithful recovery.** The2026-10-17 R2 restore ran to
+completion but its strict catalog comparison found missing extension-owned
+function settings, schema privileges and indexes. PostgreSQL documents that
+modified extension members are not individually exported by pg_dump. Preserve
+the refusal and use a complete validated backup/restore strategy, not a drift
+allowlist or a claim based only on checksums/pg_restore exit0.
+[PostgreSQL17 extension backup contract](https://www.postgresql.org/docs/17/extend-extensions.html).
+
+**A container ID is not a process lifetime.** Same-CID restart preserves the
+cluster ID and rootfs. An outer Docker check therefore did not fence a later
+recovery worker's HBA write/reload. The2026-10-17 offline reproduction now checks
+boot/init/postmaster start identity inside that worker before effects; it is not
+live recovery acceptance. Keep the refusal for an unknown/new incarnation.
+
+**Calibrate the parser's environment and representation.** An env-cleared
+postgres -C probe rejected valid locale settings because it lacked the observed
+LOCALE_ARCHIVE context. Its corrected positive control passes. Raw -C matches
+pg_settings.setting, not necessarily SHOW/current_setting formatting; do not
+invent unit normalization.43 matches with20 unexamined settings is not a complete
+configuration proof. Preserve omissions and include removed config-sourced GUCs.
+
 ---
 
 ## 6. Audio

@@ -19,12 +19,12 @@ full requirements; cross-task requirements remain open until their consumers pas
 | Task | Current checkpoint |
 | --- | --- |
 | 1 | Source verified, d7869991. |
-| 2 | CAS/RLS source and actual PG17 concurrency verified,84294a19; Task3 delivery coupling and canonical migration remain open. |
+| 2 | CAS/RLS source and actual PG17 concurrency verified,84294a19; canonical migration/full-schema runtime remain open. |
 | 3 | Terminal suppression and structural lock repair source accepted,30d8dd80; final integrated PG17 suite170/170 includes the changed source and native/album binding. Full-schema/runtime remains open. |
 | 4 | Native/album bindingbdb346f4 plus prior maintained single/legacy/preparation reviewed; affected dispatcher220/220 and integrated PG17 suite170/170, zero skips. Actual provider/OS release gates remain open. |
 | 5 | State8016c799 and reviewed presentation4fc8e3af verified,155/155 and181/181; source requires the additive SQL, not a standalone release. |
-| 6 | Fresh full-schema backup verified. Restore refused at created/stopped clone before first start; private launcher lifecycle/recovery repair in progress. [Versioned-feed compatibility design](../specs/2026-10-17-topic-alert-compatible-feed.md) selected, not implemented. No production apply/acceptance. |
-| 7 | Not started; no reachable production toggle or native release for item77. |
+| 6 | Logical R2 restore failed on real extension metadata loss; exact obsolete clone cleaned, artifacts retained. Physical-backup preparation remains gated on safe reload proof. V2 revision/ownership client320/320 and SQL/producer composition9/9 pass; bounded lifecycle supplement/worker is in progress. Full-schema/HTTP/Realtime/delivery/rollback and production acceptance remain open. |
+| 7 | Compact component/behavioral source preparation runs independently; no header mount, visual acceptance, reachable production toggle or native release for item77. Full Task6 gate still precedes visual/release acceptance. |
 
 Detailed failures, evidence and limitations: [execution record](../../operations/2026-10-16-topic-notification-overrides.md).
 

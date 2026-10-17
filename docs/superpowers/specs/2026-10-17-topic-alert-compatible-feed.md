@@ -104,6 +104,56 @@ watermark. After a gap/TTL expiry, resync the authoritative feed without replayi
 old alert signals. Current deleted-message cleanup scrubs notification payload
 through UPDATE, so checking only DELETE is insufficient.
 
+### Row Revision
+
+Independent page/lookup requests can legitimately read different versions of X.
+Last-response-wins is not an ordering rule: an older lookup can otherwise replace
+a newer page payload and leave an old alert permit usable. V2 therefore adds a
+server-owned `feed_revision` per notification, integer1..9007199254740991. Existing
+rows start at1 without rewriting their payload/read history; meaningful changes
+increment under the existing row lock, no-op updates do not. Clients cannot set,
+reset or overflow it. This is not a global cursor or a commit-order watermark.
+
+Rows contain the original six fields, explicit `alert_suppressed_at` and
+`feed_revision`, never internal alert_origin. Merge overlapping responses by the
+greater revision. Equal revisions with different row data refuse the frame;
+older revisions cannot restore payload or an old permit. A newer row revision
+retires the earlier admission token even if its payload happens to match again.
+Keep read/terminal/scrub monotonicity as additional safeguards, not substitutes
+for versioned authority. Test both page-new/lookup-old and the inverse, ABA,
+same-revision contradiction and held callbacks.
+
+Source/access invalidations must not trail ordinary message creation merely
+because a source INSERT happened: created followed by an unrelated broad
+invalidate would discard legitimate live admission. Exercise the actual message
+producer -> emitted signals -> client composition, not only each module alone.
+
+### RPC and Stream Handshake
+
+- `notification_feed_page_v2(p_limit=30,p_before_created_at=NULL,p_before_id=NULL)`
+  returns `{v:2,rows,next}`. Limit1..30, paired display cursor, descending
+  created_at/id tie order. This cursor is not a delivery/commit watermark.
+- `notification_feed_lookup_v2(p_ids uuid[])` returns
+  `{v:2,rows,unavailable_ids}`, at most100 input IDs before deduplication.
+- `notification_feed_open_v2(p_limit=30,p_held_ids='{}')` returns
+  `{v:2,barrier_event_id,page,lookup}` and inserts its own random-ID invalidate
+  signal in the same transaction. It is a per-connection handshake marker,
+  not a persistent account cursor or an alert grant.
+
+Install/buffer the callback before subscribing. After SUBSCRIBED, call open and
+enter live mode only after both its response and its exact stream marker. Preserve
+stream order if either arrives first. Earlier created events still reconcile the
+feed but cannot sound; only post-marker live created events can attempt fresh
+alert authority. Delayed commits use stream order, not created_at. Other tabs'
+markers are invalidations, not permission to change this connection's baseline.
+Gap, bounded-buffer overflow or owner/session/generation change abandons the
+handshake and resyncs without backlog alerts. Actual stream ordering remains a
+wire acceptance gate, not something a synthetic client fixture proves.
+
+Only successful enabled/disabled CAS first activates the account fence. A first
+inherit choice has no override to enforce; it does not activate. Once activated,
+inherit retains the fence permanently, including retained-data rollback.
+
 ## Required Acceptance
 
 - Real PG17/full-schema/PostgREST: successful own v2 reads equal the legitimate
