@@ -49,6 +49,10 @@ function harnessReplace(needle, replacement) {
 harnessReplace('in() { return query; }', 'in(key, value) { predicates.push([key, value]); return query; }');
 harnessReplace('calls, publications, timers, channels, hold, pending, drain,',
   'calls, publications, timers, channels, hold, pending, drain, markCache, hides,');
+harnessReplace(
+  'async remount() { slots.length = 0; effects.clear(); mounted = true; dirty = true; flush(); await drain(); },',
+  'async remount() { slots.length = 0; effects.clear(); mounted = true; dirty = true; flush(); await drain(); }, paint() { slots.length = 0; effects.clear(); mounted = true; dirty = true; flush(); },',
+);
 const fixture = new Function("assert", "path", "vm", "ts", "read", "source", "row", "CHAT", "fixtures",
   `${declarations}\nreturn fixture;`)(assert, path, vm, ts, read, source, row, CHAT, fixtures);
 
@@ -93,6 +97,18 @@ async function trusted(text = source) {
   assert.equal(requests, 0, "unchanged trusted IDs should reuse live hidden verification");
 }
 test("live verified unchanged IDs reuse hidden verification after join", () => trusted());
+
+test("trusted warm reopen paints held history before privacy microtasks", async () => {
+  const f = fixture({ historyRows: [row()] });
+  await f.drain();
+  assert.equal(f.view.messages.length, 1, "cold fetch positive control");
+  f.unmount();
+  f.clear();
+  f.paint();
+  assert.equal(f.view.historyPending, false);
+  assert.equal(f.view.messages.length, 1);
+  assert.equal(f.calls.filter((call) => ["history", "mark", "hidden"].includes(call.name)).length, 0);
+});
 
 async function newMessage(text = source) {
   const { f, rows } = await reopened(text);
