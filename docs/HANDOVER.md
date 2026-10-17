@@ -1,6 +1,28 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-17, item77:** coordinator, Task6; canonical worktree
+**Current resume,2026-10-17:** coordinator, item77 Task6 plus SAME-release
+iPhone text previews; canonical worktree below, branch `codex/topic-alerts-20261016`,
+PWA source `17f1129c` (feature only, not production). DB50/browser30/worker25/
+ownership64/legacy53, exact settings1440/390 both themes, final source review,
+actual PG17 DDL ROLLBACK and canonical typecheck/build pass. Continuation
+`494d21283395` refused after RT probe/bootstrap, before Node client; owned service/
+env/validator/PostgREST/Perl removed, retained QA tenant1+extension1/slots0.
+Do not replay it, renew sessions, reset or pretend the clone is pristine. Its
+measured bootstrap exceeds the120s left by600-body/480-client reservation;
+the exact first payload exception was masked, not proven. Coordinator owns next:
+exact QA metadata retirement manifest, then the phased envelope/leaf diagnostics
+recorded in the report; not another blind replay. Topic menu/raw snapshot/cache
+fixes pass36, six loaded omissions and the adjacent refusal check; two review
+P2s are fixed by actual-hook/menu RED/GREEN. Final typecheck/build6afb0ffb77fda7b5/
+46.79s pass. Exact1440/390 light/dark Inter renders are diagnostic only until
+Task6, not launch acceptance. No worker or exec remains active.
+Actual fullstack/provider/iPhone canary and coordinated
+migration/release remain open. Stable22/D366 and foreign root sidebar/search/
+Android overlay are unchanged; A063 excluded. Follow the linked report/ledger,
+not the historical checkpoints below. [Topic evidence](operations/2026-10-16-topic-notification-overrides.md),
+[iPhone evidence](operations/2026-10-17-iphone-message-preview-audit.md).
+
+**Historical preparation,2026-10-17, item77:** coordinator, Task6; canonical worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
 `codex/topic-alerts-20261016`, pushed public source `83bb90cc`.
 HTTP48/R4, recovered R5, forward2 fixture, Perl transport and PostgREST staging

@@ -1500,3 +1500,82 @@ grammar regression exposed a missing delimiter before COMMIT; the fix passes
 all24 continuation source controls. Readonly observation at09:02:50UTC finds
 3307seconds remaining, above its1080second admission bound. This observation
 does not itself establish Auth/CDC/provider acceptance.
+
+Actual continuation494d21283395 refuses at service-tenant-client. The exact
+retained outer proof is5ef7bb8b (raw)/bde68c25 (re-encoded), not the generic
+transport response hash. PostgREST startup and initial checkpoint pass. Readonly
+service reconciliation9e211820 confirms the actual RT metadata probe returned
+rc0/41bytes and the owned service/env are removed; validator/PostgREST/Perl are
+also removed. Catalog/epoch are unchanged, slots0, but one tenant and extension
+now exist. This is NOT a pristine no-tenant state. No Node client artifacts,
+client/CAS/rollback or provider acceptance followed. The first readback probe
+incorrectly compared the service receipt against the parent pins; it refused
+without effects. The corrected probe binds its exact service producer pins.
+
+Retained artifact timelinec3bc5762, seconds from parent intent: known lease
+admission21.341, PostgREST ready58.450, service intent87.337, tenant bootstrap
+intent120.226, service result142.075, outer proof147.428. The fixed600s body
+reserves480s for the client, so a client starting after120s cannot satisfy its
+own admission. This is a real envelope contradiction, not proof of the exact
+first exception: the service handler masks the payload leaf. Next source work
+must derive startup/client/cleanup/transport/lease together, admit before tenant
+side effects and retain safe leaf failure metadata. Do not merely bump one
+timeout, replay this nonce, delete its history, renew sessions or restage a
+pristine clone. Preserve the exact retained tenant for explicit reconciliation.
+
+## Reachable Menu And Raw Snapshot Ownership
+
+The current text-topic header now opens the existing topic submenu, separately
+from parent mute. Initial mounted source20 passed, but fresh review found two
+P2s that this fixture did not exercise: useTopics keyed cache by UID/chat and
+stamped late responses with the responder's current owner, and the menu hid
+legitimate implicit general because archived rows had already been filtered.
+
+The one correction pass fixes the source of the snapshot, not a menu-only
+waiver. useTopics captures UID/accountEpoch/chat plus request generation, keeps
+warm reads within that owner only, and retires late/unmounted/stale refetches
+before cache/state effects. It exposes the owned raw rows alongside the existing
+active-row view. ChatWindow passes that provenance unchanged to canonicalization;
+general absence is allowed, archived general still denied. A real additional
+RED showed the selected topic being reset while scope was unknown; selection
+now waits for an owned successful answer. Same-owner warm reopen is preserved.
+
+Actual hook RED:5/6 failed against old source (including late overwrite and
+unmounted cache seeding), while the unchanged warm control passed. Implicit
+general menu and selected-topic reset also reproduced RED separately. Final
+combined36/36 passes, including six loaded omission controls across menu and
+hook. The affected older refusal guard had a shape-only argument assumption;
+its anchor now follows the owned value, and an actual-hook refusal case proves
+visible-row retention plus snapshot/cache retirement. Its focused adjacent
+check passes. Canonical typecheck and final build pass:7474modules,
+SW6afb0ffb77fda7b5,46.79s; known nonfatal build warnings remain.
+
+Four exact menu renders1440/390 in both themes use current built CSS and real
+self-hosted Inter bytes. Font loading is checked against a measured fallback,
+not fonts.check. Radio targets are at least44px, no horizontal overflow or
+offscreen menu; pixels were inspected on fictional data. These are diagnostics,
+not Task6/fullstack/device/launch acceptance. The proposed e2e filename was
+absent; the Node-named tests execute real Playwright/React boundaries without
+loading production configuration, always KUB_QA_ALLOW_MUTATIONS=0. No signed-in
+production captures, messages or device changes occur.
+
+## Next Bounded Runtime Correction
+
+The private source-only envelope report4912ca82 derives PREPARE<=180s, one
+ARM before tenant effects, ARM-to-client<=120s, client<=480s, cleanup<=160s,
+host<=940s and effect transport<=990s. ARM also requires actual relay>762s and
+unchanged session lifetime>1170s; insufficient life refuses before tenant writes,
+never renewal. Those caps are a design, not runtime feasibility acceptance.
+Safe leaf failure must be persisted before service finally; later cleanup
+failures cannot replace the original cause.
+
+Next implementation first binds exact retained tenant/extension IDs, FK/trigger
+shape and raw row hashes to494d's intent/results, epoch, absent producers and
+unchanged app/history/session state. Only then can a single raising, backed-up,
+exact-row QA metadata retirement be prepared; counts1/1 alone are not authority.
+The ephemeral encryption key was scrubbed, so the old ciphertext is not a usable
+tenant for a new service. Do not adopt a fresh key, upsert, reset fixtures or
+delete history. Preserve the spent proofs and reconcile unknown COMMIT readonly.
+After that, implement the coherent phase deadlines, early admission, safe leaf
+receipts and exact disposable-resource closure together. No new runtime attempt
+was dispatched by this design. The common iPhone/topic release stays gated.

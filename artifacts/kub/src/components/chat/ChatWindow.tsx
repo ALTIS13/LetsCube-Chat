@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type DragEvent } from "react";
-import { ChatHeader } from "./ChatHeader";
+import { ChatHeader, type ChatHeaderTopicNotificationScope } from "./ChatHeader";
+import { canonicalTopicNotificationScope } from "@/lib/topicNotificationPreferences";
 import { BotViewerContext, BotViewerPanel, useBotViewerPanels } from "./BotViewerPanel";
 import { ChatTopCard } from "./ChatTopCard";
 import { MessageList } from "./MessageList";
@@ -32,6 +33,7 @@ import {
   paneFitsChannelRail,
   railIsOffered,
   topicIdForChannel,
+  GENERAL_CHANNEL_NAME,
 } from "@/lib/channelRail";
 import { listReadFailed } from "@/lib/listReadState";
 import type { ServerChannel } from "@/lib/serverChannels";
@@ -142,7 +144,7 @@ import { useChannelPreviews } from "@/hooks/useChannelPreviews";
 import { useChannelUnread } from "@/hooks/useChannelUnread";
 import { channelReadKey } from "@/lib/channelUnread";
 import { scheduleMarkChannelRead } from "@/lib/channelReadMarks";
-import type { Json, MessageWithSender } from "@/types/database";
+import type { ChatWithLastMessage, Json, MessageWithSender, Topic } from "@/types/database";
 import { createMentionText, emptyMessageMentions, trimMentionText, type MessageMentionsV1 } from "@/lib/memberMentions";
 import { buildOptimisticMessage } from "@/lib/optimisticMessage";
 import { uploadAttachmentBytes } from "@/lib/attachmentUpload";
@@ -167,6 +169,20 @@ type CaptionLinkedMedia = OutgoingMediaEntry & {
 
 const EMPTY_GENERAL_TOPIC_IDS: string[] = [];
 
+export function currentTopicNotificationScope({ chatId, chat, userId, accountEpoch, selectedTopicId, snapshot }: {
+  chatId: string; chat: ChatWithLastMessage | undefined; userId: string | null; accountEpoch: number;
+  selectedTopicId: string | null;
+  snapshot: { userId: string; accountEpoch: number; chatId: string; topics: readonly Topic[] } | null;
+}): ChatHeaderTopicNotificationScope | null {
+  if (!chat || chat.id !== chatId || !userId || (!chat.is_forum && chat.type !== "group")) return null;
+  const canonicalScopeKey = canonicalTopicNotificationScope({ userId, accountEpoch, chatId, topicId: selectedTopicId },
+    snapshot);
+  const selected = snapshot?.topics.find(t => t.id === selectedTopicId);
+  return canonicalScopeKey === null ? null : { userId, accountEpoch, chatId,
+    topicId: canonicalScopeKey === "general" ? null : selectedTopicId, canonicalScopeKey,
+    title: canonicalScopeKey === "general" ? GENERAL_CHANNEL_NAME : selected!.name };
+}
+
 export function ChatWindow({ chatId }: ChatWindowProps) {
   // Dev-only mount/unmount счётчик. Должен скакать только при смене чата
   // (новый key={chatId} в родителе), не при heartbeat-эхо (Task #48).
@@ -180,6 +196,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   // this chat does.
   const chat = useAppStore((s) => s.chats.find((c) => c.id === chatId));
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
   const botViewer = useBotViewerPanels(chatId, userId);
   const markChatRead = useAppStore((s) => s.markChatRead);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
@@ -197,7 +214,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const savedChat = chat ? isSavedChat(chat, userId) : false;
   const isForum = !!chat?.is_forum;
   const topicsEnabled = isForum || chat?.type === "group";
-  const { topics, hasTextChannelHistory, scopeKnown: topicScopeKnown, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, topicsEnabled);
+  const { topics, snapshot: topicSnapshot, hasTextChannelHistory, scopeKnown: topicScopeKnown, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, topicsEnabled);
+  const topicNotificationScope = currentTopicNotificationScope({ chatId, chat, userId, accountEpoch, selectedTopicId,
+    snapshot: topicsEnabled ? topicSnapshot : null });
   // Held by value. A refresh that answers with the same channels hands back new
   // objects, and a new array here re-keyed the conversation's history read and
   // fetched it again for a scope that had not changed (D-320).
@@ -2148,6 +2167,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             <ChatHeader
               chatId={chatId}
               chat={chat}
+              topicNotificationScope={topicNotificationScope}
               onSearchOpen={() => openChatSearch(chatId)}
               onInfoOpen={() => setShowInfo(true)}
               onClearForMe={clearChatForMe}

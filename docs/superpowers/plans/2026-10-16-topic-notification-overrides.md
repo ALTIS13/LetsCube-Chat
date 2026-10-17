@@ -149,10 +149,18 @@ All paths below are repository-relative. Existing SQL is evidence/input, not a f
 
 **Create:** `artifacts/kub/src/components/chat/TopicNotificationControl.tsx`, `tests/e2e/topic-notification-overrides.spec.ts`. **Modify:** `artifacts/kub/src/components/chat/ChatHeader.tsx` to mount it for the current canonical text topic; add explicit topic context from `ChatWindow.tsx` if the header does not already receive a verified scope. Keep the parent mute control distinct. Complete Task6's actual fullstack gate before visual acceptance; source wiring alone remains unlaunched.
 
-- [ ] Use the existing menu/segmented-control vocabulary for inherit/enabled/disabled, with confirmed state, pending, conflict and retryable error. General aliases share one control/state. No control for an unknown/foreign/archived scope. No restyling or OS-channel terminology.
-- [ ] In a strict fictional fixture, show parent-muted + child-enabled and its inverse, CAS conflict, network refusal and account replacement. Set `KUB_QA_ALLOW_MUTATIONS=0` explicitly for every invocation; abort unknown requests and do not load real configuration/personal data.
+- [x] Source: existing submenu is mounted with confirmed/pending/conflict/error state and separate parent mute. Raw snapshot provenance, implicit general/null/alias and unknown/foreign/archived refusal are covered. Final review P2s repaired in the real useTopics source and mounted boundary.
+- [x] Strict fictional actual React/Playwright fixtures in `tests/unit/topic-notification-menu.test.mjs` and `tests/unit/topic-read-ownership.test.mjs`:36/36 with six compiled omissions, QA0, no unknown requests or production configuration. This source acceptance is not completion of Task6.
 - [ ] Run `pnpm.cmd exec playwright test tests/e2e/topic-notification-overrides.spec.ts --project=chromium-desktop-1440 --project=chromium-mobile-390 --workers=1` under that isolation. Inspect exact1440/390 light/dark pixels, fit, focus, control labels and parent/child distinction; no production screenshots/traces/video. This is UI proof, not fullstack delivery proof.
 - [ ] Publish no local-only control or resolver-only release. Include every required migration/dispatcher/client consumer in the candidate and compatible rollback; verify deployment by actual image and public/container asset parity. Item77 remains open until the intended supported-client matrix and real delivery gates are accepted.
+
+Task7 source follow-up: the planned e2e filename did not exist. The controlled
+Node test files execute actual Playwright/React and Window/Header wiring rather
+than a real-config page. Exact built-CSS/Inter1440/390 light/dark renders pass
+diagnostically; visual/launch acceptance still waits for Task6. Final canonical
+typecheck/build6afb0ffb77fda7b5/46.79s pass. Current Task6 stop/next runtime
+correction is recorded in the operation report; do not replay494d or renew its
+sessions. This is a source-only preparation step, not a source-only release.
 
 ## Unresolved Facts / Execution Inputs
 

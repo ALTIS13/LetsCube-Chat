@@ -42,6 +42,16 @@ import { isMicroGroup, microGroupRoom } from "@/lib/microGroup";
 import { groupCallOffer } from "@/lib/groupCall";
 import { startGroupCall, useGroupCallForChat } from "@/hooks/useGroupCalls";
 import { MicroGroupPeopleModal } from "./MicroGroupPeopleModal";
+import { TopicNotificationControl } from "./TopicNotificationControl";
+
+export interface ChatHeaderTopicNotificationScope {
+  userId: string;
+  accountEpoch: number;
+  chatId: string;
+  topicId: string | null;
+  canonicalScopeKey: string;
+  title: string;
+}
 
 interface ChatHeaderProps {
   chatId: string;
@@ -49,6 +59,7 @@ interface ChatHeaderProps {
   onSearchOpen?: () => void;
   onInfoOpen?: () => void;
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
+  topicNotificationScope?: ChatHeaderTopicNotificationScope | null;
   /**
    * «Назад» on a phone. Absent leaves the conversation for the chat list; a
    * server's conversation passes its channel list instead (tracker item 54),
@@ -57,8 +68,8 @@ interface ChatHeaderProps {
   onBack?: () => void;
 }
 
-export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, onBack }: ChatHeaderProps) {
-  const { chats, setChats, setSelectedChatId, setMessages, currentUser } = useAppStore();
+export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, onBack, topicNotificationScope }: ChatHeaderProps) {
+  const { chats, setChats, setSelectedChatId, setMessages, currentUser, accountEpoch, chatMutes } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
@@ -69,6 +80,14 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   // about the state now says what the account holds and offers how long.
   const { state: muteState, setMute } = useChatMute(chatId);
   const [muteChoiceOpen, setMuteChoiceOpen] = useState(false);
+  const [topicChoiceOpen, setTopicChoiceOpen] = useState(false);
+  const topicScope = topicNotificationScope?.userId === currentUser?.id && topicNotificationScope?.accountEpoch === accountEpoch
+    && topicNotificationScope.chatId === chatId ? topicNotificationScope : null;
+  const menuIdentity = `${currentUser?.id ?? ""}:${accountEpoch}:${chatId}:${topicScope?.canonicalScopeKey ?? ""}`;
+  const [menuOwner, setMenuOwner] = useState<string | null>(null);
+  const menuOpen = showMenu && menuOwner === menuIdentity;
+  const parentMuted = chatMutes.userId === currentUser?.id && chatMutes.source !== "none" && !chatMutes.error ? muteState.muted : null;
+  useEffect(() => { setShowMenu(false); setMuteChoiceOpen(false); setTopicChoiceOpen(false); }, [menuIdentity]);
   const presenceNow = usePresenceNow();
 
   const display = chat
@@ -180,7 +199,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   };
 
   useEffect(() => {
-    if (!showMenu) return;
+    if (!menuOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -188,7 +207,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showMenu]);
+  }, [menuOpen]);
 
   const handleDeleteGroup = async () => {
     if (!canDeleteGroup || deletingChat) return;
@@ -414,6 +433,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
     { icon: isPinned ? "pinOff" : "pin", label: isPinned ? "Открепить чат" : "Закрепить чат", action: handlePinToggle },
     ...muteItems,
+    ...(topicScope ? [{ icon: "notifications" as KubIconName, label: "Уведомления темы", action: () => setTopicChoiceOpen(true) }] : []),
     // «Пожаловаться» sends something and ends nothing, so it belongs with the
     // ordinary items rather than inside the destructive run below. Photographed
     // at 1440 and 390 with it under «Очистить историю у себя»: an unmarked row
@@ -612,23 +632,23 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setShowMenu(!showMenu); setMuteChoiceOpen(false); }}
+                onClick={() => { setMenuOwner(menuIdentity); setShowMenu(!menuOpen); setMuteChoiceOpen(false); setTopicChoiceOpen(false); }}
                 className={cn(
                   "kub-icon-action kub-interactive kub-ios-chat-icon group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
                   FOCUS_RING,
                 )}
                 aria-label="Ещё"
-                aria-expanded={showMenu}
+                aria-expanded={menuOpen}
               >
                 <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
                 {/* iOS lays the three dots across; the product's icon stands them up. */}
                 <KubIcon name="more" size={20} className="relative rotate-90" />
               </button>
-              {showMenu && (
+              {menuOpen && (
                 <>
                   {/* Closing the menu closes the durations with it: a menu that
                       reopened on step two would be a state nobody chose. */}
-                  <div className="fixed inset-0 z-40" onClick={() => { setShowMenu(false); setMuteChoiceOpen(false); }} />
+                  <div className="fixed inset-0 z-40" onClick={() => { setShowMenu(false); setMuteChoiceOpen(false); setTopicChoiceOpen(false); }} />
                   <div
                     role="menu"
                     data-kub-menu="true"
@@ -638,7 +658,17 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                     // From `sm` it drops from the capsule, 4px under its 44px.
                     className="kub-glass-strong fixed inset-x-3 bottom-[calc(0.75rem+var(--kub-safe-bottom))] z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-60"
                   >
-                    {menuItems.map(({ icon, label, detail, danger, disabled, action }) => (
+                    {topicChoiceOpen && topicScope ? (
+                      <TopicNotificationControl
+                        key={menuIdentity}
+                        chatId={chatId}
+                        topicId={topicScope.topicId}
+                        canonicalScopeKey={topicScope.canonicalScopeKey}
+                        title={topicScope.title}
+                        parentMuted={parentMuted}
+                        onBack={() => setTopicChoiceOpen(false)}
+                      />
+                    ) : menuItems.map(({ icon, label, detail, danger, disabled, action }) => (
                       <button
                         key={label}
                         onClick={action}

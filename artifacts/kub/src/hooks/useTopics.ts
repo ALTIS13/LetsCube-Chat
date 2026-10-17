@@ -52,21 +52,31 @@ import { plainFailure } from "@/lib/plainMessages";
  */
 const lastTopicReads = new Map<string, readonly Topic[]>();
 
-function topicReadKey(chatId: string): string {
-  return `${useAppStore.getState().currentUser?.id ?? ""}:${chatId}`;
+function topicReadKey(userId: string | null, accountEpoch: number, chatId: string): string {
+  return `${userId ?? ""}:${accountEpoch}:${chatId}`;
 }
 
 export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
-  const [ownRead, setRead] = useState<HeldList<Topic>>(() => heldListPending<Topic>());
+  const userId = useAppStore(s => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore(s => s.accountEpoch);
+  type OwnedRead = { userId: string | null; accountEpoch: number; chatId: string | null; value: HeldList<Topic> };
+  const [ownRead, setRead] = useState<OwnedRead>(() => ({ userId, accountEpoch, chatId, value: heldListPending<Topic>() }));
+  const scope = useRef({ userId, accountEpoch, chatId, hasTopicNavigation });
+  scope.current = { userId, accountEpoch, chatId, hasTopicNavigation };
+  const mounted = useRef(false), generation = useRef(0);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);
   // This hook's own answer once it has one for this chat; until then, the
   // last one this session had for it. The window is not remounted between
   // chats, so this is decided on every render rather than once at mount.
-  const lastRead = chatId && hasTopicNavigation ? lastTopicReads.get(topicReadKey(chatId)) : undefined;
+  const lastRead = userId && chatId && hasTopicNavigation ? lastTopicReads.get(topicReadKey(userId, accountEpoch, chatId)) : undefined;
   const read = useMemo(
-    () => (ownRead.subject === chatId || !lastRead ? ownRead : heldListSucceeded(lastRead, chatId)),
-    [chatId, lastRead, ownRead],
+    () => !userId || !chatId || !hasTopicNavigation ? heldListCleared<Topic>()
+      : ownRead.userId === userId && ownRead.accountEpoch === accountEpoch && ownRead.chatId === chatId
+      && ownRead.value.subject === chatId ? ownRead.value
+      : lastRead ? heldListSucceeded(lastRead, chatId) : heldListPending<Topic>(),
+    [userId, accountEpoch, chatId, hasTopicNavigation, lastRead, ownRead],
   );
   const readRef = useRef(read);
   readRef.current = read;
@@ -79,37 +89,57 @@ export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
   const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
 
   const fetchTopics = useCallback(async (options: { background?: boolean } = {}) => {
+    const ownsScope = () => {
+      const now = useAppStore.getState(), held = scope.current;
+      return mounted.current && now.currentUser?.id === (userId ?? undefined)
+        && now.accountEpoch === accountEpoch && held.userId === userId && held.accountEpoch === accountEpoch
+        && held.chatId === chatId && held.hasTopicNavigation === hasTopicNavigation;
+    };
+    if (!ownsScope()) return;
+    const request = ++generation.current;
+    const current = () => ownsScope() && request === generation.current;
     // No topic navigation, or no chat open: there is nothing here to read, which is a
     // different fact from a read that failed and must not be told as one.
-    if (!chatId || !hasTopicNavigation) { setRead(heldListCleared<Topic>()); return; }
+    if (!userId || !chatId || !hasTopicNavigation) {
+      setRead({ userId, accountEpoch, chatId, value: heldListCleared<Topic>() }); return;
+    }
+    const key = topicReadKey(userId, accountEpoch, chatId);
     bumpFetch("useTopics");
     const background = options.background === true;
-    setRead((previous) => heldListStarted(previous, { background }));
+    setRead(previous => {
+      if (!current()) return previous;
+      const value = previous.userId === userId && previous.accountEpoch === accountEpoch && previous.chatId === chatId
+        ? previous.value : lastTopicReads.has(key) ? heldListSucceeded(lastTopicReads.get(key)!, chatId) : heldListPending<Topic>();
+      return { userId, accountEpoch, chatId, value: heldListStarted(value, { background }) };
+    });
     const { data, error } = await supabase
       .from("topics")
       .select("*")
       .eq("chat_id", chatId)
       .order("is_general", { ascending: false }) // general first
       .order("position", { ascending: true });
+    if (!current()) return;
     if (error) {
       // The read said nothing about this chat's channels, so the channels are
       // left exactly as they were and the surface is told the answer is old.
       // What the mapper made of it goes to the log, where somebody who can act
       // on a policy name reads it; the screen gets the product's sentence.
       if (import.meta.env.DEV) console.error("[useTopics] read refused", error);
-      lastTopicReads.delete(topicReadKey(chatId));
+      lastTopicReads.delete(key);
       setRead((previous) =>
-        heldListRefused(previous, {
+        !current() ? previous : { userId, accountEpoch, chatId, value: heldListRefused(
+          previous.userId === userId && previous.accountEpoch === accountEpoch && previous.chatId === chatId
+            ? previous.value : heldListPending<Topic>(), {
           subject: chatId,
           message: plainFailure(mapPgError(error), CHANNEL_RAIL_UNREADABLE),
-        }),
+        }) },
       );
       return;
     }
     const rows = (data ?? []) as Topic[];
-    lastTopicReads.set(topicReadKey(chatId), rows);
-    setRead(heldListSucceeded(rows, chatId));
-  }, [chatId, hasTopicNavigation, supabase]);
+    lastTopicReads.set(key, rows);
+    setRead(previous => current() ? { userId, accountEpoch, chatId, value: heldListSucceeded(rows, chatId) } : previous);
+  }, [userId, accountEpoch, chatId, hasTopicNavigation, supabase]);
 
   // Initial load + when chat changes. Where what is held already answers this
   // chat — the last answer, above — the read is a refresh and blanks nothing.
@@ -126,12 +156,13 @@ export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
       if (selectedTopicId !== null) setSelectedTopicId(null);
       return;
     }
+    if (!read.loadedOnce || read.subject !== chatId || read.error) return;
     const selectedTopic = selectedTopicId ? topics.find((t) => t.id === selectedTopicId) : null;
     if (selectedTopic?.is_general || (selectedTopicId && !selectedTopic)) {
       setSelectedTopicId(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topics, hasTopicNavigation, selectedTopicId]);
+  }, [topics, hasTopicNavigation, selectedTopicId, read.loadedOnce, read.subject, read.error, chatId]);
 
   // Realtime: react to topic create / update / delete in this chat.
   // Three separate `.on` calls because supabase-js's typings disallow event="*".
@@ -201,12 +232,14 @@ export function useTopics(chatId: string | null, hasTopicNavigation: boolean) {
     if (error) console.error("archiveTopic:", error);
   }, [supabase]);
 
+  const scopeKnown = Boolean(userId && chatId && hasTopicNavigation && read.loadedOnce && read.subject === chatId && !read.error);
   return {
     topics,
+    snapshot: scopeKnown ? { userId: userId!, accountEpoch, chatId: chatId!, topics: read.rows } : null,
     /** An archived text channel still owns its retained messages. */
     hasTextChannelHistory: read.subject === chatId && read.rows.some((topic) => !topic.is_general),
     /** A successful, current read is required before an ordinary group may use the unscoped legacy stream. */
-    scopeKnown: read.loadedOnce && read.subject === chatId && !read.error,
+    scopeKnown,
     loading: read.loading,
     /** The refused read's sentence, or null. Already in a person's words. */
     error: read.error,

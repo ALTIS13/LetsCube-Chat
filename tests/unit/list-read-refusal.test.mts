@@ -272,7 +272,7 @@ test("the forum's channel read stops being thrown away", () => {
     /const \{ data, error \} = await supabase\s*\n\s*\.from\("topics"\)\s*\n\s*\.select\("\*"\)/u,
     "`error` is discarded again",
   );
-  assert.match(hook, /heldListRefused\(previous, \{/u);
+  assert.match(hook, /value: heldListRefused\(/u);
   assert.match(hook, /message: plainFailure\(mapPgError\(error\), CHANNEL_RAIL_UNREADABLE\)/u);
   // A chat that is not a forum has no channels, which is not a failure.
   assert.match(hook, /heldListCleared<Topic>\(\)/u);
