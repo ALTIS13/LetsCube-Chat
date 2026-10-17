@@ -415,15 +415,16 @@ async function runtimeOff(t) {
 }
 async function admit(db, subscription = sub, when = "future", revoked = false) {
   const expires = when === "stale" ? "clock_timestamp() - interval '1 minute'" : "clock_timestamp() + interval '1 day'";
-  const revokedAt = revoked ? "clock_timestamp()" : "null";
-  await db.exec(`insert into private.web_message_preview_install_admissions(subscription_id,recipient_id,expires_at,revoked_at)
-    values('${subscription}','${user}',${expires},${revokedAt})`);
+  await asRole(db, "service_role", `select public.web_message_preview_install_set($1, ${expires}, false)`, [subscription]);
+  if (revoked) await asRole(db, "service_role", "select public.web_message_preview_install_set($1, null, true)", [subscription]);
 }
 
 test("a per-install admission enrolls only that install while the global runtime stays off", async t => {
   const f = await runtimeOff(t);
   const [closed] = await ctx(f.db);
   await assert.rejects(enroll(f.db, closed.revision, "message", sub, closed.subscription_fingerprint), /web_preview_disabled/);
+  await assert.rejects(asRole(f.db, "authenticated", "select public.web_message_preview_install_set($1, clock_timestamp() + interval '1 day', false)", [sub]), error => error.code === "42501");
+  await assert.rejects(asRole(f.db, "service_role", "select * from private.web_message_preview_install_admissions"), error => error.code === "42501");
   await admit(f.db);
   const { rows, secret } = await enroll(f.db, closed.revision, "message", sub, closed.subscription_fingerprint);
   assert.equal(rows.length, 1);
@@ -452,7 +453,7 @@ test("a revoked or stale per-install admission falls back to the generic preview
   const [open] = await ctx(live.db);
   const { secret } = await enroll(live.db, open.revision, "message", sub, open.subscription_fingerprint);
   assert.equal((await content(live.db, secret, live.note)).length, 1);
-  await live.db.exec(`update private.web_message_preview_install_admissions set revoked_at=clock_timestamp() where subscription_id='${sub}'`);
+  await asRole(live.db, "service_role", "select public.web_message_preview_install_set($1, null, true)", [sub]);
   assert.equal((await content(live.db, secret, live.note)).length, 0);
   const [generic] = await ctx(live.db);
   assert.equal(generic.installation_consent, false);

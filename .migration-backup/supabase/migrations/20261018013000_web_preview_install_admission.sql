@@ -11,6 +11,7 @@ BEGIN
   IF to_regclass('private.web_message_preview_runtime') IS NULL
     OR to_regclass('private.web_message_preview_grants') IS NULL
     OR to_regclass('private.web_message_preview_install_admissions') IS NOT NULL
+    OR to_regprocedure('public.web_message_preview_install_set(uuid,timestamptz,boolean)') IS NOT NULL
   THEN RAISE EXCEPTION 'web_preview_install_admission_prestate_drift'; END IF;
   SELECT enabled INTO prior FROM private.web_message_preview_runtime WHERE singleton;
   PERFORM set_config('letscube.web_preview_runtime_prior', prior::text, true);
@@ -34,6 +35,30 @@ AS $fn$
     WHERE a.subscription_id=p_subscription AND a.recipient_id=p_user AND s.user_id=p_user AND s.is_active
       AND a.revoked_at IS NULL AND a.expires_at>clock_timestamp());
 $fn$;
+
+-- Trusted backend only. Recipient is the subscription owner, never a caller argument.
+
+CREATE OR REPLACE FUNCTION public.web_message_preview_install_set(p_subscription uuid,p_expires_at timestamptz,p_revoke boolean)
+RETURNS void LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog
+AS $fn$
+DECLARE owner_id uuid;
+BEGIN
+  IF p_subscription IS NULL OR p_revoke IS NULL THEN
+    RAISE EXCEPTION 'web_preview_input_refused' USING ERRCODE='22023'; END IF;
+  SELECT user_id INTO owner_id FROM public.push_subscriptions WHERE id=p_subscription AND is_active;
+  IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_subscription_refused'; END IF;
+  IF p_revoke THEN
+    UPDATE private.web_message_preview_install_admissions
+      SET revoked_at=clock_timestamp()
+      WHERE subscription_id=p_subscription AND revoked_at IS NULL;
+    RETURN;
+  END IF;
+  IF p_expires_at IS NULL THEN RAISE EXCEPTION 'web_preview_input_refused' USING ERRCODE='22023'; END IF;
+  INSERT INTO private.web_message_preview_install_admissions(subscription_id,recipient_id,expires_at,revoked_at)
+    VALUES(p_subscription,owner_id,p_expires_at,NULL)
+    ON CONFLICT (subscription_id) DO UPDATE SET recipient_id=EXCLUDED.recipient_id,
+      expires_at=EXCLUDED.expires_at,revoked_at=NULL;
+END $fn$;
 
 
 CREATE OR REPLACE FUNCTION private.web_message_preview_subscription_retire()
@@ -220,6 +245,8 @@ END $fn$;
 
 
 REVOKE ALL ON FUNCTION private.web_message_preview_install_open(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.web_message_preview_install_set(uuid,timestamptz,boolean) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.web_message_preview_install_set(uuid,timestamptz,boolean) TO service_role;
 DO $selfcheck$
 BEGIN
   IF (SELECT enabled::text FROM private.web_message_preview_runtime WHERE singleton)
@@ -230,6 +257,9 @@ BEGIN
     OR has_function_privilege('authenticated','private.web_message_preview_install_open(uuid,uuid)','EXECUTE')
     OR has_function_privilege('anon','private.web_message_preview_install_open(uuid,uuid)','EXECUTE')
     OR has_function_privilege('service_role','private.web_message_preview_install_open(uuid,uuid)','EXECUTE')
+    OR NOT has_function_privilege('service_role','public.web_message_preview_install_set(uuid,timestamptz,boolean)','EXECUTE')
+    OR has_function_privilege('authenticated','public.web_message_preview_install_set(uuid,timestamptz,boolean)','EXECUTE')
+    OR has_function_privilege('anon','public.web_message_preview_install_set(uuid,timestamptz,boolean)','EXECUTE')
   THEN RAISE EXCEPTION 'web_preview_install_admission_selfcheck_failed'; END IF;
 END $selfcheck$;
 COMMIT;
