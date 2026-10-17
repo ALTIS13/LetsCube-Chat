@@ -231,7 +231,21 @@ export function useMessages(
     setVerifiedChatId(null);
     setVerifyingChatId(null);
     setHistoryError(null);
-  }, [chatId, accountEpoch]);
+    // A return whose membership mark and hidden ids are already trusted may
+    // draw the held rows before paint. Waiting for the privacy effect blanks
+    // the first frame even though both modules allow the skip. Unread still
+    // waits: the held page does not contain the first unread message.
+    if (!chatId || !userId) return;
+    const held = useAppStore.getState().messages[chatId] ?? [];
+    const cached = held.some((message) => messageBelongsToTopic(message, topicId, generalTopicIds));
+    const unreadWhileClosed = (useAppStore.getState().chats.find((item) => item.id === chatId)?.unread_count ?? 0) > 0;
+    if (!cached || unreadWhileClosed) return;
+    if (!clearedAtCache.hasFresh(chatId, userId)) return;
+    if (!hiddenMessagesLive.canSkip(chatId, getMessageAndReplyIds(held))) return;
+    verifiedAccountEpochRef.current = accountEpoch;
+    setVerifiedChatId(chatId);
+    setVerifyingChatId(null);
+  }, [chatId, accountEpoch, userId, topicId]);
 
   const supabase = createClient(); // REST-операции
   const rt = getRealtimeClient();  // WebSocket каналы
