@@ -27,30 +27,30 @@
 
 ## Не сделано
 
-- Android 23 Stable. Публичные байты APK не сверялись, поэтому публикация не запускалась.
+- Включение topic/Web runtime. `release-map-20261017.md` разрешает его только когда потребители готовы и пройдены канарейки Web Push/FCM/sound/Windows и установленный Home Screen iPhone с читаемым текстом. iPhone — гейт того же выпуска, доказательства нет. Включение разослало бы доставку живым людям, поэтому runtime оставлены выключенными. Legacy sender не включался.
+- Android 0.1.22/build 23. Окно receipt кандидата `c6c67368` истекло в 16:47:56 UTC. Preflight в 16:50:21Z вернул `MAIN_BASE_CHANGED`: скрипт принимает сборку только если `origin/main` равен базовому `05f72b25` или самому коммиту кандидата, а main уже `aed60557`. Публикация по карте выпуска идёт после канареек, поэтому кандидат не публиковался, A063 не трогался, поверх личной релизной сборки ничего не ставилось.
 
 ## Блокеры
 
-Нет блокера на провод и SQL. Android ждёт отдельной сверки публичных байтов.
+Канарейка iPhone Home Screen с читаемым текстом не выполнена. Без неё runtime не включается и Android 23 не публикуется.
 
 ## Что делается
 
-Журнал фиксирует принятый провод и выкат веба, API и edge.
+Журнал фиксирует отказ включать runtime и публиковать Android до этой канарейки.
 
 ## Проверки
 
-- Горизонт перед прогоном: 4895 с. Прогон: `READ COMMITTED`, горизонт 4863 с, 670 мс, CAS revision 1, rollback runtime false.
-- Production readback: оба runtime false, RLS true, setter true. Backup 6448310 байт.
-- Живой веб и API на `aed605574697db46f5a101d2f1f664a1cd33cc94`. Маркер `topic_notification_preference_set` в `/assets/index-CW9ih_wQ.js`.
+- Провод не переигрывался. Образ не менялся: `l64kyyu1sysev2izzjjbizhe:aed605574697db46f5a101d2f1f664a1cd33cc94`.
+- Android preflight: `REFUSED` / `MAIN_BASE_CHANGED`, `published: false`, `deviceEffects: false`.
 
 ## Миграции
 
-`20261017104253_coordinated_notification_release.sql` применена в production после проверенного backup. Оба runtime оставлены выключенными. RLS не отключался.
+Production-миграция не повторялась. Оба runtime по-прежнему выключены.
 
 ## Релизы
 
-Stable веба и API: `aed605574697db46f5a101d2f1f664a1cd33cc94`. Предыдущий `978617b9` остался в истории и не затирался. Android 23 не опубликован.
+Живой веб и API остаются на `aed605574697db46f5a101d2f1f664a1cd33cc94`. Android 23 не опубликован.
 
 ## Следующее действие
 
-Сверить публичные байты Android 23 с каталогом и только после этого публиковать. Runtime уведомлений в production остаются выключены, пока не будет отдельного включения.
+Канарейка установленного Home Screen iPhone: читаемый текст, sender/None, перезапуск, точный tap и отказ queued logout/None. Только после неё включать topic/Web runtime и заново собирать Android 23 с коммита, который примет `android23-release.mjs` при текущем main.
