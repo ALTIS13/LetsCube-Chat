@@ -259,7 +259,7 @@ test("authenticated enrollment refuses foreign session subscription choice finge
 test("exact function/table ACLs deny service clients and anonymous enrollment", async t => {
   const f = await granted(t);
   for (const role of ["anon", "authenticated", "service_role"]) {
-    for (const table of ["private.web_message_preview_grants", "private.web_message_preview_runtime"]) {
+    for (const table of ["private.web_message_preview_grants", "private.web_message_preview_runtime", "private.web_message_preview_install_admissions"]) {
       await assert.rejects(asRole(f.db, role, `select * from ${table}`), error => error.code === "42501");
     }
   }
@@ -403,6 +403,60 @@ test("prestate refuses changed trusted helper bodies before creating any feature
   await assert.rejects(db.exec(await sqlSource()), /web_preview_dependency_drift/);
   await db.exec("rollback");
   assert.equal((await db.query("select to_regclass('private.web_message_preview_grants') is null as absent")).rows[0].absent, true);
+});
+
+const siblingInstall = id(53);
+
+async function runtimeOff(t) {
+  const f = await fixture(t);
+  await f.db.exec("update private.web_message_preview_runtime set enabled=false where singleton");
+  await f.db.exec(`insert into public.push_subscriptions(id,user_id,is_active) values('${siblingInstall}','${user}',true)`);
+  return f;
+}
+async function admit(db, subscription = sub, when = "future", revoked = false) {
+  const expires = when === "stale" ? "clock_timestamp() - interval '1 minute'" : "clock_timestamp() + interval '1 day'";
+  const revokedAt = revoked ? "clock_timestamp()" : "null";
+  await db.exec(`insert into private.web_message_preview_install_admissions(subscription_id,recipient_id,expires_at,revoked_at)
+    values('${subscription}','${user}',${expires},${revokedAt})`);
+}
+
+test("a per-install admission enrolls only that install while the global runtime stays off", async t => {
+  const f = await runtimeOff(t);
+  const [closed] = await ctx(f.db);
+  await assert.rejects(enroll(f.db, closed.revision, "message", sub, closed.subscription_fingerprint), /web_preview_disabled/);
+  await admit(f.db);
+  const { rows, secret } = await enroll(f.db, closed.revision, "message", sub, closed.subscription_fingerprint);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].installation_consent, true);
+  assert.equal(rows[0].preview_level, "message");
+  assert.equal((await f.db.query("select enabled from private.web_message_preview_runtime where singleton")).rows[0].enabled, false);
+  assert.equal((await content(f.db, secret, f.note))[0].body, "WEB CANARY FIXED");
+  const [sibling] = await ctx(f.db, siblingInstall);
+  await assert.rejects(enroll(f.db, sibling.revision, "message", siblingInstall, sibling.subscription_fingerprint), /web_preview_disabled/);
+  assert.equal((await f.db.query("select enabled from private.web_message_preview_runtime where singleton")).rows[0].enabled, false);
+});
+
+test("a revoked or stale per-install admission falls back to the generic preview", async t => {
+  const revoked = await runtimeOff(t);
+  await admit(revoked.db, sub, "future", true);
+  const [revokedCtx] = await ctx(revoked.db);
+  await assert.rejects(enroll(revoked.db, revokedCtx.revision, "message", sub, revokedCtx.subscription_fingerprint), /web_preview_disabled/);
+
+  const stale = await runtimeOff(t);
+  await admit(stale.db, sub, "stale", false);
+  const [staleCtx] = await ctx(stale.db);
+  await assert.rejects(enroll(stale.db, staleCtx.revision, "message", sub, staleCtx.subscription_fingerprint), /web_preview_disabled/);
+
+  const live = await runtimeOff(t);
+  await admit(live.db);
+  const [open] = await ctx(live.db);
+  const { secret } = await enroll(live.db, open.revision, "message", sub, open.subscription_fingerprint);
+  assert.equal((await content(live.db, secret, live.note)).length, 1);
+  await live.db.exec(`update private.web_message_preview_install_admissions set revoked_at=clock_timestamp() where subscription_id='${sub}'`);
+  assert.equal((await content(live.db, secret, live.note)).length, 0);
+  const [generic] = await ctx(live.db);
+  assert.equal(generic.installation_consent, false);
+  assert.equal(generic.preview_level, "none");
 });
 
 test("prestate refuses a changed definer search_path even when its trusted body is unchanged", async t => {

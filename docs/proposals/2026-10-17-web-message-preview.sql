@@ -47,6 +47,16 @@ ALTER TABLE private.web_message_preview_runtime ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON private.web_message_preview_runtime FROM PUBLIC,anon,authenticated,service_role;
 INSERT INTO private.web_message_preview_runtime VALUES(true,false);
 
+-- Operator-owned, revocable admission for one install. It does not enable the global runtime.
+CREATE TABLE private.web_message_preview_install_admissions (
+  subscription_id uuid PRIMARY KEY REFERENCES public.push_subscriptions(id) ON DELETE CASCADE,
+  recipient_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL,
+  revoked_at timestamptz
+);
+ALTER TABLE private.web_message_preview_install_admissions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON private.web_message_preview_install_admissions FROM PUBLIC,anon,authenticated,service_role;
+
 CREATE TABLE private.web_message_preview_grants (
   subscription_id uuid PRIMARY KEY REFERENCES public.push_subscriptions(id) ON DELETE CASCADE,
   recipient_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -85,6 +95,16 @@ BEGIN
   RETURN 'v1:'||encode(sha256(framed),'hex');
 END $fn$;
 
+CREATE FUNCTION private.web_message_preview_install_open(p_subscription uuid,p_user uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog
+AS $fn$
+  SELECT EXISTS(
+    SELECT 1 FROM private.web_message_preview_install_admissions a
+    JOIN public.push_subscriptions s ON s.id=a.subscription_id
+    WHERE a.subscription_id=p_subscription AND a.recipient_id=p_user AND s.user_id=p_user AND s.is_active
+      AND a.revoked_at IS NULL AND a.expires_at>clock_timestamp());
+$fn$;
+
 CREATE FUNCTION private.web_message_preview_choice_retire()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog
 AS $fn$
@@ -109,6 +129,8 @@ BEGIN
     UPDATE private.web_message_preview_grants SET grant_hash=NULL,installation_consent=false,
       preview_level='none',expires_at=NULL,revision=least(revision+1,9007199254740991)
       WHERE subscription_id=OLD.id;
+    UPDATE private.web_message_preview_install_admissions SET revoked_at=clock_timestamp()
+      WHERE subscription_id=OLD.id AND revoked_at IS NULL;
   END IF;
   RETURN NULL;
 END $fn$;
@@ -142,7 +164,8 @@ BEGIN
     AND g.preview_level IN ('sender','message') AND g.preview_level=pref.preview_level
     AND g.issued_at<=ts AND g.expires_at>ts
     AND a.created_at<=ts AND (a.not_after IS NULL OR a.not_after>ts)
-    AND EXISTS(SELECT 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled) AS ok) eligible
+    AND (EXISTS(SELECT 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled)
+      OR private.web_message_preview_install_open(s.id,u)) AS ok) eligible
   WHERE s.id=p_subscription_id AND s.user_id=u AND d.fp IS NOT NULL;
 END $fn$;
 
@@ -168,7 +191,14 @@ BEGIN
   IF u IS NULL THEN RAISE EXCEPTION 'web_preview_session_refused' USING ERRCODE='42501'; END IF;
   sid:=(auth.jwt()->>'session_id')::uuid;
   PERFORM 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled FOR SHARE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_disabled'; END IF;
+  IF NOT FOUND THEN
+    PERFORM 1 FROM private.web_message_preview_install_admissions admission
+      JOIN public.push_subscriptions installed ON installed.id=admission.subscription_id
+      WHERE admission.subscription_id=p_subscription_id AND admission.recipient_id=u AND installed.user_id=u AND installed.is_active
+        AND admission.revoked_at IS NULL AND admission.expires_at>clock_timestamp()
+      FOR SHARE OF admission;
+    IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_disabled'; END IF;
+  END IF;
   SELECT p.preview_level INTO pref FROM public.notification_preview_preferences p WHERE p.user_id=u FOR SHARE;
   IF pref IS DISTINCT FROM p_preview_level THEN RAISE EXCEPTION 'web_preview_choice_refused'; END IF;
   SELECT x.* INTO s FROM public.push_subscriptions x WHERE x.id=p_subscription_id AND x.user_id=u AND x.is_active FOR UPDATE;
@@ -236,10 +266,10 @@ DECLARE seed private.web_message_preview_grants%ROWTYPE; g private.web_message_p
 BEGIN
   IF p_grant_secret IS NULL OR octet_length(p_grant_secret)<>69 OR p_grant_secret !~ '^wpg1_[0-9a-f]{64}$'
     OR p_notification_id IS NULL OR current_setting('transaction_isolation')<>'read committed' THEN RETURN; END IF;
-  PERFORM 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled FOR SHARE NOWAIT;
-  IF NOT FOUND THEN RETURN; END IF;
   SELECT x.* INTO seed FROM private.web_message_preview_grants x WHERE x.grant_hash=sha256(convert_to(p_grant_secret,'UTF8'));
   IF NOT FOUND THEN RETURN; END IF;
+  PERFORM 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled FOR SHARE NOWAIT;
+  IF NOT FOUND AND NOT private.web_message_preview_install_open(seed.subscription_id,seed.recipient_id) THEN RETURN; END IF;
   -- Keep the same pref -> subscription -> grant order as authenticated enrollment.
   SELECT p.preview_level INTO pref FROM public.notification_preview_preferences p WHERE p.user_id=seed.recipient_id FOR SHARE NOWAIT;
   IF pref IS DISTINCT FROM seed.preview_level OR pref NOT IN ('sender','message') THEN RETURN; END IF;
@@ -302,6 +332,7 @@ EXCEPTION WHEN lock_not_available OR serialization_failure THEN RETURN;
 END $fn$;
 
 REVOKE ALL ON FUNCTION private.web_message_preview_descriptor(uuid,uuid,text,text,text),
+  private.web_message_preview_install_open(uuid,uuid),
   private.web_message_preview_choice_retire(),private.web_message_preview_subscription_retire()
   FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON FUNCTION public.web_message_preview_context(uuid),
@@ -315,10 +346,15 @@ DO $selfcheck$
 DECLARE r record; oid_ oid; role_ oid;
 BEGIN
   IF EXISTS(SELECT 1 FROM pg_class WHERE oid IN ('private.web_message_preview_grants'::regclass,
-    'private.web_message_preview_runtime'::regclass) AND (NOT relrowsecurity OR relowner<>(SELECT oid FROM pg_roles WHERE rolname='postgres')))
+    'private.web_message_preview_runtime'::regclass,'private.web_message_preview_install_admissions'::regclass)
+    AND (NOT relrowsecurity OR relowner<>(SELECT oid FROM pg_roles WHERE rolname='postgres')))
     OR EXISTS(SELECT 1 FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a
-      WHERE c.oid IN ('private.web_message_preview_grants'::regclass,'private.web_message_preview_runtime'::regclass)
+      WHERE c.oid IN ('private.web_message_preview_grants'::regclass,'private.web_message_preview_runtime'::regclass,
+        'private.web_message_preview_install_admissions'::regclass)
         AND a.grantee<>c.relowner)
+    OR has_function_privilege('authenticated','private.web_message_preview_install_open(uuid,uuid)','EXECUTE')
+    OR has_function_privilege('anon','private.web_message_preview_install_open(uuid,uuid)','EXECUTE')
+    OR has_function_privilege('service_role','private.web_message_preview_install_open(uuid,uuid)','EXECUTE')
     OR (SELECT enabled FROM private.web_message_preview_runtime WHERE singleton) IS DISTINCT FROM false
     OR EXISTS(SELECT 1 FROM private.web_message_preview_grants)
   THEN RAISE EXCEPTION 'web_preview_selfcheck_failed'; END IF;
