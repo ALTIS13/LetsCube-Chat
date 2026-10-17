@@ -1579,3 +1579,69 @@ delete history. Preserve the spent proofs and reconcile unknown COMMIT readonly.
 After that, implement the coherent phase deadlines, early admission, safe leaf
 receipts and exact disposable-resource closure together. No new runtime attempt
 was dispatched by this design. The common iPhone/topic release stays gated.
+
+## Retained494d Metadata: Exact Capture And Retirement Rehearsal
+
+The next resume captured the actual owned tenant/extension pair, not counts
+alone. The extension has one text external-id FK to the tenant with ON DELETE
+CASCADE; the four triggers are internal RI triggers only. The encrypted rows
+remain in a verified0600 server-private backup33967bytes, SHA2566ca1eb58.
+Capture receiptf432367b binds original tenant intentc8d9ee6c, raw service910bdc71,
+raw parent5ef7bb8b and the unchanged R5 epoch/catalog. Full-row digests for176
+other tables, all sequence values and foreign metadata were captured privately;
+no credentials/ciphertext/application content entered the report.
+
+A corrected instrument matters here: B.cidName is a retained CID-file name,
+not a Docker container name. The earlier9e211820 name filter therefore did not
+prove absence. Current capture uses the actual B.containerName and exact retained
+service CID, with the live PG CID as a positive filter control. Tenant intent
+also binds that service CID, not the PG CID. Neither mistaken assertion reached
+retirement; original failures remain retained.
+
+Actual PG17 rehearsalb22927ed passes four genuine raising refusal controls
+(wrong full row, foreign metadata digest, FK dependency and protected data), with
+exact unchanged readback after each. Positive SQL2f110900 deletes only the exact
+extension then tenant inside ROLLBACK; both rows return unchanged. The transaction
+checks actual FK/trigger definitions, full encrypted-row equality, all176 other
+table row digests, foreign metadata and sequence value/is_called equality.
+Fresh process checks cover service CID/name, client/validator, exact PostgREST
+PID and readonly Perl probe. COMMIT is still pending independent source review;
+an unknown COMMIT admits only readonly reconciliation, never a repeated DELETE.
+
+Independent review found no P1/P2 in exact sources4868617e/d2579ebe. The single
+COMMITdc0a9e1c then completed with fresh readbackd29a4159: owned metadata0/0,
+slots0, protected176/foreign metadata/sequences/catalog/epoch unchanged. No
+application row, history, session, sequence or old evidence was removed/reset.
+The new readonly armed baseline18e15c0d binds all eight retained session full-row
+hashes to the prior receipt and unchanged initial history/row. This is readiness
+for a NEW230..233 fixture lifetime, not a renewal/adoption of the expired lease
+and not fullstack/provider acceptance.
+
+MobileNext cloud inventory is reachable again and lists a physical iPhone16 /
+iOS18.6.2. No rental has started. The bounded fictional Home Screen PWA canary
+is prepared for message/sender/none/restart/tap/logout once backend is ready.
+
+## Armed Candidate And Common Release Preparation
+
+Independent review found two P2s before effects: post-ARM120s was checked only
+after READY, and a local transport-receipt write could skip server-proof readback.
+One fix pass preserves actual absolute bounds across CREATE/LOAD/RPC/guard IO and
+late select returns; sourcea8700ca4 passes23 cases with held-clock RED/GREEN and
+loaded omissions, forward68e remains unchanged. Runner9081553a passes5 cases:
+the old code passed only the unchanged positive and failed three readback cases;
+an independent finally now reads proof even after UNKNOWN transport plus local
+write failure. No additional review loop or old suite replay was required.
+
+Old85731836e3a5 remains preparation-only. NEW94f99762a6a5/programc5655ed8 was
+dispatched ONCE; its result is pending. Never replay it or reinterpret UNKNOWN
+as readiness. This is not production, provider or OS acceptance.
+
+Android source reserves0.1.22/build23; actual metadata parser confirms it.
+Known Stable22 HEAD returns200/7737623bytes; next version path returns404. The
+new private build successor preserves original signer/Firebase/asset checks and
+passes8 focused cases including five loaded omissions; no credential/build/
+sign/publication action has run. Seven reviewed proposals are also assembled
+inertly through the existing PG17 transaction composer:501b1f32,141992bytes,
+195 statements, exactly one top-level BEGIN/COMMIT. This is not canonical
+registration, a full combined rehearsal or application. Fresh origin/main still
+matches05f72b25; no unseen remote main commits. Public Stable22/D366 unchanged.

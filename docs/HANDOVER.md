@@ -5,19 +5,27 @@ iPhone text previews; canonical worktree below, branch `codex/topic-alerts-20261
 PWA source `17f1129c` (feature only, not production). DB50/browser30/worker25/
 ownership64/legacy53, exact settings1440/390 both themes, final source review,
 actual PG17 DDL ROLLBACK and canonical typecheck/build pass. Continuation
-`494d21283395` refused after RT probe/bootstrap, before Node client; owned service/
-env/validator/PostgREST/Perl removed, retained QA tenant1+extension1/slots0.
-Do not replay it, renew sessions, reset or pretend the clone is pristine. Its
+`494d21283395` refused before Node client. Its exact unusable QA metadata pair
+has now been backed up6ca1eb58, rehearsedb22927ed and retired once with fresh
+readbackd29a4159; tenant0/extension0/slots0. Protected176 tables, eight old session
+rows, history, sequences, catalog and epoch are unchanged. Armed baseline18e15c0d
+is captured. Do not replay494d, renew its sessions or reset history. Its
 measured bootstrap exceeds the120s left by600-body/480-client reservation;
 the exact first payload exception was masked, not proven. Coordinator owns next:
-exact QA metadata retirement manifest, then the phased envelope/leaf diagnostics
-recorded in the report; not another blind replay. Topic menu/raw snapshot/cache
+NEW phased armed HOST/leaf diagnostics and NEW230..233 session fixture, then
+actual same-client CAS/rollback acceptance; not another blind replay. Kuhn owns
+source implementation, coordinator owns live execution. Armeda870/forward68e
+passes23; runner9081 passes5 after two review P2 RED/GREEN fixes. NEW94f99762a6a5
+programc5655ed8 is dispatched ONCE and awaiting result; do not replay/adopt
+UNKNOWN. Old857 is preparation only. Topic menu/raw snapshot/cache
 fixes pass36, six loaded omissions and the adjacent refusal check; two review
 P2s are fixed by actual-hook/menu RED/GREEN. Final typecheck/build6afb0ffb77fda7b5/
 46.79s pass. Exact1440/390 light/dark Inter renders are diagnostic only until
-Task6, not launch acceptance. No worker or exec remains active.
+Task6, not launch acceptance. MobileNext cloud inventory is available again;
+physical iPhone16/iOS18.6.2 canary is prepared, no paid allocation yet.
 Actual fullstack/provider/iPhone canary and coordinated
-migration/release remain open. Stable22/D366 and foreign root sidebar/search/
+migration/release remain open. Android source is reserved0.1.22/build23 (not built
+or published); public Stable22/D366 and foreign root sidebar/search/
 Android overlay are unchanged; A063 excluded. Follow the linked report/ledger,
 not the historical checkpoints below. [Topic evidence](operations/2026-10-16-topic-notification-overrides.md),
 [iPhone evidence](operations/2026-10-17-iphone-message-preview-audit.md).
