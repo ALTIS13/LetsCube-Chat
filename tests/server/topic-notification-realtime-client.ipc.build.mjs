@@ -15,8 +15,9 @@ export async function buildRealtimeClientIpcBundle(){
   const require=createRequire(new URL('../../artifacts/kub/package.json',import.meta.url));
   const esbuild=createRequire(require.resolve('vite'))('esbuild');
   const entry=`import baseline from 'accepted-baseline';
-export {runRealtimeClientIpc} from './topic-notification-realtime-client.ipc.mjs';
+export {runRealtimeClientIpc,runRealtimeClientPhaseIpc} from './topic-notification-realtime-client.ipc.mjs';
 export const runRealtimeClientBaseline=baseline.runRealtimeClientBaseline;
+export const runRealtimeClientPhases=baseline.runRealtimeClientPhases;
 const snapshot=${JSON.stringify(sources)};
 function freeze(value){for(const child of Object.values(value))if(child&&typeof child==='object')freeze(child);return Object.freeze(value);}
 export async function loadRealtimeClientSources(){return freeze(structuredClone(snapshot));}

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {PassThrough,Writable} from 'node:stream';
 import {existsSync,readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 
 const url=new URL('./topic-notification-realtime-client.ipc.mjs',import.meta.url);
 const api=existsSync(url)?await import(url.href):{};
@@ -171,5 +172,68 @@ test('literal 1 MiB line-cap omission is killed before a valid oversized config 
   const large={...config(),sources:{text:''}};large.sources.text='a'.repeat(1048577-Buffer.byteLength(JSON.stringify(large)));
   assert.equal(Buffer.byteLength(JSON.stringify(large)),1048577);
   const control=async module=>{let calls=0;const p=pair(module,async()=>{calls++;return baseline();});p.send(large);await p.done;assert.equal(calls,0);};
+  await control(api);await assert.rejects(()=>control(mutant),e=>e.code==='ERR_ASSERTION');
+});
+
+function phasePair(module=api,runPhases){
+  const input=new PassThrough(),output=new PassThrough(),frames=[];let raw='',offset=0;
+  output.on('data',chunk=>{raw+=chunk.toString();});
+  const done=module.runRealtimeClientPhaseIpc({input,output,runPhases});
+  return {input,output,done,raw:()=>raw,send:value=>input.write(JSON.stringify(value)+'\n'),
+    read(){const lines=raw.slice(offset).split('\n');offset=raw.length-lines.pop().length;for(const line of lines)frames.push(JSON.parse(line));return frames;}};
+}
+async function phaseRequest(p,index){for(let i=0;i<50;i++){const q=p.read().filter(f=>f.kind!=='result')[index];if(q)return q;await turn();}assert.fail('PHASE_REQUEST_MISSING');}
+const phaseResult=()=>({...baseline(),boundary:'REAL_SDK_ACTUAL_HOOK_CAS_ROLLBACK_ONLY',casDisableAccepted:true,rollbackAccepted:true,
+  sameClientLifetime:true,runtimeEnabled:false,phaseCount:3});
+
+test('finite phase IPC exists without altering the legacy IPC export',()=>{
+  assert.equal(typeof api.runRealtimeClientPhaseIpc,'function','FINITE_PHASE_IPC_REQUIRED');assert.equal(typeof api.runRealtimeClientIpc,'function');
+});
+
+test('finite phase IPC binds exact checkpoint and runtime false from parent, not a caller boolean or raw final payload',async()=>{
+  const p=phasePair(api,async o=>{
+    for(const phase of ['baseline','disabled','rollback'])await o.phase({phase,snapshot:{fictional:'checkpoint'},runtimeEnabled:phase!=='rollback',signal:o.signal});
+    await o.inspect({phase:'rollback',snapshotSha256:createHash('sha256').update(JSON.stringify({fictional:'checkpoint'})).digest('hex'),runtimeEnabled:false,signal:o.signal});return phaseResult();
+  });p.send(config());
+  for(let n=0;n<3;n++){
+    const q=await phaseRequest(p,n);assert.equal(q.kind,'phase');assert.equal(q.runtimeEnabled,n!==2);assert.deepEqual(q.snapshot,{fictional:'checkpoint'});
+    p.send({v:1,kind:'phase-result',nonce:q.nonce,result:{binding:config().binding,phase:q.phase,snapshot:q.snapshot,runtimeEnabled:n!==2}});
+  }
+  const i=await phaseRequest(p,3);assert.equal(i.kind,'inspect');assert.equal(i.runtimeEnabled,false);
+  p.send({v:1,kind:'inspect-result',nonce:i.nonce,result:{binding:config().binding,phase:i.phase,snapshotSha256:i.snapshotSha256,runtimeEnabled:false}});
+  const result=await p.done;assert.equal(result.status,'CAS_ROLLBACK_ACCEPTED');assert.equal(result.phaseCount,3);
+  assert.equal(result.fullstackAccepted,false);assert.equal(result.osAccepted,false);assert.doesNotMatch(JSON.stringify(result),/PRIVATE_|MUST_NOT_ESCAPE|checkpoint/);
+});
+
+for(const variant of ['runtime','snapshot','kind','unknown'])test('finite phase IPC refuses '+variant+' mismatch before continuation',async()=>{
+  let continued=false;const p=phasePair(api,async o=>{for(const phase of ['baseline','disabled','rollback'])
+    await o.phase({phase,snapshot:{revision:1},runtimeEnabled:phase!=='rollback',signal:o.signal});continued=true;return phaseResult();});
+  p.send(config());
+  for(let n=0;n<2;n++){const q=await phaseRequest(p,n);p.send({v:1,kind:'phase-result',nonce:q.nonce,result:{binding:config().binding,phase:q.phase,snapshot:q.snapshot,runtimeEnabled:true}});}
+  const q=await phaseRequest(p,2);
+  p.send({v:1,kind:variant==='kind'?'inspect-result':'phase-result',nonce:variant==='unknown'?'00000000-0000-4000-8000-000000000000':q.nonce,
+    result:{binding:config().binding,phase:q.phase,snapshot:variant==='snapshot'?{revision:0}:q.snapshot,runtimeEnabled:variant==='runtime'}});
+  refused(await p.done);assert.equal(continued,false);
+});
+
+test('finite phase IPC refuses fabricated final success without three parent checkpoint ACKs',async()=>{
+  const p=phasePair(api,async()=>phaseResult());p.send(config());refused(await p.done);
+});
+
+test('finite phase IPC loaded reply-binding omission fails the real duplex rollback false assertion',async()=>{
+  const text=readFileSync(url,'utf8'),anchor='need(stable(message.result)===stable({binding:configuration.binding,...(phases?record.context:{runtimeEnabled:true})}));';
+  assert.equal(text.split(anchor).length,2);
+  const mutant=await import('data:text/javascript;base64,'+Buffer.from(text.replace(anchor,'')).toString('base64'));
+  const control=async module=>{
+    let continued=false;
+    const p=phasePair(module,async o=>{
+      for(const phase of ['baseline','disabled','rollback'])await o.phase({phase,snapshot:{revision:1},runtimeEnabled:phase!=='rollback',signal:o.signal});
+      continued=true;return phaseResult();
+    });p.send(config());
+    for(let n=0;n<3;n++){
+      const q=await phaseRequest(p,n);p.send({v:1,kind:'phase-result',nonce:q.nonce,result:{binding:config().binding,phase:q.phase,snapshot:q.snapshot,runtimeEnabled:true}});
+    }
+    await p.done;assert.equal(continued,false,'NO_CONTINUATION_ON_ECHO_TRUE_ROLLBACK');
+  };
   await control(api);await assert.rejects(()=>control(mutant),e=>e.code==='ERR_ASSERTION');
 });

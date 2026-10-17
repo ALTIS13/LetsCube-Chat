@@ -1,29 +1,22 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-17, item77:** coordinator; worktree
+**Current resume, 2026-10-17, item77:** coordinator, Task6; canonical worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, checkpoint `849ce348` (not main/deployed).
-Task6: actual HTTP48 passes (`b7b31942...8055150`); preserve its spent R4 fixture
-and proofs. Separate logical-WAL R5 recovery is verified (`2441c65f...353a878`,
-768 constraint ASTs); do not restore/reset either target. RT2.102.3/history72/31
-and per-object differences ff73e83d are inventoried, not a semantic-equality waiver.
-R5 candidate and forward2 fixture are now committed: exact actual rollback
-preflight d76e6cd8 passed first, then seed/enable/readback3b7cd9b8 passed once.
-Ordinary invited users retain two invalidates PLUS B's legitimate chat_added/
-linked-created history, both parents ALLOW, fences0, runtime=true. Keep original
-two failed attempts/proofs; no seed/candidate/reset replay. Existing-Perl relay
-calibration now passes actual Linux SQL/262144-byte stream and exact process/
-port cleanup (02fb2103), with unchanged PG epoch. Next: Hume's R5 PostgREST and
-Leibniz's Realtime/bootstrap source preparation, then service/SDK wire acceptance. Public actual-
-hook/SDK/IPC bundle is committed849ce348 and passes55/55; not a live result.
-Node22 smoke passes; single-socket Docker bind refused before
-process start and its exact created container was removed. Do not repeat that
-topology: use verified in-clone Perl, no install/broad mount/HBA/PG restart.
-No R5 JWT/PostgREST/RT startup. Client/provider/native/launch gates remain open;
-UI is not mounted.
-Reuse accepted source418/PG170/dispatch220/assembler32/selftest51. No production
-SQL/HBA/main push/native publication/paid allocation. Stable22/D366 unchanged by
-our actions. Preserve foreign sidebar/search/version paths; A063 excluded.
+`codex/topic-alerts-20261016`, feature tip `c3ae0447`, public source `849ce348`.
+HTTP48/R4, recovered R5, forward2 fixture, Perl transport and PostgREST staging
+are accepted; do not replay restore/seed/staging or clear retained history.
+Combined actual-hook/SDK/IPC source55/55 and actual isolated Node22 import000a1f22
+pass, not wire acceptance. Changed native diagnostic found the scheduler-thread
+limit; bounded execution flags pass actual Elixir3controls+1mutant dbd84c88 with
+exact cleanup. First metadata-only RT boot6c52d9843661 refused at RPC (rc1/stdout0),
+receipt372076e8; exact container/env/Perl cleanup and unchanged baseline confirmed.
+Do not replay the opaque attempt. New bounded RPC-stderr classification and a
+single-lifetime CAS/rollback client extension proceed independently; source75/75,
+independent review accepted (source only). No live relay/HTTP/RT, tenant or JWT.
+Next: changed safe RPC diagnostic, then composed service/SDK wire acceptance with fresh
+phase-aware guards. Provider/native/launch gates remain open; UI is unmounted.
+No production SQL/HBA/main push/native release or paid allocation. Stable22/D366
+and foreign sidebar/search/version paths remain unchanged; A063 excluded.
 [Detailed evidence and limits](operations/2026-10-16-topic-notification-overrides.md).
 
 **Accepted prior web release,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is

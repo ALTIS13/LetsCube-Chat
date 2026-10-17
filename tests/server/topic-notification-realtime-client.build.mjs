@@ -9,7 +9,7 @@ export async function buildRealtimeClientBundle(){
   const require=createRequire(new URL('../../artifacts/kub/package.json',import.meta.url));
   const esbuild=createRequire(require.resolve('vite'))('esbuild'),versions=await realtimeClientSdkVersions();
   const output=await esbuild.build({stdin:{contents:
-    'export {runRealtimeClientBaseline,validateRealtimeClientBinding,validateRealtimeClientCredentials} from "./topic-notification-realtime-client.helper.mjs";',
+    'export {runRealtimeClientBaseline,runRealtimeClientPhases,validateRealtimeClientBinding,validateRealtimeClientCredentials} from "./topic-notification-realtime-client.helper.mjs";',
     resolveDir:fileURLToPath(new URL('./',import.meta.url)),sourcefile:'topic-notification-realtime-client.entry.mjs',loader:'js'},
     bundle:true,write:false,platform:'node',target:'node22',format:'cjs',minifySyntax:true,treeShaking:true,logLevel:'silent',metafile:true,
     legalComments:'none',define:{'import.meta.url':'"file:///rt-client/client.mjs"',

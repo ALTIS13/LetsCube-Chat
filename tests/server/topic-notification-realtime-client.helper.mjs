@@ -1,4 +1,4 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {readlink} from 'node:fs/promises';
 import Supabase from '../../node_modules/.pnpm/@supabase+supabase-js@2.105.1/node_modules/@supabase/supabase-js/dist/index.cjs';
 import WebSocket from '../../node_modules/.pnpm/ws@8.20.0/node_modules/ws/wrapper.mjs';
@@ -14,6 +14,7 @@ const RECOVERY='2441c65f68a6ad9fd5bd35444102fbe4b4d9552355b733cd364f2efa6353a878
 const IMAGE='sha256:aa1c92c0cf326007563641730ec9da9c60478caa6853887775365fa2c097a471';
 const HEX=/^[a-f0-9]{64}$/,UUID=/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const BODY='fictional realtime client baseline';
+const sha=value=>createHash('sha256').update(value).digest('hex');
 const stable=v=>JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
 const need=(v,code='RT_CLIENT_BINDING_REFUSED')=>{if(!v)throw Error(code);};
 function keys(v,names){need(v&&typeof v==='object'&&!Array.isArray(v)&&stable(Object.keys(v).sort())===stable([...names].sort()));}
@@ -107,6 +108,10 @@ export async function prepareRealtimeSdkRequest(binding,actor,jwt,input,init){
           &&args.topic_id===f.topicId&&args.type==='text'&&args.content===BODY,'RT_CLIENT_BODY_REFUSED');
       }else if(route==='/rpc/topic_notification_preferences_read'){
         keys(args,['p_chat_id']);need(args.p_chat_id===f.chatId,'RT_CLIENT_BODY_REFUSED');
+      }else if(route==='/rpc/topic_notification_preference_set'){
+        keys(args,['p_chat_id','p_topic_id','p_mode','p_expected_revision']);
+        need(args.p_chat_id===f.chatId&&args.p_topic_id===f.topicId&&['inherit','enabled','disabled'].includes(args.p_mode)
+          &&Number.isSafeInteger(args.p_expected_revision)&&args.p_expected_revision>=0,'RT_CLIENT_BODY_REFUSED');
       }else if(['/rpc/notification_feed_page_v2','/rpc/notification_feed_open_v2'].includes(route)){
         keys(args,route.endsWith('open_v2')?['p_limit','p_held_ids']:['p_limit']);
         need(Number.isInteger(args.p_limit)&&args.p_limit>=1&&args.p_limit<=30,'RT_CLIENT_BODY_REFUSED');
@@ -167,11 +172,95 @@ export function createRealtimeSdkFetch({binding,actor,jwt,inspect,signal,op,admi
   };
 }
 
+// This gate coordinates IO, not policy. Both callbacks must be the parent's real
+// fresh guards. Checkpoints contain only owned IDs/digests; never rows or tokens.
+export function createRealtimeClientPhaseGate({binding,inspect,phase,signal}){
+  const b=validateRealtimeClientBinding(binding),check=v=>need(v,'RT_CLIENT_PHASE_REFUSED');
+  check(typeof inspect==='function'&&typeof phase==='function');
+  const inspectParent=inspect,phaseParent=phase;
+  let current='initial',runtime=true,saved=null,failed=false,active=0,blocked=null,release,drained;
+  const live=()=>check(!failed&&!signal?.aborted);
+  const operation=()=>AbortSignal.any([AbortSignal.timeout(15000),...(signal?[signal]:[])]);
+  function wait(promise,s=operation()){
+    return new Promise((resolve,reject)=>{
+      const abort=()=>reject(Error('RT_CLIENT_PHASE_REFUSED'));if(s.aborted){abort();return;}
+      s.addEventListener('abort',abort,{once:true});Promise.resolve(promise).then(value=>{
+        s.removeEventListener('abort',abort);try{live();check(!s.aborted);resolve(value);}catch{abort();}
+      },()=>{s.removeEventListener('abort',abort);abort();});
+    });
+  }
+  function snapshot(input,next){
+    const v=JSON.parse(JSON.stringify(input));
+    keys(v,['topicId','revision','mode','initialBNotificationId','initialBHistorySha256','baselineMessageIds','baselineNotificationIds','baselineHistorySha256',
+      'blockedMessageId','blockedNotificationId','controlMessageId','terminalSha256']);
+    check(v.topicId===b.http.fixture.topicId&&UUID.test(v.initialBNotificationId)&&HEX.test(v.initialBHistorySha256));
+    for(const key of ['baselineMessageIds','baselineNotificationIds','baselineHistorySha256']){
+      keys(v[key],['a','b']);check(Object.values(v[key]).every(x=>(key==='baselineHistorySha256'?HEX:UUID).test(x)));
+    }
+    const ids=[v.initialBNotificationId,...Object.values(v.baselineMessageIds),...Object.values(v.baselineNotificationIds)];
+    check(new Set(ids).size===ids.length);
+    check(v.revision===(next==='baseline'?0:1)&&v.mode===(next==='baseline'?'inherit':'disabled'));
+    for(const key of ['blockedMessageId','blockedNotificationId','controlMessageId','terminalSha256'])
+      check(next==='baseline'?v[key]===null:(key==='terminalSha256'?HEX:UUID).test(v[key]));
+    if(next!=='baseline'){
+      check(stable(Object.fromEntries(['topicId','initialBNotificationId','initialBHistorySha256','baselineMessageIds','baselineNotificationIds','baselineHistorySha256'].map(k=>[k,v[k]])))
+        ===stable(Object.fromEntries(['topicId','initialBNotificationId','initialBHistorySha256','baselineMessageIds','baselineNotificationIds','baselineHistorySha256'].map(k=>[k,saved[k]]))));
+      const all=[...ids,v.blockedMessageId,v.blockedNotificationId,v.controlMessageId];check(new Set(all).size===all.length);
+    }
+    if(next==='rollback')check(stable(v)===stable(saved));
+    return freeze(v);
+  }
+  return {
+    runtimeEnabled:()=>runtime,
+    async inspect(){
+      try{
+        live();const context={runtimeEnabled:runtime,phase:current,snapshotSha256:saved?sha(stable(saved)):null};
+        const s=operation(),result=await wait(inspectParent({...context,signal:s}),s);
+        check(stable(result)===stable({binding:b,...context}));return result;
+      }catch{failed=true;throw Error('RT_CLIENT_PHASE_REFUSED');}
+    },
+    async dispatch(fn){
+      try{live();if(blocked)await wait(blocked);live();active++;try{return await fn();}finally{active--;if(active===0)drained?.();}}
+      catch{failed=true;throw Error('RT_CLIENT_PHASE_REFUSED');}
+    },
+    async transition(next,input){
+      try{
+        live();check(!blocked&&next===({initial:'baseline',baseline:'disabled',disabled:'rollback'})[current]);
+        const exact=snapshot(input,next),expectedRuntime=next!=='rollback',s=operation();
+        blocked=new Promise(r=>{release=r;});
+        if(active)await wait(new Promise(r=>{drained=r;}),s);
+        live();check(!s.aborted);const result=await wait(phaseParent({phase:next,snapshot:exact,runtimeEnabled:expectedRuntime,signal:s}),s);
+        check(stable(result)===stable({binding:b,phase:next,snapshot:exact,runtimeEnabled:expectedRuntime}));
+        runtime=result.runtimeEnabled;current=next;saved=exact;
+      }catch{failed=true;throw Error('RT_CLIENT_PHASE_REFUSED');}
+      finally{drained=null;release?.();release=null;blocked=null;}
+    },
+  };
+}
+
+export function assertRealtimeClientPhasePresentation(before,after){
+  for(const label of ['oldWeb','oldWindows','newWeb','newWindows'])for(const key of ['sounds','cards',...(label.startsWith('old')?['legacyInserts']:[])]){
+    const a=before[label]?.[key],b=after[label]?.[key];
+    need(Number.isSafeInteger(a)&&a>=0&&Number.isSafeInteger(b)&&b===a,'RT_CLIENT_PHASE_ALERT_LEAK');
+  }
+}
+
 /** BASELINE ONLY. Import/construction never starts a service or reads credentials.
  * Execute inside the bound Linux namespace. inspect must freshly establish the
  * exact processes/catalog/fixture, not echo this input. No CAS/rollback here.
  */
-export async function runRealtimeClientBaseline(input){
+export async function runRealtimeClientBaseline(input){return runRealtimeClient(input,false);}
+/** One lifetime, no reset/reseed. phase({phase,snapshot,runtimeEnabled,signal})
+ * must fresh-check the owned checkpoint on the parent; rollback additionally
+ * executes its pinned compatible runtime-off control ONCE before returning.
+ * inspect returns {binding,phase,snapshotSha256,runtimeEnabled} from real guards.
+ * Snapshots bind retained history prefixes, not whole-catalog equivalence.
+ * Neither callback may echo its expected input as evidence.
+ */
+export async function runRealtimeClientPhases(input){
+  need(typeof input?.phase==='function','RT_CLIENT_PHASE_REQUIRED');return runRealtimeClient(input,true);
+}
+async function runRealtimeClient(input,phases){
   need(typeof input?.inspect==='function','RT_CLIENT_INSPECT_REQUIRED');
   const binding=validateRealtimeClientBinding(input.binding),sources=validateRealtimeClientSources(input.sources);
   need(sources.digest===binding.sourceDigest,'RT_CLIENT_SOURCE_REFUSED');const credentials=validateRealtimeClientCredentials(binding,input.credentials);
@@ -179,11 +268,13 @@ export async function runRealtimeClientBaseline(input){
   need(process.versions.node.startsWith('22.'),'RT_CLIENT_NODE22_REQUIRED');
   const {parseNotificationFeedPageV2,parseNotificationFeedOpenV2,parseNotificationFeedEventV2}=realtimeClientFeedParsers(sources);
   const lifetime=new AbortController(),signal=AbortSignal.any([lifetime.signal,AbortSignal.timeout(480000),...(input.signal?[input.signal]:[])]);
+  const phaseGate=phases?createRealtimeClientPhaseGate({binding,inspect:input.inspect,phase:input.phase,signal}):null;
   let requests=0,failed=false,httpFailureStatus=null;const sockets=new Set(),clients=[],docs=[];
   const expected={binding,runtimeEnabled:true};
   const op=()=>AbortSignal.any([signal,AbortSignal.timeout(15000)]);
   async function inspect(){try{const s=op();s.throwIfAborted();const p=await input.inspect({signal:s});s.throwIfAborted();need(stable(p)===stable(expected));}
     catch{throw Error('RT_CLIENT_TARGET_REFUSED');}}
+  if(phases)inspect=()=>phaseGate.inspect();
   async function wait(check){const until=Date.now()+15000;while(!check()){
     need(!failed&&!signal.aborted&&Date.now()<until&&!docs.some(d=>d.snapshot().failed||d.snapshot().error),'RT_CLIENT_WAIT_REFUSED');
     await new Promise(resolve=>setTimeout(resolve,10));
@@ -202,7 +293,8 @@ export async function runRealtimeClientBaseline(input){
       refuse(status){failed=true;if(httpFailureStatus===null&&Number.isInteger(status)&&status>=100&&status<=599)httpFailureStatus=status;
         lifetime.abort();for(const socket of sockets)socket.terminate();}});
     const client=Supabase.createClient(HTTP_ORIGIN,jwt,{accessToken:async()=>jwt,
-      auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:transportFetch},
+      auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:phases?
+        (...args)=>phaseGate.dispatch(()=>transportFetch(...args)):transportFetch},
       realtime:{transport:BoundSocket,timeout:10000,logLevel:'error',logger(){},reconnectAfterMs:()=>600000}});
     clients.push(client);return client;
   }
@@ -214,23 +306,32 @@ export async function runRealtimeClientBaseline(input){
       }).subscribe(status=>{joined=status==='SUBSCRIBED';if(['CLOSED','TIMED_OUT','CHANNEL_ERROR'].includes(status)&&!signal.aborted)failed=true;});
     return {channel,rows,current:()=>joined&&channel.state==='joined'&&client.realtime.isConnected()};
   }
+  function legacyObserver(client,uid){
+    let joined=false,count=0;const ids=new Set();
+    const channel=client.channel('qa-legacy-control:'+randomUUID()).on('postgres_changes',
+      {event:'INSERT',schema:'public',table:'notifications',filter:'user_id=eq.'+uid},payload=>{
+        try{need(++count<=128&&payload.new.user_id===uid&&UUID.test(payload.new.id));ids.add(payload.new.id);}catch{failed=true;}
+      }).subscribe(status=>{joined=status==='SUBSCRIBED';if(['CLOSED','TIMED_OUT','CHANNEL_ERROR'].includes(status)&&!signal.aborted)failed=true;});
+    return {ids,count:()=>count,current:()=>joined&&channel.state==='joined'&&client.realtime.isConnected()};
+  }
   try{
     const versions=await realtimeClientSdkVersions(),slots={};
     for(const [label,actor,generation,desktop] of [['oldWeb','a','old',false],['newWeb','a','current',false],
       ['oldWindows','a','old',true],['newWindows','a','current',true],['controlWeb','b','old',false],['controlWindows','b','old',true]])
       slots[label]={actor,generation,desktop,client:await sdk(actor)};
-    const f=binding.http.fixture,initialLegacyIds={};
+    const f=binding.http.fixture,initialLegacyIds={},initialLegacyRows={};
     for(const actor of ['a','b']){
       const client=slots[actor==='a'?'oldWeb':'controlWeb'].client,uid=f.actors[actor].uid;
       const parents=result(await client.from('chat_notification_preferences').select('chat_id,user_id,push_enabled,muted_until').eq('chat_id',f.chatId).eq('user_id',uid));
       need(stable(parents)===stable([{chat_id:f.chatId,user_id:uid,push_enabled:true,muted_until:null}]),'RT_CLIENT_PARENT_NOT_ALLOWED');
       need(stable(result(await client.rpc('topic_notification_preferences_read',{p_chat_id:f.chatId})))==='[]','RT_CLIENT_FIXTURE_NOT_PRISTINE');
-      initialLegacyIds[actor]=validateRealtimeClientInitialLegacy(binding,actor,
-        result(await client.from('notifications').select('*').eq('user_id',uid).limit(30)));
+      initialLegacyRows[actor]=result(await client.from('notifications').select('*').eq('user_id',uid).limit(30));
+      initialLegacyIds[actor]=validateRealtimeClientInitialLegacy(binding,actor,initialLegacyRows[actor]);
     }
     const controls={oldWeb:observer(slots.oldWeb.client,f.actors.a.uid),oldWindows:observer(slots.oldWindows.client,f.actors.a.uid)};
+    const legacyControls=phases?{oldWeb:legacyObserver(slots.oldWeb.client,f.actors.a.uid),oldWindows:legacyObserver(slots.oldWindows.client,f.actors.a.uid)}:{};
     for(const slot of Object.values(slots)){slot.doc=await mountRealtimeClientHook({...slot,sources,actor:f.actors[slot.actor]});docs.push(slot.doc);}
-    await wait(()=>docs.every(d=>d.snapshot().ready)&&Object.values(controls).every(c=>c.current()));await inspect();
+    await wait(()=>docs.every(d=>d.snapshot().ready)&&Object.values(controls).every(c=>c.current())&&Object.values(legacyControls).every(c=>c.current()));await inspect();
     const before=Object.fromEntries(Object.entries(slots).map(([k,v])=>[k,v.doc.snapshot()]));
     const produced={};
     for(const actor of ['b','a']){
@@ -257,12 +358,93 @@ export async function runRealtimeClientBaseline(input){
       if(actor==='b')validateRealtimeClientInitialLegacy(binding,'b',rows.filter(row=>row.id===initialLegacyIds.b));
     }
     await inspect();need(!failed&&docs.every(d=>d.snapshot().ready),'RT_CLIENT_FINAL_REFUSED');
+    if(phases){
+      const history=row=>sha(stable(Object.fromEntries(['id','user_id','kind','payload','read_at','created_at'].map(k=>[k,row[k]]))));
+      const page=async actor=>parseNotificationFeedPageV2(result(await slots[actor==='a'?'newWeb':'controlWeb'].client.rpc('notification_feed_page_v2',{p_limit:30})),f.actors[actor].uid);
+      const message=(messageId,rows)=>{
+        const found=rows.filter(n=>n.kind==='message'&&n.payload?.message_id===messageId);
+        need(found.length===1,'RT_CLIENT_PHASE_ROW_REQUIRED');return found[0];
+      };
+      const original={a:message(produced.a,(await page('a')).rows),b:message(produced.b,(await page('b')).rows)};
+      await wait(()=>Object.values(legacyControls).every(c=>c.current()&&c.ids.has(original.a.id)));
+      const checkpoint={topicId:f.topicId,revision:0,mode:'inherit',initialBNotificationId:initialLegacyIds.b,initialBHistorySha256:history(initialLegacyRows.b[0]),
+        baselineMessageIds:{...produced},baselineNotificationIds:{a:original.a.id,b:original.b.id},
+        baselineHistorySha256:{a:history(original.a),b:history(original.b)},blockedMessageId:null,blockedNotificationId:null,controlMessageId:null,terminalSha256:null};
+      await phaseGate.transition('baseline',checkpoint);
+      const counts=()=>Object.fromEntries(Object.entries(slots).map(([k,v])=>[k,{...v.doc.snapshot(),...(legacyControls[k]?{legacyInserts:legacyControls[k].count()}:{} )}]));
+      const noOldAlerts=previous=>{
+        need(Object.values(legacyControls).every(c=>c.current()),'RT_CLIENT_LEGACY_SOCKET_LOST');
+        assertRealtimeClientPhasePresentation(previous,counts());
+      };
+      const sequence=()=>Object.fromEntries(Object.entries(controls).map(([k,c])=>[k,Math.max(0,...[...c.rows.values()].map(x=>x.sequence))]));
+      const drain=async previous=>{
+        for(const [label,control] of Object.entries(controls)){
+          const open=parseNotificationFeedOpenV2(result(await slots[label].client.rpc('notification_feed_open_v2',{p_limit:30,p_held_ids:[original.a.id]})),f.actors.a.uid,[original.a.id]);
+          await wait(()=>control.rows.has(open.barrier_event_id));
+          need(control.current()&&control.rows.get(open.barrier_event_id).sequence>previous[label],'RT_CLIENT_PHASE_DRAIN_REFUSED');
+        }
+        for(const doc of docs)await doc.drain();
+      };
+      const produce=async actor=>{const id=randomUUID();result(await slots[actor==='a'?'oldWeb':'controlWeb'].client.from('messages')
+        .insert({id,chat_id:f.chatId,user_id:f.actors[actor].uid,topic_id:f.topicId,type:'text',content:BODY}));return id;};
+      const controlPositive=async previous=>{
+        const id=await produce('a');
+        await wait(()=>['controlWeb','controlWindows'].every(label=>slots[label].doc.hasMessage(id)
+          &&slots[label].doc.snapshot()[label==='controlWeb'?'sounds':'cards']>previous[label][label==='controlWeb'?'sounds':'cards']));return id;
+      };
+      const decisions=async(ids,revision)=>{
+        const rows=result(await slots.newWeb.client.rpc('message_notification_alert_decisions',{p_notification_ids:ids}));
+        need(Array.isArray(rows)&&stable([...rows].sort((a,b)=>String(a.notification_id).localeCompare(String(b.notification_id))))
+          ===stable(ids.map(id=>({notification_id:id,allowed:false,scope_key:f.topicId,revision})).sort((a,b)=>a.notification_id.localeCompare(b.notification_id))),'RT_CLIENT_PHASE_DENIAL_REQUIRED');
+      };
+      const retained=async pages=>{
+        for(const actor of ['a','b'])need(history(message(produced[actor],pages[actor]))===checkpoint.baselineHistorySha256[actor],'RT_CLIENT_PHASE_HISTORY_CHANGED');
+        const rows=result(await slots.controlWeb.client.from('notifications').select('*').eq('user_id',f.actors.b.uid).limit(30));
+        validateRealtimeClientInitialLegacy(binding,'b',rows.filter(n=>n.id===initialLegacyIds.b));
+        need(history(rows.find(n=>n.id===initialLegacyIds.b))===checkpoint.initialBHistorySha256,'RT_CLIENT_PHASE_INITIAL_HISTORY_CHANGED');
+      };
+      const legacyDenied=async()=>need(stable(result(await slots.oldWeb.client.from('notifications').select('*').eq('user_id',f.actors.a.uid).limit(30)))==='[]','RT_CLIENT_LEGACY_REST_LEAK');
+      const beforeDisable=counts(),beforeSequence=sequence();
+      const ack=result(await slots.newWeb.client.rpc('topic_notification_preference_set',
+        {p_chat_id:f.chatId,p_topic_id:f.topicId,p_mode:'disabled',p_expected_revision:0}));
+      need(stable(ack)===stable({status:'applied',scope_key:f.topicId,mode:'disabled',revision:1}),'RT_CLIENT_CAS_UNKNOWN_NO_RETRY');
+      need(stable(result(await slots.newWeb.client.rpc('topic_notification_preferences_read',{p_chat_id:f.chatId})))
+        ===stable([{scope_key:f.topicId,mode:'disabled',revision:1}]),'RT_CLIENT_CAS_READBACK_REQUIRED');
+      await wait(()=>Object.entries(controls).every(([label,c])=>[...c.rows.values()].some(x=>x.sequence>beforeSequence[label]&&x.event.event_kind==='invalidate')));
+      const blocked=await produce('b'),control=await controlPositive(beforeDisable);
+      await wait(()=>['newWeb','newWindows'].every(label=>slots[label].doc.hasMessage(blocked)));
+      await drain(beforeSequence);const disabledPages={a:(await page('a')).rows,b:(await page('b')).rows};
+      const blockedRow=message(blocked,disabledPages.a),terminal=message(produced.a,disabledPages.a);
+      need(terminal.alert_suppressed_at!==null&&blockedRow.alert_suppressed_at!==null,'RT_CLIENT_TERMINAL_REQUIRED');
+      await decisions([original.a.id,blockedRow.id],1);await legacyDenied();noOldAlerts(beforeDisable);await retained(disabledPages);
+      const disabled={...checkpoint,revision:1,mode:'disabled',blockedMessageId:blocked,blockedNotificationId:blockedRow.id,
+        controlMessageId:control,terminalSha256:sha(terminal.alert_suppressed_at)};
+      await phaseGate.transition('disabled',disabled);
+      const beforeRollback=counts(),rollbackSequence=sequence(),blockedHistory=history(blockedRow),blockedTerminal=blockedRow.alert_suppressed_at;
+      // Parent executes the one reviewed rollback and proves runtime=false while
+      // new HTTP is gated; existing sockets and already delivered callbacks stay.
+      await phaseGate.transition('rollback',disabled);
+      const rollbackMessage=await produce('b');await controlPositive(beforeRollback);
+      await wait(()=>['newWeb','newWindows'].every(label=>slots[label].doc.hasMessage(rollbackMessage)));
+      await drain(rollbackSequence);const rollbackPages={a:(await page('a')).rows,b:(await page('b')).rows};
+      noOldAlerts(beforeRollback);await legacyDenied();await retained(rollbackPages);
+      const after=message(produced.a,rollbackPages.a),afterBlocked=message(blocked,rollbackPages.a),rollbackRow=message(rollbackMessage,rollbackPages.a);
+      need(sha(after.alert_suppressed_at)===disabled.terminalSha256&&history(afterBlocked)===blockedHistory
+        &&afterBlocked.alert_suppressed_at===blockedTerminal&&rollbackRow.alert_suppressed_at!==null,'RT_CLIENT_ROLLBACK_REOPENED');
+      await decisions([original.a.id,blockedRow.id,rollbackRow.id],1);
+      await inspect();need(!failed&&docs.every(d=>d.snapshot().ready),'RT_CLIENT_FINAL_REFUSED');
+      return {v:1,boundary:'REAL_SDK_ACTUAL_HOOK_CAS_ROLLBACK_ONLY',baselineAccepted:true,casDisableAccepted:true,rollbackAccepted:true,
+        legacyMuteAccepted:false,fullstackAccepted:false,osAccepted:false,requests,phaseCount:3,runtimeEnabled:false,sameClientLifetime:true,
+        sameJwtOldNewDocuments:true,sameOldSocketProducerAndMarker:true,
+        pending:['reconnect/token refresh','inherit reset and allowed-scope presentation','held pre-CAS callback/response, not recall','fresh-fixture fence-omission variant','provider/physical OS acceptance']};
+    }
     return {v:1,boundary:'REAL_SDK_ACTUAL_HOOK_BASELINE_ONLY',baselineAccepted:true,legacyMuteAccepted:false,fullstackAccepted:false,osAccepted:false,
       sourceDigest:sources.digest,legacyRevision:sources.legacyRevision,versions,requests,sameJwtOldNewDocuments:true,sameOldSocketProducerAndMarker:true,
       observations:Object.fromEntries(Object.entries(slots).map(([k,v])=>[k,v.doc.snapshot()])),
       pending:['disabled-CAS legacy denial and v2 retained history','rollback retained fence/history','preauthorized queued callback, not recall']};
   }catch{
-    const error=Error(httpFailureStatus===null?'RT_CLIENT_BASELINE_REFUSED_NO_RETRY':'RT_CLIENT_BASELINE_HTTP_STATUS_'+httpFailureStatus+'_ABORTED_NO_RETRY');
+    const prefix=phases?'RT_CLIENT_PHASE':'RT_CLIENT_BASELINE';
+    const error=Error(httpFailureStatus===null?prefix+'_REFUSED_NO_RETRY':prefix+'_HTTP_STATUS_'+httpFailureStatus+'_ABORTED_NO_RETRY');
     if(httpFailureStatus!==null)error.status=httpFailureStatus;throw error;
   }
   finally{

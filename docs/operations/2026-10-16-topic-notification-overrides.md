@@ -1172,3 +1172,92 @@ intent evidence stays retained. No runtime install, broad mount, HBA change,
 Postgres restart, JWT/PostgREST/Realtime startup or provider delivery occurred.
 Do not repeat accepted calibration without changed input. The next live lifetime
 must use a distinct owned service scope and reuse this accepted transport proof.
+
+## PostgREST Staging Accepted, Not Startup
+
+New R5 PostgREST definitions initially passed8/8; review found a material gap:
+the staged binary was hash-checked only after exec. A held binary-replacement
+case went RED, then GREEN with regular/non-symlink, owner, single-link, mode0700
+and binary-SHA checks inside the launcher BEFORE exec. Final source3a2bf345/
+testscad6649c plus inert wrapper4bca676d/tests67a44562 pass13/13 coordinator
+checks, including loaded omissions. Old source/test bytes remain preserved.
+The separate process-only verifier deliberately does not assert baseline catalog
+or slots after the declared Realtime metadata transition.
+
+One reviewed coordinator stage operation now passes without starting a process:
+stage proofc2fcb9955e2bfaa82e5fc850fb47e59999ace79ad1a8f0382168be3b8f145356.
+Only the known accepted R4 QA binary bytes were copied and rehashed; no old key,
+config, token or production binary was read/adopted. A fresh QA signer is generated
+in server RAM, retained in an exclusive owner-private0600 file and copied only to
+the owned clone0600 key/config. Readback, binary hash, new-file state, closed port,
+candidate catalog, fixture and epoch checks pass. Nothing secret is output.
+No JWT, HTTP process, Realtime tenant/service or provider call was issued.
+Do not replay staging; the successful stage is the next start phase's prestate.
+
+## Node Runtime And Boot Review
+
+The self-contained combined actual-hook/SDK/IPC bundle efab511e now imports in an
+isolated Linux Node22.23.3 container (uid1000); receipt000a1f22. External package
+resolution is zero; no host Git/repository, credentials or client run is required.
+The exact temporary container is removed. Build from the canonical worktree:
+esbuild source comments are CWD-sensitive, so a different bundle hash from a
+different CWD is a refusal, not permission to silently replace an accepted pin.
+
+One native Elixir cleanup-control attempt refused before acceptance. Its exact
+container is absent and inode-bound temporary env removed; original intent/CID
+and failure remain retained. A changed safe diagnostic records only prerequisite
+booleans, stage enums, output lengths/hashes and exception classes, never raw
+output or runtime secrets. No tenant was created and no JWT issued.
+
+Independent boot review found two material harness issues before launch: an
+image config ID is not its registry manifest digest, and a failed container
+cleanup must not skip private env unlink. One RED/GREEN fix pass handles them.
+The next launch is finite metadata-only startup/read-only Repo/listener proof,
+with a NEW actual Perl relay lifetime and exact cleanup. Replication, tenant,
+authenticated SDK delivery and CAS/rollback remain separate unaccepted stages.
+
+The changed native diagnostic67d301eac9f4 established the pre-Elixir cause:
+ERLANG_DIRTY_CPU_THREAD_LIMIT, rc139, stderr60 bytes, stdout0; safe receipt
+0162e1093bab44ad59995a5b115212405944525f43e37eb0749c3eb35fde0b8b.
+Exact container/env cleanup and closing clone identity pass. No raw logs are
+retained or emitted. A Docker CPU quota alone did not bound Erlang's threads.
+
+One changed execution environment sets `ERL_FLAGS=+S 2:2 +SDcpu 1 +SDio 1 +A 4`
+without increasing CPU/memory/PID limits or changing the frozen service/tenant
+bootstrap. These are documented [Erlang runtime flags](https://www.erlang.org/doc/apps/erts/erl_cmd.html).
+Actual Linux evaluationf83ac214d907 now completes all three original controls
+and the loaded cleanup-omission mutant, native diagnostic source5e2fe973:
+receipt dbd84c88ed54126b723424f1a9b6a818ceef3fdc0d3427c80e0ce3101a91aad9.
+Jason is loaded; Repo/Supervisor are absent; exact container/env are removed and
+clone identity remains unchanged. This proves native bootstrap file-control
+flow with only the API leaf replaced, not a real tenant/API/service or delivery.
+HOST5a3b62c4 keeps a safe private failure-stage/RPC hash receipt;5/5 coordinator
+checks include actual generated env evaluation and loaded omission controls.
+
+## First Metadata Boot Refusal
+
+Final adapter4c0674f9 binds HOST5a3b62c4; coordinator14 adapter plus2 dispatch
+checks pass16/16. Image `.ID` and exact RepoDigests are separate; every guard
+freshly measures the clone/relay. Env cleanup refusal cannot produce acceptance.
+
+One actual finite metadata boot6c52d9843661 refused at `probe`: last RPC rc1,
+stdout0. Private boot receipt372076e808f88deb5bb4c661e5c16403ce677f4f4f9f9557638413984cb8776c
+and adapter2eec69dc are retained. Exact service/container cleanup is REMOVED,
+env cleanup REMOVED and Perl cleanup passes. A fresh readonly reconciliation
+confirms the original baseline catalog/fixture/epoch still match; no JWT/tenant,
+HTTP or replication slot was created. Do not replay this opaque attempt.
+Next changed diagnostic captures bounded RPC stderr only as fixed classes and
+lengths/hashes, with the same identity-bound cleanup. The cause is not inferred
+from a generic rc1 or repaired by changing database access.
+
+The public single-lifetime phase runner now has75/75 coordinator checks, zero
+skip: baseline -> authenticated disabled CAS -> parent-controlled compatible
+rollback with runtime=false. Original sockets remain, new HTTP drains before
+phase changes, and retained history/read-state is checked separately from alert
+eligibility. This remains source-only pending actual composed parent/service
+execution; reconnect/refresh, inherit reset, held callback
+and provider/OS gates are not relabelled complete.
+
+Independent review of the frozen seven-file phase delta5b910199/16698aef found
+no new P1/P2. Coordinator75/75, zero skip and diff checks pass. Actual parent/
+service execution remains outstanding; the review is not a delivery receipt.

@@ -34,18 +34,18 @@ function load(code){
   forbidFiles=true;return {api:module.exports,fileReads:()=>fileReads};
 }
 
-test('new IPC bundle builder is available without changing the baseline builder',async()=>{
+test('IPC bundle builder pins the reviewed baseline-compatible phase export builder',async()=>{
   assert.equal(typeof api.buildRealtimeClientIpcBundle,'function','SELF_CONTAINED_IPC_BUNDLE_REQUIRED');
   assert.equal(sha(readFileSync(new URL('./topic-notification-realtime-client.build.mjs',import.meta.url))),
-    '68cf96e5fd47ba94379dd01dda843492ccd8f557753d0e465b677cd94035b04b');
+    '9b40a68a2dfb644ecec857f478c80e95f23728c9df4c25e1ae58d739cbc878df');
 });
 
-test('combined Node22 code reuses the exact accepted baseline bundle and includes frozen IPC source pins',async()=>{
+test('combined Node22 code reuses the current baseline-compatible phase bundle and includes frozen IPC source pins',async()=>{
   const b=await bundle();assert.equal(b.sha256,sha(b.code));assert.equal(b.target,'node22');
-  assert.equal(b.baselineBundleSha256,'a6880489e12d5e69badf6f65225002b22820b40296e3308ca572935a170a2764');
+  assert.equal(b.baselineBundleSha256,'2e926dc30a4a0fcfa472b8915a85347a27e8143e6778107305f519cc445b12eb');
   assert.deepEqual(b.externalPackages,[]);assert.equal(b.credentialsEmbedded,false);assert.equal(b.sourceSnapshot,'embedded-public-only');
-  assert.equal(b.sourcePins.ipc,'8f908750d9791b017cc432d1bdcf0a914479d764bae95a4650cea6538ba12e3f');
-  assert.equal(b.sourcePins.ipcTest,'7281113ceeb97df7b4b21523b0ef5fc84aa371bad4101439a7c46c05f8cde521');
+  assert.equal(b.sourcePins.ipc,'16698aef9a465727859204974ba6e514738517cf7556bc2bf52dccc54e27887d');
+  assert.equal(b.sourcePins.ipcTest,'6b6697687caee026f9217835283530ecbba014f71c0271bbbfa3a0367a40d28d');
   assert.ok(b.code.length>100000&&b.code.length<25000000);
   assert.doesNotMatch(b.code,/C:\\\\Users|D:\\\\CodexProjects|VITE_SUPABASE|SUPABASE_SERVICE_ROLE_KEY/);
 });
@@ -53,6 +53,7 @@ test('combined Node22 code reuses the exact accepted baseline bundle and include
 test('standalone CommonJS imports silently and exposes actual IPC/baseline plus immutable public sources without file/Git reads',async()=>{
   const b=await bundle(),loaded=load(b.code);
   assert.equal(typeof loaded.api.runRealtimeClientIpc,'function');assert.equal(typeof loaded.api.runRealtimeClientBaseline,'function');
+  assert.equal(typeof loaded.api.runRealtimeClientPhaseIpc,'function');assert.equal(typeof loaded.api.runRealtimeClientPhases,'function');
   assert.equal(typeof loaded.api.loadRealtimeClientSources,'function');
   const a=await loaded.api.loadRealtimeClientSources(),other=await loaded.api.loadRealtimeClientSources();
   assert.equal(a.digest,b.sourceDigest);assert.equal(a.legacyRevision,'75096aa30427fdf551fd0c3bdcb7d9eee7fbd5c5');
@@ -78,4 +79,13 @@ test('combined actual IPC consumes private stdin config and returns only fixed r
   const r=await done;assert.equal(r.status,'REFUSED');assert.equal(r.baselineAccepted,false);assert.equal(r.fullstackAccepted,false);
   assert.equal(r.inspectCount,0);assert.doesNotMatch(stdout,/PRIVATE_|notificationFeed|legacyRevision/);
   assert.equal(JSON.parse(stdout).code,'RT_CLIENT_IPC_REFUSED');assert.equal(loaded.fileReads(),0);
+});
+
+test('combined phase IPC uses the real phase runner and fails an unbound target without filesystem/Git/process reads',async()=>{
+  const loaded=load((await bundle()).code),input=new PassThrough(),output=new PassThrough();let stdout='';
+  output.on('data',chunk=>{stdout+=chunk.toString();});
+  const done=loaded.api.runRealtimeClientPhaseIpc({input,output,runPhases:loaded.api.runRealtimeClientPhases});
+  input.write(JSON.stringify({v:1,kind:'config',binding:{},credentials:{a:'PRIVATE_A',b:'PRIVATE_B'},sources:await loaded.api.loadRealtimeClientSources()})+'\n');
+  const result=await done;assert.equal(result.status,'REFUSED');assert.equal(result.fullstackAccepted,false);
+  assert.equal(result.inspectCount,0);assert.doesNotMatch(stdout,/PRIVATE_|legacyRevision|notificationFeed/);assert.equal(loaded.fileReads(),0);
 });
