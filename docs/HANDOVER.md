@@ -1,6 +1,26 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-17 12:08Z:** coordinator; item77 Task6 and SAME-release
+For Cursor continuation, read [the complete Cursor handoff](CURSOR_HANDOVER.md),
+including the measured wire failure, tool/device setup and unfinished Webhost P2.
+
+**Current resume,2026-10-17 12:46Z:** resource checkpoint after owner reports1%
+usage remaining. Stable NOT published; production unchanged. ProductC6/Android23,
+R6 recovery3b4692b2 and whole7 ROLLBACKfd5baacf remain accepted. Actual330 e49
+backup47150b3c/preflight/appendf53793ab/fresh readback pass (128 sessions, all old124
+retained). Wire880ad82e REFUSED b099014b: first inspect response27.412s exceeds
+unchanged client15s (13.417s fresh +0.765s checkpoint +13.230s fresh). Clientexit1,
+validatoralive, no OOM; all4processes REMOVED/tenantRETIRED/cleanupFailure null.
+Root cause is repeated OS-guard latency, not a product-delivery verdict. Next:
+reuse existing fullstack-http-fast-probe batching for equivalent fresh guards;
+new execution nonce with ORIGINAL e49 cohort/known COMMIT, >=1170s horizon,
+no TTL renewal/reset/replay. Fastguard is analysis ONLY; continuation tests are
+expected RED0/3, no implementation/CLI yet. Webhostfb0f43ce13 checks and Edge
+operatorb3750b0f11 checks are SOURCE ONLY, pending real wire/HTTP/SQL/canaries.
+No running coordinator/worker exec commands, no rental/main push/prodSQL/native
+publication. Read newest report and ignored ledger below; do not repeat accepted
+build/SQL suites. Keep foreign work/A063 exclusion. Existing agents are held.
+
+**Earlier resume,2026-10-17 12:08Z:** coordinator; item77 Task6 and SAME-release
 iPhone text previews, branch `codex/topic-alerts-20261016` in the canonical
 worktree below. Product source/migration/native candidate is `c6c67368`;
 subsequent checkpoint edits are documentation only. Android0.1.22/build23 is
