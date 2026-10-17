@@ -23,7 +23,7 @@
 - Один successor-провод в `READ COMMITTED` принят: горизонт 4863 с, 670 мс, fastguard `WITHIN_BUDGET`, inspect не стартовал, один backend pid, CAS `applied` revision 1, режим `disabled`, rollback runtime `false`, фазы 3. Readback после COMMIT: runtime `false`, mode `disabled`, revision 1, строк 4. Cohort 330 не вызывался.
 - Production: свежий backup 6448310 байт в `/srv/letscube/backups/notification-coordinated-20261017`, архив читается. Миграция `20261017104253_coordinated_notification_release.sql` применена один раз. После неё topic runtime `false`, web runtime `false`, RLS обеих таблиц включён, setter есть.
 - `main` быстро перемотан `978617b9..aed60557`. Образ веба `l64kyyu1sysev2izzjjbizhe:aed605574697db46f5a101d2f1f664a1cd33cc94`, healthy, прежний контейнер снят. Публичный бандл `/assets/index-CW9ih_wQ.js` содержит `topic_notification_preference_set`. API-образ `fkd10qwlo4qod9e6gtyzzuwk:aed605574697db46f5a101d2f1f664a1cd33cc94`, healthy, прежний снят.
-- Edge `send-push-notifications` обновлён пятью файлами, три прежних сохранены рядом с backup. `supabase-edge-functions` после перезапуска healthy. Android 23 не публиковался: публичные байты APK в этом заходе не проверялись.
+- D-084: карточка обратной связи больше не складывает заголовок и пояснение в две строки. Тест `tests/unit/feedback-card-line.test.mjs` был красным на `items-start` и стал зелёным. Runtime не включались, Android 23 не публиковался, образ не менялся.
 
 ## Не сделано
 
@@ -53,4 +53,4 @@ Production-миграция не повторялась. Оба runtime по-п�
 
 ## Следующее действие
 
-Канарейка установленного Home Screen iPhone: читаемый текст, sender/None, перезапуск, точный tap и отказ queued logout/None. Только после неё включать topic/Web runtime и заново собирать Android 23 с коммита, который примет `android23-release.mjs` при текущем main.
+Канарейка установленного Home Screen iPhone на устройстве владельца. До неё runtime не включать. Android 23 не собирать в обход `MAIN_BASE_CHANGED`: скрипт примет новый кандидат только если HEAD и `origin/main` совпадают с `aed60557`, а текущая ветка уже впереди документами. D-084 сведён к одной строке карточки; это не канарейка и не Android.

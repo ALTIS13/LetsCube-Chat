@@ -100,7 +100,7 @@ export function KubFeedbackViewport() {
             // was up a press on «Диагностика» went into the toast. A number
             // tuned against one layout cannot hold for the next one; a card that
             // swallows nothing does not need to be tuned at all.
-            "kub-feedback-card pointer-events-none relative flex w-full max-w-sm items-start gap-2.5",
+            "kub-feedback-card pointer-events-none relative flex w-full max-w-sm items-center gap-2.5",
             "overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]",
             // A toast floats over whatever the person was looking at, so it
             // takes the covering fill rather than the panel one.
@@ -109,16 +109,14 @@ export function KubFeedbackViewport() {
           )}
         >
           <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1", RAIL[item.kind])} />
-          <span className={cn("mt-0.5 shrink-0", TONE[item.kind])}>
+          <span className={cn("shrink-0", TONE[item.kind])}>
             <KubIcon name={ICON[item.kind]} size={15} tone="currentColor" />
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-semibold leading-snug">{item.title}</span>
-            {item.detail && (
-              <span className="mt-0.5 block text-xs leading-snug text-[color:var(--kub-muted)]">
-                {item.detail}
-              </span>
-            )}
+          <span className="min-w-0 flex-1 truncate leading-snug">
+            <span className="font-semibold">{item.title}</span>
+            {item.detail ? (
+              <span className="text-[color:var(--kub-muted)]"> {item.detail}</span>
+            ) : null}
           </span>
           <button
             type="button"
