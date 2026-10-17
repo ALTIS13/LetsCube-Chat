@@ -228,6 +228,53 @@ test("a socket that already knows it is closed is opened rather than probed", ()
   assert.equal(state.beats, 0);
 });
 
+test("a handshake that never finishes is dropped before it is opened again", async () => {
+  // realtime-js 2.105.1 `RealtimeClient.connect` returns while `isConnecting()`.
+  // phoenix 0.4.1 `Socket.connect` returns while `conn` exists. A handshake
+  // left on the route that just died therefore stays until the browser gives
+  // up, and a probe is never sent because the socket is not open. `disconnect`
+  // finishes on a later turn; `connect` during that turn is refused too.
+  const state = {
+    phase: "connecting" as "connecting" | "disconnecting" | "closed" | "open",
+    disconnects: 0,
+    connects: 0,
+    connectsWhileBusy: 0,
+    beats: 0,
+  };
+  const revival = createRealtimeRevival({
+    isConnected: () => state.phase === "open",
+    isConnecting: () => state.phase === "connecting",
+    disconnect: () =>
+      new Promise<void>((resolve) => {
+        state.disconnects += 1;
+        state.phase = "disconnecting";
+        queueMicrotask(() => {
+          state.phase = "closed";
+          resolve();
+        });
+      }),
+    connect: () => {
+      if (state.phase !== "closed") {
+        state.connectsWhileBusy += 1;
+        return;
+      }
+      state.connects += 1;
+      state.phase = "connecting";
+    },
+    sendHeartbeat: () => {
+      state.beats += 1;
+    },
+  });
+
+  assert.equal(revival.doubt(), "connect");
+  assert.equal(state.beats, 0, "a stuck handshake was probed");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.disconnects, 1);
+  assert.equal(state.connectsWhileBusy, 0, "connect() ran while the old handshake was still held");
+  assert.equal(state.connects, 1);
+  assert.equal(state.phase, "connecting");
+});
+
 test("a socket that closed while the probe waited is not beaten again", () => {
   const { revival, state, elapse } = socketHarness();
   revival.doubt();

@@ -29,7 +29,18 @@ export type HeartbeatStatus = "sent" | "ok" | "error" | "timeout" | "disconnecte
 
 export interface RevivableSocket {
   isConnected(): boolean;
+  /**
+   * True while a handshake is already in progress. `connect()` will not
+   * replace that transport: realtime-js returns, and phoenix returns while
+   * its `conn` still exists.
+   */
+  isConnecting?(): boolean;
   connect(): void;
+  /**
+   * Drops the current transport and resolves once `connect()` can open
+   * another. The client's own `disconnect` does not reconnect afterwards.
+   */
+  disconnect?(): Promise<unknown> | unknown;
   sendHeartbeat(): unknown;
 }
 
@@ -78,6 +89,17 @@ export function createRealtimeRevival(
     /** A moment of doubt. */
     doubt(): RevivalStep {
       if (!socket.isConnected()) {
+        // A handshake left on the route that just died still counts as
+        // connecting, so `connect()` leaves it there and no probe is sent.
+        // Drop it first. `connect()` during the drop is refused as well
+        // (`isDisconnecting`), so the new one waits until the drop settles.
+        if (socket.isConnecting?.() && socket.disconnect) {
+          const drop = socket.disconnect();
+          void Promise.resolve(drop).then(() => {
+            if (!socket.isConnected()) socket.connect();
+          });
+          return "connect";
+        }
         socket.connect();
         return "connect";
       }
