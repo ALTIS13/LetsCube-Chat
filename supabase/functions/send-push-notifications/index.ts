@@ -240,7 +240,9 @@ async function dispatchAlbumPush(
           try {
             await webpush.sendNotification(
               { endpoint: descriptor.endpoint, keys: { p256dh: descriptor.p256dh, auth: descriptor.auth } },
-              JSON.stringify(buildDeclarativeWebPushPayload(safe, webPushAppOrigin)),
+              JSON.stringify(buildDeclarativeWebPushPayload(safe, webPushAppOrigin, {
+                subscriptionId: descriptor.id, notificationId: freshPayload.notificationId,
+              })),
               { TTL: 60 * 60 * 24, urgency: getWebPushUrgency(safe.kind), ...(topic ? { topic } : {}) },
             );
             return { outcome: "sent" };
@@ -753,7 +755,9 @@ async function deliver(
     legacyPayload = safePayload(row.payload);
     topic = await createWebPushTopic(legacyPayload.tag);
     descriptorFingerprint = await webPushDescriptorFingerprint(descriptor);
-    providerPayload = JSON.stringify(buildDeclarativeWebPushPayload(legacyPayload, webPushAppOrigin));
+    providerPayload = JSON.stringify(buildDeclarativeWebPushPayload(legacyPayload, webPushAppOrigin, {
+      subscriptionId: descriptor.id, notificationId: row.payload.notificationId,
+    }));
   } catch (error) {
     await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       attempt_count: row.attempt_count + 1,

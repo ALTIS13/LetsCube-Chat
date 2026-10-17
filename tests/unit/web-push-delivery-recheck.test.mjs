@@ -134,6 +134,18 @@ async function descriptorChanged() {
 }
 test("actual Single Web Edge refuses held descriptor A after live same-id owner changes to B", () => descriptorChanged());
 
+test("single Web preview selector uses the checked subscription and notification, never payload credentials", async () => {
+  const notificationId = "71000000-0000-4000-8000-000000000002";
+  configure("deliver", { payload: { notificationId,
+    web_preview: { subscription_id: userId, grant_secret: "fictional-forged-grant" } } });
+  await handler(request());
+  assert.equal(providerCalls.length, 1);
+  const sent = JSON.parse(providerCalls[0][1]);
+  assert.deepEqual(sent.web_preview, { preview_v: 1, subscription_id: subscriptionId, notification_id: notificationId });
+  assert.equal(sent.body, "Новое уведомление");
+  assert.doesNotMatch(JSON.stringify(sent), /fictional-forged-grant/);
+});
+
 test("Single Web permanent failure only retires the exact descriptor that failed", async () => {
   const f = configure("deliver");
   const original = {...f.live};

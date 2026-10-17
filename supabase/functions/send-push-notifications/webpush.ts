@@ -20,12 +20,13 @@ export type SafeWebPushPayload = {
 export function buildDeclarativeWebPushPayload(
   payload: SafeWebPushPayload,
   configuredAppOrigin: string | undefined,
+  previewSelector?: unknown,
 ): SafeWebPushPayload & Record<string, unknown> {
   // A subscription can outlive the account in this browser, and an already
   // accepted push can arrive after logout. WebKit may display this declarative
   // fallback without running our service worker, so both display paths must
   // carry no sender or message content. Keep only routing/grouping metadata.
-  const neutral: SafeWebPushPayload = {
+  const neutral: SafeWebPushPayload & Record<string, unknown> = {
     ...payload,
     title: "LETSCUBE",
     body: "Новое уведомление",
@@ -37,6 +38,20 @@ export function buildDeclarativeWebPushPayload(
     messageType: "",
     preview: "",
   };
+  delete neutral.web_preview;
+  const selector = previewSelector && typeof previewSelector === "object" && !Array.isArray(previewSelector)
+    ? previewSelector as Record<string, unknown>
+    : null;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (payload.kind === "message" && typeof selector?.subscriptionId === "string" &&
+    uuid.test(selector.subscriptionId) && typeof selector.notificationId === "string" && uuid.test(selector.notificationId)) {
+    // Selectors are not display authority. The worker must obtain fresh content.
+    neutral.web_preview = {
+      preview_v: 1,
+      subscription_id: selector.subscriptionId.toLowerCase(),
+      notification_id: selector.notificationId.toLowerCase(),
+    };
+  }
   const appOrigin = safeHttpsOrigin(configuredAppOrigin);
   if (!appOrigin) return neutral;
 

@@ -67,6 +67,16 @@ test.after(() => {
   delete globalThis.__albumWebpush;
 });
 
+test("album Web preview selector uses the freshly rechecked member and exact subscription", async () => {
+  configure("web");
+  await handler(request());
+  assert.equal(webCalls.length, 1);
+  assert.deepEqual(webCalls[0].web_preview, {
+    preview_v: 1, subscription_id: subscriptionId, notification_id: notificationId,
+  });
+  assert.equal(webCalls[0].body, "Новое уведомление");
+});
+
 function configure(nextProvider, options = {}) {
   provider = nextProvider;
   requests = [];

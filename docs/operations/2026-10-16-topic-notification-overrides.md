@@ -1386,3 +1386,95 @@ They include the ignored-signal and absolute aggregate deadline repairs, but new
 partition/session contracts are not integrated and additional flow/unknown-ACK/
 rollback leaf controls remain. No active exec or live action belongs to that
 worker. This is a dependency handoff, not permission to run the old HOST.
+
+## Structural Guard Follow-Up
+
+Guard6526109a passes18 source cases; the append-only session lease b4e2bf04 and
+checkpoint adapter0414d1cf pass9 and independent source review finds no P1/P2.
+Those are not a fresh session or a runtime permit. Hume is integrating these
+contracts into the finite parent; additional HOST flow controls remain open.
+
+Actual PG17 guard SQL succeeds with no stderr. The earlier wrapper refusal did
+not establish a SQL ABI fault. A manual diagnostic using postgres instead of
+the accepted supabase_admin role produced a different deparsed catalog hash.
+Using the exact connection guard and accepted role/default search_path gives
+structural initial PASS, all seven partitions supported:
+ea26e333f9f4d721c354945541e45aa0db4d542caa8eb0571ea2bfc9d0d81d21.
+This metadata-only measurement explicitly does not admit stale Auth sessions.
+
+The changed comparison-only ACL projection was then exercised on actual PG17
+inside an exact-target CREATE/ROLLBACK transaction. It correctly refuses new
+child equivalence: supported=true, rawEqual=false, comparisonEqual=false.
+Proof30d2b8b4d519fefe8251f7412d02bdcb7d13ff0add98d9af7e3a2dba45247232.
+Catalog/epoch are unchanged afterwards. An in-RAM footprint diff finds only
+table ACL array order and the inherited PRIMARY KEY connoinherit bit: old19=true,
+new20=false. Both keys have the same parent constraint19460, key columns[8,7],
+local=false, inheritCount1, validated=true and PRIMARY KEY(id,inserted_at).
+CHECK metadata otherwise matches. Kuhn owns the narrow semantic investigation
+and regression case; do not waive general constraint fields or weaken raw old
+partition equality. No new sessions, services, tenant or lasting DDL exists.
+
+Guard a5ef97d8/tests181d78dc closes that measured projection issue:21/21
+coordinator checks pass, including actual local catalogs and omission controls.
+PG17.6 creates a direct-child primary key with connoinherit=false, whereas
+attaching an existing constraint retains its bit. Comparison-only normalization
+requires exact inherited parent PK/key/index binding. CHECK/FK/UNIQUE bits and
+raw old partition fingerprints remain strict. Primary source:
+[creation](https://github.com/postgres/postgres/blob/REL_17_6/src/backend/catalog/index.c#L1803-L1847),
+[attachment](https://github.com/postgres/postgres/blob/REL_17_6/src/backend/catalog/pg_constraint.c#L791-L806).
+
+One changed actual PG17 rollback-only comparison now passes:
+ed1478191a5349c472fd7120a31be7387f45dbfe761847f9fc6677125f382344.
+Initial structural validation passes; new20 is supported, rawEqual=false and
+comparisonEqual=true. All old physical footprints and closing full catalog/
+epoch are unchanged. No session admission or service startup is inferred.
+
+Coordinator also identified a concrete parent transport omission before live
+dispatch: the configuration JSON lacked the newline required by the actual
+public IPC parser. Hume is repairing it with a real-parser regression control,
+along with the remaining lease/HOST tests and bounded no-secret failure metadata.
+
+## Finite Parent Execution Follow-Up
+
+Core801e6520/HOSTd984a35a pass29 coordinator checks. One independent review
+finds P2: validator cap1056 counted four rather than six exchanges per public
+request. The one fix pass derives1687 from startup41 +256*6 +rollback-extra6
++closed104. Actual validator rejects1057 under the old cap, accepts1687 with
+the new cap and refuses1688. Coordinator's exact named case passes; the earlier
+`budget` name pattern selected no case and is not acceptance. Prior source
+checks are reused, not replayed as a second review.
+
+Actual attempt97c132ec5a10/program0a75031b refuses before remote intent creation.
+Exact owned intent/proof/validator/lease paths are absent. Actual Linux inert
+namespace inspection identifies a missing outer signal import before the HOST
+try block. The local helper had masked it. Corrected HOSTd00dac9e/testsacea1de3
+pass21 worker cases; coordinator's no-injected-runtime-import case passes.
+The original failed attempt remains retained and is not retried.
+
+Changed attempt5c2dcb908124/program77fab006 refuses at jit-session-lease.
+Its exact retained proof confirms validator removal, no session lease, and
+parent_exchange rejection of the validator's refusal frame. A direct readonly
+actual lease projection confirms four old sessions, zero new and fixtureReady
+false, not a proven Node22/IPC defect. Twenty independent readiness atoms
+identify only two wrong synthetic literals: profile names and invitation label
+were copied from R4, whereas this is the accepted forward2 R5 fixture. All other
+18 atoms pass. Leib repairs those checks against pinned fixture provenance;
+do not rename DB rows, weaken predicates, reset/reseed, or repeat the spent
+attempt. No relay, HTTP, RT, tenant, JWT or production action occurred.
+
+## Same-Release iPhone Preview Requirement
+
+The owner explicitly requires readable iPhone PWA message pushes in this same
+planned release. [Audit](2026-10-17-iphone-message-preview-audit.md),
+[plan](../superpowers/plans/2026-10-17-web-message-preview.md), and
+[stable RPC/DTO contract](../superpowers/specs/2026-10-17-web-message-preview.md).
+Kuhn owns additive DB/grants, Hume browser lifecycle/settings, Leib worker after
+the lease fix, coordinator Edge selectors and final assembly. Android/native
+contracts and Stable22 remain unchanged; no paid device was allocated.
+
+Coordinator adds the non-authoritative selector to actual single and album Web
+providers, from the checked subscription and current notification selector.
+Both declarative and legacy fallback text remain generic. A payload-supplied
+web_preview is discarded. Real producer RED becomes GREEN; affected114 tests
+pass, plus the focused4 selector cases include three loaded literal omissions.
+This is source only: no rich lookup/worker/iPhone delivery or release claim.

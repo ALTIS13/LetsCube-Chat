@@ -22,14 +22,26 @@ source-only ports are not actual inspection or permission to start a tenant.
 Checkpoint sourcef78740ec/tests14/14 plus independent review pass; actual PG17
 initial readonly projection/validation1eca560d matches four sessions/fences0/
 retained initial history. Do not rerun this accepted calibration.
-Launch is not ready: actual metadata projection rejects inherited parent CHECK
-names on all seven existing partitions; exact readonly measurement identifies
-messages_payload_exclusive, not catalog/publication/epoch drift. Also the original
-finite QA sessions crossed their remaining30-minute admission threshold. Do not
-extend their expiry or weaken old checks. Kuhn owns structural inherited/new-child
-normalization; Leib owns a forward NEW-session lease/checkpoint adapter, created
-only just before an admitted run, retaining old rows. Hume freezes parent/HOST
-pending those contracts. No new sessions, services or tenant were created.
+Launch is not ready: guard a5ef now passes21 source cases and actual PG17 initial/
+new-child comparison ed147819. Comparison-only ACL-order and exact inherited PK
+normalization retain strict old physical fingerprints; closing catalog/epoch
+are unchanged after ROLLBACK. Do not repeat accepted metadata work. The original
+QA sessions aged naturally; never extend their expiry or weaken old checks.
+Append-only lease b4e2/checkpoint0414 pass9 source cases and independent review;
+create NEW sessions only just before an admitted run, retaining all old rows.
+Parent/HOST source29 coordinator checks pass; review's validator budget P2 is
+fixed1687 with genuine boundary proof. Actual97c failed before intent (missing
+outer signal import); corrected no-injected-import test passes. Changed5c2d
+fails at lease readiness; validator is removed, four old sessions/zero new.
+Only profile-name/invite-label literals were copied from R4 instead of pinned
+R5 forward2. Leib owns that narrow lease fix, then Hume repins HOST. Retain both
+failed attempts; do not retry them, weaken checks, reset or reseed.
+Latest owner requirement: readable message text in iPhone PWA push must ship
+in this same release, preserving preview/privacy choices. New plan/spec are
+published. Kuhn owns additive grant DB/tests, Hume browser lifecycle/settings,
+Leib worker after lease repair, coordinator Edge selector/final assembly.
+Single/album selector transport RED/GREEN and114 affected tests pass; generic
+fallback remains safe. Worker/DB/physical iPhone and common release remain open.
 No live relay/HTTP/RT, tenant or JWT.
 Next: finite composed service/SDK controller and actual delivery with fresh
 phase-aware guards. Provider/native/launch gates remain open; UI is unmounted.
