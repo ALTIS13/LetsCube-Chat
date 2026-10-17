@@ -1478,3 +1478,25 @@ Both declarative and legacy fallback text remain generic. A payload-supplied
 web_preview is discarded. Real producer RED becomes GREEN; affected114 tests
 pass, plus the focused4 selector cases include three loaded literal omissions.
 This is source only: no rich lookup/worker/iPhone delivery or release claim.
+
+## Common Release Integration, 2026-10-17
+
+The iPhone grant proposal passes50 source cases and one actual isolated PG17
+DDL-only ROLLBACK rehearsal (76c5aebc), with unchanged catalog/epoch and no
+feature objects retained. Browser30, worker25, adjacent ownership64 and legacy53
+checks pass; settings1440/390 in both themes were inspected on fictional data.
+Final source review's Unicode boundary P2 is fixed by genuine SQL-to-worker
+RED/GREEN, retaining96/240 code-point limits. The opt-in legacy dispatcher no
+longer serializes raw content; it shares the generic/selector contract without
+changing its deployment ownership. Details and remaining phone/release gates
+are in the linked iPhone audit/plan, not inferred from these source counts.
+
+Topic Task6: actual b83 committed the exact append-only lease16bfd2d8 before
+PostgREST startup refused. No RT/tenant/JWT/client/CAS followed; cleanup removed
+the validator, PostgREST and Perl. Retained artifacts and all old/new rows stay
+unchanged. The new explicit known-COMMIT continuation uses new process/receipt
+paths, never replays the spent parent or renews sessions. A real PostgreSQL17
+grammar regression exposed a missing delimiter before COMMIT; the fix passes
+all24 continuation source controls. Readonly observation at09:02:50UTC finds
+3307seconds remaining, above its1080second admission bound. This observation
+does not itself establish Auth/CDC/provider acceptance.

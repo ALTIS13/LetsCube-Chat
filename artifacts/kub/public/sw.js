@@ -32,6 +32,14 @@ const APP_SHELL = [
 ];
 const APP_NAME = "LETSCUBE";
 const DEFAULT_PUSH_BODY = "Новое уведомление";
+const WEB_PREVIEW_RPC = "https://core.letscube.ru/rest/v1/rpc/web_message_preview_content";
+const WEB_PREVIEW_DB = "letscube-web-message-preview";
+const WEB_PREVIEW_STORE = "state";
+const WEB_PREVIEW_MAX_TTL = 2592000000;
+let previewWrites = Promise.resolve();
+let previewChange = 0;
+let previewStorageFailed = false;
+let previewBlocked = false;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(precacheShell());
@@ -68,6 +76,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  if (typeof event.data?.type === "string" && event.data.type.startsWith("LETSCUBE_WEB_PREVIEW_")) {
+    const pending = handleWebPreviewMessage(event);
+    if (typeof event.waitUntil === "function") event.waitUntil(pending);
+    return;
+  }
   if (event.data?.type === "KUB_SKIP_WAITING") {
     const update = self.skipWaiting();
     if (typeof event.waitUntil === "function") event.waitUntil(update);
@@ -226,9 +239,12 @@ self.addEventListener("push", (event) => {
 });
 
 async function showPushNotification(data) {
+  const preview = await lookupWebPreview(data);
   await closePushNotificationTag(data.tag);
-  return self.registration.showNotification(data.title, {
-    body: data.body,
+  // No await remains between this final durable recheck and FIRST publication.
+  const readable = preview && await currentWebPreview(preview);
+  return self.registration.showNotification(readable ? preview.content.title : data.title, {
+    body: readable ? preview.content.body : data.body,
     tag: data.tag,
     renotify: data.renotify,
     timestamp: data.timestamp,
@@ -287,17 +303,234 @@ function normalizePushPayload(raw) {
           ? `chat:${chatId}`
           : "kub-notification";
   return {
-    title: safeText(proposed.title || data.title, APP_NAME, 80),
-    body: safeText(proposed.body || data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
+    title: isMessagePush ? APP_NAME : safeText(proposed.title || data.title, APP_NAME, 80),
+    body: isMessagePush ? DEFAULT_PUSH_BODY : safeText(proposed.body || data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
     tag: safeText(proposed.tag || data.tag, fallbackTag, 100),
     renotify: typeof data.renotify === "boolean" ? data.renotify : true,
     kind,
     isMessagePush,
+    webPreview: isMessagePush ? webPreviewSelector(data.web_preview) : null,
     chatId,
     messageId,
     timestamp: safeTimestamp(data.timestamp || data.createdAt || data.created_at),
     url: routeForPush({ ...data, navigate: proposed.navigate }, { chatId, messageId, taskId, inviteId }),
   };
+}
+
+function previewExact(value, keys) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+}
+
+function previewId(value) {
+  return typeof value === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value);
+}
+
+function previewInteger(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function previewOwner(value) {
+  return previewExact(value, ["userId", "sessionId", "accountEpoch"])
+    && previewId(value.userId) && previewId(value.sessionId) && previewInteger(value.accountEpoch);
+}
+
+function webPreviewSelector(value) {
+  return previewExact(value, ["preview_v", "subscription_id", "notification_id"])
+    && value.preview_v === 1 && previewId(value.subscription_id) && previewId(value.notification_id)
+    ? { ...value } : null;
+}
+
+function previewPublicKey(key) {
+  if (typeof key !== "string" || key.length > 2048) return false;
+  if (/^sb_publishable_[a-zA-Z0-9_-]{16,512}$/.test(key)) return true;
+  try {
+    const parts = key.split(".");
+    return parts.length === 3 && parts.every(part => /^[A-Za-z0-9_-]+$/.test(part))
+      && JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))).role === "anon";
+  } catch { return false; }
+}
+
+function previewContext(context, owner) {
+  return previewExact(context, ["preview_v", "recipient_id", "session_id", "subscription_id", "subscription_fingerprint",
+    "revision", "preview_level", "installation_consent", "observed_at_epoch_ms", "expires_at_epoch_ms"])
+    && context.preview_v === 1 && previewOwner(owner) && context.recipient_id === owner.userId && context.session_id === owner.sessionId
+    && previewId(context.subscription_id) && /^v1:[a-f0-9]{64}$/.test(context.subscription_fingerprint)
+    && previewInteger(context.revision) && context.revision > 0
+    && ["sender", "message"].includes(context.preview_level) && context.installation_consent === true
+    && previewInteger(context.observed_at_epoch_ms) && previewInteger(context.expires_at_epoch_ms)
+    && context.expires_at_epoch_ms > context.observed_at_epoch_ms
+    && context.expires_at_epoch_ms - context.observed_at_epoch_ms <= WEB_PREVIEW_MAX_TTL;
+}
+
+// Shared Hume browser lifecycle owns state/current. The worker writes only the
+// nonsecret API confirmation key, never a second owner/grant state machine.
+// Each operation uses a fresh transaction. No transaction spans network IO.
+function previewRecord(update) {
+  return new Promise((resolve, reject) => {
+    let db, tx, result, settled = false;
+    const finish = ok => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); if (db) db.close();
+      if (ok) resolve(result); else reject(new Error("WEB_PREVIEW_STORAGE_UNAVAILABLE"));
+    };
+    const timer = setTimeout(() => {
+      try { if (tx) tx.abort(); } catch { /* A completed transaction cannot be aborted. */ }
+      finish(false);
+    }, 2000);
+    try {
+      const open = indexedDB.open(WEB_PREVIEW_DB, 1);
+      open.onerror = open.onblocked = () => finish(false);
+      open.onupgradeneeded = () => {
+        if (!open.result.objectStoreNames.contains(WEB_PREVIEW_STORE)) open.result.createObjectStore(WEB_PREVIEW_STORE);
+      };
+      open.onsuccess = () => {
+        db = open.result;
+        if (settled) { db.close(); return; }
+        try {
+          tx = db.transaction(WEB_PREVIEW_STORE, update ? "readwrite" : "readonly");
+          tx.onabort = tx.onerror = () => finish(false);
+          tx.oncomplete = () => finish(true);
+          const store = tx.objectStore(WEB_PREVIEW_STORE), record = store.get("current"), api = store.get("worker-public-api");
+          let remaining = 2;
+          const read = () => {
+            if (--remaining) return;
+            try {
+              result = { record: record.result, api: api.result };
+              if (update) { result.api = update(result.record); store.put(result.api, "worker-public-api"); }
+            } catch { tx.abort(); }
+          };
+          record.onsuccess = api.onsuccess = read;
+        } catch { finish(false); }
+      };
+    } catch { finish(false); }
+  });
+}
+
+function handleWebPreviewMessage(event) {
+  const port = event.ports && event.ports[0], source = event.source;
+  const reply = value => { if (port) port.postMessage(value); };
+  let data;
+  try {
+    // Snapshot before the first await; only structured-clone JSON is consumed.
+    data = JSON.parse(JSON.stringify(event.data));
+    if (!source || source.type !== "window" || new URL(source.url).origin !== self.location.origin || data.v !== 1) throw new Error();
+    const install = data.type === "LETSCUBE_WEB_PREVIEW_INSTALL";
+    const retire = data.type === "LETSCUBE_WEB_PREVIEW_RETIRE";
+    const keys = retire ? ["type", "v"] : ["type", "v", "intent_id", "generation", "context", "public_key"];
+    if ((!install && !retire) || !previewExact(data, keys)) throw new Error();
+    if (install && (!port || source.visibilityState !== "visible" || !previewId(data.intent_id)
+      || !previewInteger(data.generation) || data.generation < 1 || !previewPublicKey(data.public_key))) throw new Error();
+    // In-flight lookups are synchronously invalidated when intent arrives, even
+    // while its durable retirement is still queued. Stale writes remain CAS'd.
+    const change = ++previewChange;
+    if (retire) {
+      previewBlocked = true;
+      reply({ type: "LETSCUBE_WEB_PREVIEW_RESULT", ok: true });
+      return Promise.resolve();
+    }
+    const pending = previewWrites.then(async () => {
+      const stored = await previewRecord(record => {
+        if (change !== previewChange || !usablePreviewRecord(record) || record.generation !== data.generation || record.intent_id !== data.intent_id
+          || !previewContext(data.context, record.owner)
+          || Object.keys(record.envelope.context).some(key => record.envelope.context[key] !== data.context[key])) throw new Error();
+        return { api_v: 1, generation: data.generation, intent_id: data.intent_id, public_key: data.public_key };
+      });
+      const confirmed = await previewRecord();
+      if (change !== previewChange || JSON.stringify(confirmed) !== JSON.stringify(stored)) throw new Error();
+      previewStorageFailed = false;
+      previewBlocked = false;
+      reply({ type: "LETSCUBE_WEB_PREVIEW_RESULT", ok: true, generation: stored.record.generation,
+        intent_id: stored.record.intent_id, installed: true });
+    });
+    previewWrites = pending.catch(() => { previewStorageFailed = true; reply({ type: "LETSCUBE_WEB_PREVIEW_RESULT", ok: false }); });
+    return previewWrites;
+  } catch {
+    reply({ type: "LETSCUBE_WEB_PREVIEW_RESULT", ok: false });
+    return Promise.resolve();
+  }
+}
+
+function usablePreviewRecord(record) {
+  return previewExact(record, ["record_v", "generation", "intent_id", "owner", "state", "envelope", "accepted_at_epoch_ms", "deadline_at_epoch_ms"])
+    && record.record_v === 1 && record.state === "active" && previewInteger(record.generation) && record.generation > 0
+    && previewId(record.intent_id) && previewOwner(record.owner)
+    && record.envelope?.storage_v === 1 && previewContext(record.envelope.context, record.owner)
+    && previewExact(record.envelope, ["storage_v", "context", "grant_secret"]) && /^wpg1_[a-f0-9]{64}$/.test(record.envelope.grant_secret)
+    && previewInteger(record.accepted_at_epoch_ms) && previewInteger(record.deadline_at_epoch_ms)
+    && record.deadline_at_epoch_ms > record.accepted_at_epoch_ms
+    && record.deadline_at_epoch_ms - record.accepted_at_epoch_ms <= WEB_PREVIEW_MAX_TTL
+    && Date.now() >= record.accepted_at_epoch_ms && Date.now() < record.deadline_at_epoch_ms;
+}
+
+function usablePreviewState(state) {
+  return usablePreviewRecord(state?.record) && previewExact(state.api, ["api_v", "generation", "intent_id", "public_key"])
+    && state.api.api_v === 1 && state.api.generation === state.record.generation && state.api.intent_id === state.record.intent_id
+    && previewPublicKey(state.api.public_key);
+}
+
+function previewContent(row, record, data) {
+  const context = record.envelope.context;
+  const text = (value, max) => typeof value === "string" && value.length > 0 && Array.from(value).length <= max
+    && value === value.trim() && !/[\u0000-\u001f\u007f-\u009f]|\s{2,}/u.test(value) && !looksSensitive(value);
+  return previewExact(row, ["preview_v", "recipient_id", "session_id", "subscription_id", "subscription_fingerprint", "revision",
+    "notification_id", "chat_id", "message_id", "preview_level", "sender_name", "title", "body", "observed_at_epoch_ms", "expires_at_epoch_ms"])
+    && ["preview_v", "recipient_id", "session_id", "subscription_id", "subscription_fingerprint", "revision", "preview_level"].every(key => row[key] === context[key])
+    && row.notification_id === data.webPreview.notification_id && row.chat_id === data.chatId && row.message_id === data.messageId
+    && previewId(row.chat_id) && previewId(row.message_id)
+    && text(row.sender_name, 96) && text(row.title, 96) && text(row.body, 240)
+    && (row.preview_level !== "sender" || row.body === "Новое сообщение")
+    && previewInteger(row.observed_at_epoch_ms) && previewInteger(row.expires_at_epoch_ms)
+    && row.observed_at_epoch_ms >= context.observed_at_epoch_ms
+    && row.expires_at_epoch_ms > row.observed_at_epoch_ms && row.expires_at_epoch_ms - row.observed_at_epoch_ms <= 15000
+    && row.expires_at_epoch_ms <= context.expires_at_epoch_ms;
+}
+
+async function lookupWebPreview(data) {
+  if (!data.webPreview || previewStorageFailed || previewBlocked) return null;
+  try {
+    await previewWrites;
+    const change = previewChange, state = await previewRecord(), record = state.record;
+    if (previewStorageFailed || previewBlocked || change !== previewChange || !usablePreviewState(state)
+      || record.envelope.context.subscription_id !== data.webPreview.subscription_id) return null;
+    const wall = Date.now(), monotonic = performance.now(), controller = new AbortController();
+    let timer;
+    try {
+      const read = async () => {
+        const key = state.api.public_key;
+        const response = await fetch(WEB_PREVIEW_RPC, { method: "POST", credentials: "omit", redirect: "error", cache: "no-store",
+          referrerPolicy: "no-referrer", signal: controller.signal,
+          headers: { "Content-Type": "application/json", apikey: key, ...(key.startsWith("sb_publishable_") ? {} : { Authorization: "Bearer " + key }) },
+          body: JSON.stringify({ p_grant_secret: record.envelope.grant_secret, p_notification_id: data.webPreview.notification_id }) });
+        if (!response.ok || response.redirected || !response.body) return null;
+        const reader = response.body.getReader(), chunks = []; let size = 0;
+        try {
+          for (;;) {
+            const chunk = await reader.read(); if (chunk.done) break;
+            size += chunk.value.byteLength; if (size > 8192) return null;
+            chunks.push(chunk.value);
+          }
+        } finally { reader.cancel().catch(() => {}); }
+        const bytes = new Uint8Array(size); let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+        const rows = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+        if (!Array.isArray(rows) || rows.length !== 1 || !previewContent(rows[0], record, data)) return null;
+        return { state, content: rows[0], change, wall, monotonic };
+      };
+      return await Promise.race([read(), new Promise(resolve => { timer = setTimeout(() => { controller.abort(); resolve(null); }, 5000); })]);
+    } finally { clearTimeout(timer); controller.abort(); }
+  } catch { return null; }
+}
+
+async function currentWebPreview(preview) {
+  try {
+    await previewWrites;
+    const state = await previewRecord(), elapsed = performance.now() - preview.monotonic;
+    return !previewStorageFailed && !previewBlocked && preview.change === previewChange && usablePreviewState(state)
+      && JSON.stringify(state) === JSON.stringify(preview.state)
+      && Date.now() >= preview.wall && elapsed >= 0 && elapsed < preview.content.expires_at_epoch_ms - preview.content.observed_at_epoch_ms
+      && Date.now() - preview.wall < preview.content.expires_at_epoch_ms - preview.content.observed_at_epoch_ms;
+  } catch { return false; }
 }
 
 function routeForPush(data, ids) {

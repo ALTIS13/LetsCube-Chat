@@ -21,6 +21,7 @@ import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { useSessionDevices } from "@/hooks/useSessionDevices";
 import { usePush } from "@/hooks/usePush";
 import { useNativeMessagePreview } from "@/hooks/useNativeMessagePreview";
+import { useWebMessagePreview } from "@/hooks/useWebMessagePreview";
 import type { MessagePreviewChoice } from "@/lib/platform/nativeMessagePreviewContract";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
@@ -183,7 +184,9 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     disable: disablePush,
     setPreference: setPushPreference,
   } = usePush();
-  const messagePreview = useNativeMessagePreview();
+  const nativeMessagePreview = useNativeMessagePreview();
+  const webMessagePreview = useWebMessagePreview();
+  const messagePreview = nativeAndroid ? nativeMessagePreview : webMessagePreview;
   const savedPreviewLabel = MESSAGE_PREVIEW_OPTIONS.find(option => option.value === messagePreview.savedChoice)?.label;
   const isStaff = useIsManagerOrAdmin();
   const isAdmin = useIsAdmin();
@@ -770,8 +773,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
           {pushStatus === "denied" && shows("push") && (
             <RowNote>{pushDeniedHelp({ nativeAndroid, desktopWindows, iosPwa: installedIosPwa })}</RowNote>
           )}
-          {shows("push") && nativeAndroid && (
-            <div data-testid="native-message-preview-setting">
+          {shows("push") && (nativeAndroid || webMessagePreview.available) && (
+            <div data-testid={nativeAndroid ? "native-message-preview-setting" : "web-message-preview-setting"}>
               {messagePreview.savedChoice !== null ? (
                 <DisclosureRow
                   id="message-preview"
@@ -797,6 +800,12 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
                       </label>
                     ))}
                   </fieldset>
+                  {!nativeAndroid && (
+                    <RowNote>{webMessagePreview.installed ? "Предпросмотр включён на этой установке." : "На этой установке используется общий текст."}</RowNote>
+                  )}
+                  {!nativeAndroid && !webMessagePreview.installed && messagePreview.savedChoice !== "none" && (
+                    <KubButton size="sm" variant="secondary" disabled={!messagePreview.canChoose} onClick={() => { void messagePreview.setChoice(messagePreview.savedChoice!); }}>Включить на этой установке</KubButton>
+                  )}
                   {messagePreview.error && <KubButton size="sm" variant="secondary" onClick={messagePreview.refresh}>Повторить</KubButton>}
                 </DisclosureRow>
               ) : (

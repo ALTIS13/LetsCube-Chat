@@ -31,6 +31,7 @@ import {
   type PushPreferenceState,
 } from "@/lib/pushPreferences";
 import { useAppStore } from "@/store/app.store";
+import { retireWebMessagePreviews, retireWebMessagePreviewsForSubscription } from "@/lib/platform/webMessagePreviews";
 
 /**
  * Manages Web Push subscription for the current user/device.
@@ -99,7 +100,10 @@ async function unsubscribeBrowser(subscription: PushSubscription): Promise<void>
   browserUnsubscribes += 1;
   browserProviderRevision += 1;
   notifyBrowserProviderObservers();
-  try { await subscription.unsubscribe(); }
+  try {
+    if (!await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке.");
+    await subscription.unsubscribe();
+  }
   finally {
     browserUnsubscribes -= 1;
     if (browserUnsubscribes === 0) notifyBrowserProviderObservers();
@@ -412,6 +416,7 @@ export function usePush() {
     owner.reconciledAt = now;
     try {
       if (Notification.permission === "denied") {
+        await retireWebMessagePreviews(); if (!current()) return;
         setStatus("denied");
         return;
       }
@@ -420,6 +425,7 @@ export function usePush() {
       const subscription = registration ? await registration.pushManager.getSubscription() : null;
       if (!current()) return;
       if (!subscription) {
+        await retireWebMessagePreviews(); if (!current()) return;
         setStatus("inactive");
         if (owner.preferences.push_enabled) {
           setMessage("Push-подписка этого устройства неактивна. Включите уведомления повторно.");
@@ -431,6 +437,7 @@ export function usePush() {
       if (keyMatches === false) {
         // A failed cleanup settlement must not bounce another deletion between hooks.
         if (!settlementRead) {
+          if (!await retireWebMessagePreviews() || !current()) return;
           await supabase
             .from("push_subscriptions")
             .update({ is_active: false, updated_at: new Date().toISOString() })
@@ -448,10 +455,12 @@ export function usePush() {
       }
 
       if (!owner.preferences.push_enabled) {
+        await retireWebMessagePreviews(); if (!current()) return;
         setStatus("inactive");
         return;
       }
 
+      if (!await retireWebMessagePreviewsForSubscription(subscription, owner.userId, current) || !current()) return;
       const { error } = await supabase
         .from("push_subscriptions")
         .upsert(
@@ -491,7 +500,7 @@ export function usePush() {
     browserProviderObservers.add(providerChanged);
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       if (event.data?.type === "KUB_PUSH_SUBSCRIPTION_CHANGED") {
-        void reconcileBrowserSubscription(true);
+        void retireWebMessagePreviews().then(ok => { if (ok) void reconcileBrowserSubscription(true); });
       }
     };
     const onVisibility = () => {
@@ -568,8 +577,10 @@ export function usePush() {
     // No await before this call: WebKit allows the permission prompt only
     // while transient activation from this exact press is still alive.
     try {
+      const retirement = retireWebMessagePreviews();
       const subscriptionOperation = subscribeDuringUserGesture(reg, urlBase64ToUint8Array(VAPID_PUBLIC));
-      const sub = await subscriptionOperation;
+      const [retired, sub] = await Promise.all([retirement, subscriptionOperation]);
+      if (!retired) throw new Error("Не удалось отключить прежний предпросмотр на этой установке.");
       if (!currentBrowser()) return;
 
       // Upsert on user+endpoint so re-enabling on the same device does not
@@ -631,6 +642,8 @@ export function usePush() {
       }
       let providerRevision = browserProviderRevision;
       const currentBrowser = () => current() && browserUnsubscribes === 0 && providerRevision === browserProviderRevision;
+      if (!isDesktopApp() && !await retireWebMessagePreviews()) return;
+      if (!currentBrowser()) return;
       const reg = await navigator.serviceWorker.getRegistration("/sw.js");
       if (!currentBrowser()) return;
       const sub = reg ? await reg.pushManager.getSubscription() : null;
@@ -664,6 +677,9 @@ export function usePush() {
 
   const setPreference = useCallback(async (key: PushPreferenceKey, value: boolean) => {
     if (!owner.userId || !isCurrentOwner(owner)) return;
+    if (!isNativeApp() && !isDesktopApp() && key === "message_push_enabled" && !value) {
+      if (!await retireWebMessagePreviews() || !isCurrentOwner(owner)) return;
+    }
     if (!owner.loaded && !await ensurePreferencesLoaded()) return;
     if (!isCurrentOwner(owner)) return;
     await savePreferences({ [key]: value });

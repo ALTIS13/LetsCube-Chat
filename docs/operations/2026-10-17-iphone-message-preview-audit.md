@@ -55,7 +55,38 @@ spec uses a browser-generated secret and hash-only authenticated enrollment;
 no raw secret is generated/returned by enroll. Actual single/album Edge paths
 now carry selectors only;114 affected tests and the focused loaded-omission
 checks pass while both display fallbacks remain generic. This is not a deployed
-feature. Browser settings/lifecycle and worker implementation are in progress.
+feature. Browser settings/lifecycle and worker implementation now pass their
+source and isolated-render checks; runtime/phone acceptance remains separate.
 Real PG17/HTTP, safe migration and physical iPhone canary remain same-release
 requirements. MobileNext local inventory works; its cloud catalog request
 timed out, with no device reservation or paid minutes consumed.
+
+One actual PG17 DDL rehearsal now passes on the exact owned R5 clone. The
+byte-pinned proposal runs unchanged except its sole terminal COMMIT becomes
+ROLLBACK. Real dependency prestate, types, owners, ACLs, RLS and raising selfcheck
+pass with0 stderr; catalog and epoch are identical before/after. Receipt:
+76c5aebc80996de402f7b87c623c770a8db79f3b83964f79e23f9b55564e07a3.
+No feature objects remain, runtime was OFF, no content/HTTP/phone acceptance is
+inferred. This reuses the accepted clone recovery; no production backup/apply,
+new restore, session renewal or fixture reset occurred.
+
+Browser lifecycle/settings30, worker25, adjacent subscription ownership64 and
+legacy dispatcher53 checks now pass. Worker count25 is the actual Node test
+count, not the implementer's earlier scenario count. The final source review
+found one P2: SQL counts Unicode code points, while JavaScript String.length
+counts UTF16 units. Actual SQL96/240-character boundary values reproduced the
+generic-fallback regression; counting code points fixes it without broadening
+the limits. An adjacent mutation anchor was updated for the new concurrent
+retirement await, preserving its independent late-subscribe oracle.
+
+The opt-in legacy API worker now uses a generic display whitelist plus the same
+identifier-only selector, rather than raw payload serialization. Its deployment
+ownership, opt-in default and token-bound claim/recheck/ACK flow are unchanged.
+The API build completed. The four exact settings renders1440/390, light/dark
+were inspected on fictional data: fit, pending/error state and44px radio targets
+pass. None of these results is evidence of real iPhone push delivery.
+
+Final canonical typecheck and web build pass:7471 modules, SW build
+`d14bd7d50ba1fb9a`, Vite `built in17.31s`. Nonfatal sourcemap, mixed-import and
+chunk-size warnings remain. This is a local artifact marker, not a production
+marker: production embeds different public configuration.

@@ -160,6 +160,13 @@ function fixture({ text = source, native = false, holds = [], preferences = aCho
     "@/lib/platform/capabilities": { isNativeAndroid: () => native, isNativeApp: () => native, supportsBrowserPush: () => !native, nativePushPendingMessage: () => "native-pending" },
     "@/lib/plainMessages": { BROWSER_PUSH_UNAVAILABLE: "browser-unavailable", PUSH_UNAVAILABLE: "push-unavailable" },
     "@/lib/platform/desktop": { isDesktopApp: () => false }, "@/lib/platform/desktopNotifications": {},
+    // This preference/provider fixture has no enrolled preview envelope. Local
+    // denial therefore succeeds; actual IDB/grant/worker behavior is covered by
+    // web-message-preview-client.test.mjs, not substituted by these ports.
+    "@/lib/platform/webMessagePreviews": {
+      retireWebMessagePreviews: () => Promise.resolve(true),
+      retireWebMessagePreviewsForSubscription: (_subscription, _userId, current) => Promise.resolve().then(current),
+    },
     "@/lib/platform/nativePush": { getNativePushPermissionStatus: () => boundary("native-permission", { status: "native_inactive", message: null }) },
     "@/lib/platform/nativeVoiceCalls": {
       nativeVoiceContext: nativeContext,
@@ -589,7 +596,7 @@ const mutants = [
     multipleInstances, "another hook's stale row must not erase confirmed categories"],
   ["lose user gesture before subscribe", "const subscriptionOperation = subscribeDuringUserGesture", "await Promise.resolve();\n      const subscriptionOperation = subscribeDuringUserGesture",
     gesture, "subscribe keeps the original user gesture"],
-  ["continue after retired subscribe", "const sub = await subscriptionOperation;\n      if (!currentBrowser()) return;", "const sub = await subscriptionOperation;",
+  ["continue after retired subscribe", "const [retired, sub] = await Promise.all([retirement, subscriptionOperation]);\n      if (!retired) throw new Error(\"Не удалось отключить прежний предпросмотр на этой установке.\");\n      if (!currentBrowser()) return;", "const [retired, sub] = await Promise.all([retirement, subscriptionOperation]);\n      if (!retired) throw new Error(\"Не удалось отключить прежний предпросмотр на этой установке.\");",
     lateSubscribe, "late subscribe cannot register the retired account"],
   ["ignore newer enable-disable operation", "const enable = useCallback(async () => {\n    if (!owner.userId || !isCurrentOwner(owner)) return;\n    const revision = ++owner.operation;\n    const current = () => isCurrentOwner(owner) && owner.operation === revision;",
     "const enable = useCallback(async () => {\n    if (!owner.userId || !isCurrentOwner(owner)) return;\n    const revision = ++owner.operation;\n    const current = () => isCurrentOwner(owner);",

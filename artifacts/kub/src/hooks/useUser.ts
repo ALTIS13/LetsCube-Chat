@@ -9,11 +9,14 @@ import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { createSingleFlight } from "@/lib/singleFlight";
 import { signedMediaUrls } from "@/lib/media/mediaUrl";
 import { readAuthSessionIdentity } from "@/lib/authSessionIdentity";
+import { isWebBrowser } from "@/lib/platform/capabilities";
+import { observeWebMessagePreviewIdentity, retireWebMessagePreviews } from "@/lib/platform/webMessagePreviews";
 
 const PROFILE_LOAD_ERROR = "Не удалось загрузить профиль. Проверьте соединение и попробуйте снова.";
 
 export function useSignOut(): () => Promise<void> {
   return useCallback(async () => {
+    if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке. Повторите выход.");
     await createClient().auth.signOut();
   }, []);
 }
@@ -173,6 +176,7 @@ export function useUser() {
 
     const observeSession = (session: unknown): ProfileOwner | null => {
       const identity = readAuthSessionIdentity(session);
+      if (isWebBrowser()) observeWebMessagePreviewIdentity(identity);
       useAppStore.getState().setAuthSessionIdentity(identity);
       if (!identity) return activeOwnerRef.current = null;
       const epoch = useAppStore.getState().accountEpoch;
@@ -255,7 +259,10 @@ export function useUser() {
     return () => detach();
   }, [user?.id, accountEpoch]);
 
-  const signOut = async () => { await supabase.auth.signOut(); };
+  const signOut = async () => {
+    if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке. Повторите выход.");
+    await supabase.auth.signOut();
+  };
   const retry = useCallback(() => {
     setLoadingError(null);
     setLoading(true);

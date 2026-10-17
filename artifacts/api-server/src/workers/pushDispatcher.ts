@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { logger } from "../lib/logger";
-import { sanitizeLegacyWebPushFailure } from "./pushDispatcherConfig";
+import { buildLegacyWebPushPayload, sanitizeLegacyWebPushFailure } from "./pushDispatcherConfig";
 
 /**
  * Push dispatcher worker (Task #32 — push side of in-app notifications).
@@ -169,7 +169,7 @@ async function deliver(
   const descriptorFingerprint = `v1:${hash.digest("hex")}`;
   let payload: string;
   try {
-    payload = JSON.stringify(row.payload);
+    payload = JSON.stringify(buildLegacyWebPushPayload(row.payload, descriptor.id, process.env["WEB_PUSH_APP_ORIGIN"]));
   } catch {
     await completeOutbox(supabase, claimToken, row.id, {
       attempt_count: row.attempt_count + 1, last_error: "webpush:unknown:invalid_payload",

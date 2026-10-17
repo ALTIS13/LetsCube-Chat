@@ -46,16 +46,17 @@ This plan does not assume those contracts already exist.
 Owner: Kuhn. New proposal/rollback, contract spec and
 `tests/server/web-message-preview-db.test.mjs`.
 
-- [ ] Establish RED for missing own-session/subscription/grant content authority.
-- [ ] Implement hash-only grants and narrow authenticated enroll/revoke plus
+- [x] Establish RED for missing own-session/subscription/grant content authority.
+- [x] Implement hash-only grants and narrow authenticated enroll/revoke plus
   bounded selector lookup. Bind actual subscription descriptors, revocation
   revision, expiry and current user choice. Payload text is never authority.
-- [ ] Prove own positive, foreign tuple, expired/revoked, none, read/deleted/
+- [x] Prove own positive, foreign tuple, expired/revoked, none, read/deleted/
   hidden, membership/topic denial, selector tampering and album member cases.
   Preserve native RPCs, RLS and existing dispatcher rechecks.
-- [ ] Test literal omissions; review SQL signatures/owners/search paths/grants.
-  Actual isolated SQL and production backup/transaction/rollback proof are
-  separate required steps, not substituted by source tests.
+- [x] Test literal omissions; review SQL signatures/owners/search paths/grants.
+- [x] Actual isolated PG17 DDL-only rollback rehearsal, unchanged catalog/epoch.
+- [ ] Actual content/HTTP and production backup/transaction/rollback proof.
+  DDL rehearsal and source tests do not substitute for these checks.
 
 ### 2. Worker And Browser Lifecycle
 
@@ -68,12 +69,12 @@ consumer code. New
 SettingsScreen/usePush/browserPushSubscription/PwaRuntime/useUser and
 `artifacts/kub/public/sw.js`. Do not rewrite the generic owner framework.
 
-- [ ] Pin real worker-handler RED before adding lookup and durable context.
-- [ ] Add explicit none/sender/message choice, current-installation admission,
+- [x] Pin real worker-handler RED before adding lookup and durable context.
+- [x] Add explicit none/sender/message choice, current-installation admission,
   foreground renewal and retirement using existing accountEpoch/session identity.
-- [ ] Lookup before the first showNotification, then reread durable context;
+- [x] Lookup before the first showNotification, then reread durable context;
   honor original grouping, route/tag/renotify and one publication attempt.
-- [ ] Test held logout/None/account replacement/same-UID session change, stale
+- [x] Test held logout/None/account replacement/same-UID session change, stale
   ACK, worker restart, IDB failure/eviction, timeout and malformed responses.
   Omission tests assert literal security outcomes, not their own constants.
 
@@ -81,9 +82,12 @@ SettingsScreen/usePush/browserPushSubscription/PwaRuntime/useUser and
 
 Coordinator owns the narrow Edge/webpush integration and final assembly.
 
-- [ ] Add single/album selectors without content in the declarative fallback;
+- [x] Add single/album selectors without content in the declarative fallback;
   retain current claim/descriptor/policy checks and old-worker compatibility.
-- [ ] Verify changed server/worker/client boundaries and exact1440/390 pixels
+- [x] Cover the opt-in API legacy dispatcher too: its former raw row.payload
+  serialization now uses the selector/generic display contract. Keep
+  opt-in/default deployment ownership unchanged; no privacy or legacy bypass.
+- [x] Verify changed server/worker/client boundaries and exact1440/390 pixels
   in both themes for the new setting, on strictly fictional data.
 - [ ] Finish the existing topic fullstack gate. Assemble compatible migrations,
   Edge, worker/client and rollback; never publish only the control or resolver.
@@ -96,7 +100,11 @@ Coordinator owns the narrow Edge/webpush integration and final assembly.
 
 ## Current Checkpoint
 
-Coordinator: topic Task6 continues independently; no production preview change.
-Kuhn owns additive DB/spec/tests, Hume browser client/hook/UI/lifecycle, Leib
-worker/handler tests, coordinator Edge selectors and final assembly. Contracts
-are published; no runtime, device or release acceptance is inferred.
+Coordinator: topic Task6 remains the common release gate; no production preview
+change. DB50, browser30, worker25, adjacent ownership64 and legacy53 source
+checks pass; actual PG17 DDL-only rollback also passes. Exact settings pixels
+at1440/390 in both themes and the final source review are accepted. The review's
+SQL Unicode/codepoint mismatch is fixed with a real SQL-to-worker RED/GREEN
+case, retaining the literal96/240 limits. Canonical typecheck/build pass
+(SW d14bd7d50ba1fb9a,17.31s). Fullstack, real iPhone and common release checks
+remain open; no runtime/device/release acceptance is inferred.

@@ -6,11 +6,15 @@ import { isNativeAndroid, isNativeApp } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useWebMessagePreview } from "@/hooks/useWebMessagePreview";
+import { readAuthSessionIdentity } from "@/lib/authSessionIdentity";
+import { observeWebMessagePreviewIdentity, retireWebMessagePreviews } from "@/lib/platform/webMessagePreviews";
 
 type ConnectionState = "hidden" | "offline" | "online";
 
 export function PwaRuntime() {
   usePwaServiceWorker();
+  useWebMessagePreview();
   useEffect(() => {
     // Mounted above the configuration gate in `App.tsx`, so it has to ask:
     // `createClient()` throws on a build with no Supabase configuration, and a
@@ -20,12 +24,17 @@ export function PwaRuntime() {
     if (!isSupabaseConfigured()) return;
     if (isNativeApp() || isDesktopApp() || !("serviceWorker" in navigator)) return;
     let previousUserId: string | null = null;
+    let transition = 0;
     const { data: { subscription } } = createClient().auth.onAuthStateChange((event, session) => {
+      observeWebMessagePreviewIdentity(readAuthSessionIdentity(session));
       const nextUserId = session?.user?.id ?? null;
       const accountExited = event === "SIGNED_OUT";
       const accountSwitched = event === "SIGNED_IN" && previousUserId !== null && nextUserId !== previousUserId;
       previousUserId = nextUserId;
-      if (accountExited || accountSwitched) void clearBrowserPushForAccountExit();
+      if (accountExited || accountSwitched) {
+        const generation = ++transition;
+        void clearBrowserPushForAccountExit(() => generation === transition);
+      } else if (nextUserId !== null) ++transition;
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -105,18 +114,22 @@ export function PwaRuntime() {
   return <ConnectionStatusBanner />;
 }
 
-async function clearBrowserPushForAccountExit(): Promise<void> {
+async function clearBrowserPushForAccountExit(current: () => boolean): Promise<void> {
   try {
+    if (!await retireWebMessagePreviews() || !current()) return;
     const registration = await navigator.serviceWorker.getRegistration("/sw.js");
-    if (!registration) return;
+    if (!registration || !current()) return;
     // Closing cards is best effort: a provider can still deliver an accepted
     // push afterward, so the server must send only neutral display content.
     try {
-      (await registration.getNotifications()).forEach((card) => card.close());
+      const cards = await registration.getNotifications();
+      if (!current()) return;
+      cards.forEach((card) => card.close());
     } catch {
       // Unsupported presentation cleanup must not prevent unsubscribing.
     }
-    await (await registration.pushManager.getSubscription())?.unsubscribe();
+    const subscription = await registration.pushManager.getSubscription();
+    if (current()) await subscription?.unsubscribe();
   } catch {
     // Sign-out must succeed even when the push service is unavailable.
   }

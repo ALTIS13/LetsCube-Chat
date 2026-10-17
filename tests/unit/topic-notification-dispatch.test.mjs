@@ -128,9 +128,22 @@ async function heldDisable(text = source) {
 }
 test("actual legacy worker refuses disable during its subscription await", () => heldDisable());
 
-test("unchanged allowed positive control reaches the provider once", async () => {
+test("actual legacy worker sends generic display paths and an identifier-only Web preview selector", async () => {
+  const notificationId = "70000000-0000-4000-8000-000000000001";
+  const f = fixture(source, { row: { payload: { kind: "message", title: "Fictional Sender", body: "Fictional private text",
+    notificationId, web_preview: { grant_secret: "fictional-forged-grant" } } } });
+  await f.run();
+  assert.equal(f.sends.length, 1);
+  const payload = JSON.parse(f.sends[0][1]);
+  assert.equal(payload.title, "LETSCUBE");
+  assert.equal(payload.body, "Новое уведомление");
+  assert.deepEqual(payload.web_preview, { preview_v: 1, subscription_id: SUB, notification_id: notificationId });
+  assert.doesNotMatch(JSON.stringify(payload), /Fictional|fictional-forged-grant/);
+});
+
+test("allowed positive control reaches the provider once with a generic display body", async () => {
   const f = fixture(); await f.run();
-  assert.equal(f.sends.length, 1); assert.equal(JSON.parse(f.sends[0][1]).body, "fixture");
+  assert.equal(f.sends.length, 1); assert.equal(JSON.parse(f.sends[0][1]).body, "Новое уведомление");
 });
 async function allowed(text = source) {
   const f = fixture(text); await f.run();
