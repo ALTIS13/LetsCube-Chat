@@ -2,18 +2,22 @@
 
 **Current resume, 2026-10-17, item77:** coordinator, Task6; canonical worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, feature tip `c3ae0447`, public source `849ce348`.
+`codex/topic-alerts-20261016`, pushed public source `83bb90cc`.
 HTTP48/R4, recovered R5, forward2 fixture, Perl transport and PostgREST staging
 are accepted; do not replay restore/seed/staging or clear retained history.
 Combined actual-hook/SDK/IPC source55/55 and actual isolated Node22 import000a1f22
 pass, not wire acceptance. Changed native diagnostic found the scheduler-thread
 limit; bounded execution flags pass actual Elixir3controls+1mutant dbd84c88 with
-exact cleanup. First metadata-only RT boot6c52d9843661 refused at RPC (rc1/stdout0),
-receipt372076e8; exact container/env/Perl cleanup and unchanged baseline confirmed.
-Do not replay the opaque attempt. New bounded RPC-stderr classification and a
-single-lifetime CAS/rollback client extension proceed independently; source75/75,
-independent review accepted (source only). No live relay/HTTP/RT, tenant or JWT.
-Next: changed safe RPC diagnostic, then composed service/SDK wire acceptance with fresh
+exact cleanup. Metadata-only RT boot now ACCEPTED50ed9a4c71b6: Repo readonly SQL/
+listener, exact container/env/Perl cleanup and unchanged baseline5bbe4d23/ae4101d4.
+Original failures retained: bounded stderr hash proves public RPC:noconnection;
+image IPv6 distribution disagreed with the IPv4 QA namespace. Explicit execution-
+only IPv4 fixes it without HBA/DB changes. Do not rerun accepted boot/native work.
+Same-lifetime CAS/rollback source75/75 plus independent review accepted, not wire.
+Connected guard's feed-name P2 is fixed85dc7226; coordinator13/13 incl v2-only
+publication/filter omission controls. Finite parent/Node entry preparation runs.
+No live relay/HTTP/RT, tenant or JWT.
+Next: finite composed service/SDK controller and actual delivery with fresh
 phase-aware guards. Provider/native/launch gates remain open; UI is unmounted.
 No production SQL/HBA/main push/native release or paid allocation. Stable22/D366
 and foreign sidebar/search/version paths remain unchanged; A063 excluded.

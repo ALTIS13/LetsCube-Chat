@@ -1261,3 +1261,41 @@ and provider/OS gates are not relabelled complete.
 Independent review of the frozen seven-file phase delta5b910199/16698aef found
 no new P1/P2. Coordinator75/75, zero skip and diff checks pass. Actual parent/
 service execution remains outstanding; the review is not a delivery receipt.
+
+## Actual Metadata Boot Accepted
+
+The changed bounded stderr diagnostic e56a180b3c92 retained only50 bytes/hash,
+not raw output. Hash b6c61e38...be9a14's public-source comparison is exact for
+[Elixir's CLI](https://github.com/elixir-lang/elixir/blob/v1.18.4/lib/elixir/lib/kernel/cli.ex#L397)
+`RPC failed ... :noconnection` message; this alone did not establish
+cookie or SQL failure. Selected pinned-image metadata confirms its inherited
+`ERL_AFLAGS=-proto_dist inet6_tcp`; the
+[pinned Dockerfile](https://github.com/supabase/realtime/blob/cd952f26787d764b357eec01568f680137756293/Dockerfile#L102)
+declares the same.
+QA used127.0.0.1; DB/Endpoint IPv4 settings do not set Erlang distribution.
+
+New inert wrapperdd66e7ca overrides only execution `ERL_AFLAGS=-proto_dist inet_tcp`.
+Coordinator6/6 includes actual generated Python env/serialization, inherited-value
+omission and compiled full parent. Frozen adapter/HOST/diagnostic/tenant-bootstrap
+bytes remain unchanged and all receipt namespaces retain the new wrapper/host pin.
+
+One actual changed run50ed9a4c71b6 now passes:
+boot5bbe4d230efe7014acfc02dd10e33185f0e7d86696c71426a7c06222a1bab174;
+adapter ae4101d4527aa6709dfb5afd6a28319c60ccd172ed252c4220b264bac54b46e5.
+Read-only Repo proves actual DB/role/search path/cluster/postmaster/no slots/no
+owned tenant and listener4000; RPC exits0, stderr0, expected stdout41 bytes.
+Exact container/env cleanup is REMOVED and Perl cleanup passes. Independent
+readonly reconciliation04fba313 confirms actual service name absent, no env and
+unchanged baseline. Do not rerun this accepted calibration. No tenant, JWT,
+PostgREST start, WS/CDC, provider, OS or production acceptance follows from it.
+
+Connected-phase guard source12/12 was independently reviewed. One P2 is real:
+its fixture/coverage used legacy `notification_feed_events` instead of the
+candidate's actual `notification_feed_events_v2`. One genuine fixture RED/GREEN
+fix pass is required before composing it; no live guard result was claimed.
+
+The P2 fix85dc7226/tests76f0b319 now passes13/13 coordinator checks. The real
+PGlite fixture contains the v2 table; legacy-only publication membership and
+omitting the v2 unfiltered-coverage check fail the literal controls. Baseline
+activeSlots0 is unchanged. This closes the source review finding, not actual
+connected tenant/slot acceptance; no rereview or old-suite replay is needed.
