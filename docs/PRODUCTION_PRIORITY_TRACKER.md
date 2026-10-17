@@ -3946,9 +3946,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     final integrated dispatch220/220 and isolated PG17 suite170/170, zero skips.
     Source checkpoints30d8dd80/bdb346f4 close the structural lock/INSERT/history
     and native/album target-binding source defects after independent review.
-    Exact synthetic fixture cleanup passed. Fresh verified full-schema backup
-    exists; private clone lifecycle/recovery repair, full-schema/PostgREST,
-    versioned-feed old-client compatibility and fullstack/rollout stay open.
+    Exact synthetic fixture cleanup passed. Current feed/lifecycle/component
+    source418/418, guarded SQL assembly32/32 and isolated HTTP admission selftest
+    48/48 pass; these are not HTTP/OS acceptance. Logical R2 recovery failed on
+    extension metadata loss. R4 snapshot-bound package capture/integrity and
+    byte-hash schema transfer and actual4817-statement schema AST equality pass.
+    First R4 restore refused: two schema ACLs lost, raw column ordinals and four
+    constraint strings require logical/AST comparison. Exact clone cleanup passed;
+    reviewed restorer2 (15/15) reuses the immutable capture and passes actual
+    logical catalog, ALL14 schema ACLs, data, sequences and controls. Three DDL
+    files transferred byte-identically, but local RESTORE2_SCHEMA_AST_DIFFERENCE
+    still refuses final acceptance; owned network-none clone held for diagnosis.
+    Verified recovery is NOT established. HTTP seed/transport source work is
+    independent preparation, not execution or delivery acceptance.
+    Full-schema/PostgREST/Realtime, old-client compatibility and rollout stay open.
     No production migration/UI/native release or feature completion inferred.
     [Evidence and current checkpoint](operations/2026-10-16-topic-notification-overrides.md).
     Same voice note: silence a busy parent chat while explicitly enabling one

@@ -509,3 +509,209 @@ session/role override and one file-only name. This is not reload authorization.
 Independent review additionally found a removed-include selection gap; a bounded
 coverage repair/applicability probe is assigned. No full sweep replay, reload or
 authentication change is authorized by the positive aggregate alone.
+
+## Reload Coverage Checkpoint
+
+The separate probe's removed-file coverage repair passes the coordinator's
+20/20 offline cases, zero skips/failures. It now selects all settings whose
+source is configuration file and retains loaded source-file metadata, including
+removed include files. A bounded read-only applicability measurement found
+zero genuinely loaded-only GUCs; it additionally selected TimeZone, which was
+not part of the prior43 equal/20 unexamined sweep. No new parser calls or full
+sweep replay were performed. Prior comparison counts remain unchanged.
+
+HBA9/IDENT6 parsed rows have zero server parse errors. No include, at-file or
+continuation reference was observed in the checked primaries. The conservative
+HBA-shape classifier and three directory contexts nevertheless remain UNPROVEN;
+this is not an exported loaded-auth snapshot or permission to reload. Safe
+receipts are retained privately. Frozen probe84ac9120/tests dad0e71c; physical
+backup332f1754 and its hard refusal are unchanged. No production writes/reload.
+
+The next bounded decision compares a complete, independently recoverable logical
+backup package with the narrow peer-auth path. A catalog-derived recovery
+supplement would have to be captured consistently and verified as part of a NEW
+backup format, not hand-repair the failed R1/R2 archive or waive security drift.
+Isolated HTTP acceptance preparation proceeds separately. Main, Stable22 and
+the accepted D366 runtime remain unchanged; the candidate is shared on
+codex/topic-alerts-20261016 at5eea874d.
+
+## One-Transaction Candidate Preparation
+
+The coordinator added scripts/topic-notification-candidate.mjs to assemble only
+the six frozen proposal digests in dependency order. It imports without database,
+network or filesystem-write effects and returns the SQL plus digest/manifest;
+it is not canonical migration registration or an apply command.
+
+The RED baseline joined the existing independently committed drafts: a later
+failure left the first table committed in real PGlite. Collapsing the envelopes
+then exposed LOCAL-role and setting leakage between original stages. Independent
+review additionally reproduced CR-comment and Unicode-identifier lexical holes
+in the incumbent-style scanner. These findings were fixed by replacing that
+scanner with the real PG17 grammar, not adding keyword exceptions. Candidate
+execution refuses a pre-existing bounded SET ROLE context before DDL and restores
+the captured session search_path/timeouts and session role before each stage.
+
+libpg-query17.7.4 is an exact development dependency, WASM/PG17 parse-only, with
+MIT license and integrity pinned in pnpm-lock.yaml. Its sole dependency
+@pgsql/types17.6.2 is also MIT; installed license notices are retained. There is
+no frontend import or new runtime service. Installation used --ignore-scripts;
+the existing LiveKit peer-type warning was not changed or hidden. Upstream:
+https://github.com/constructive-io/libpg-query-node/tree/17-latest and
+https://www.postgresql.org/docs/17/sql-set-role.html.
+
+Final changed-source32/32 passes, zero skips/failures, including real rollback,
+caller-context, LOCAL baselines, UTF-8 byte boundaries, hash refusal and seven
+compiled literal omissions. Log: output/topic-notification-candidate-final.log.
+The assembled117198-byte candidate has SHA256
+4dacb35beedd1dd4d312b836d4c5d4b52462476bba5c886d55233d8070e9f537.
+It parses with PG17 grammar; this does not replace full-schema execution, restore,
+wire or production acceptance. Prior418-source evidence remains separate and was
+not repeated. R3 snapshot-bound logical capture/restore and the bounded HTTP
+fixture remain in preparation. Physical backup stays hard-refused.
+
+## Isolated HTTP Harness Checkpoint
+
+Source1787e9c5 contains the reviewed one-transaction assembler;0e2463f1 contains
+the bounded HTTP harness. The latter's coordinator selftest now passes48/48,
+zero skips/failures, explicitly QA0. Independent review found two P2s: caller
+args could change after scope validation while inspect awaited, and decision
+checks did not assert the known scope/revision values. Genuine held-port REDs
+and loaded omissions verify the repair: the exact frozen JSON wire is validated
+before awaits, and known decision scope/revision are literal assertions.
+Log: output/topic-notification-fullstack-selftest-final.log.
+
+There is no real HTTP bridge/fixture yet. SELFTEST_ONLY is explicit; none of
+these48 checks claims HTTP/Auth/Realtime/provider acceptance. Missing runtime
+inputs fail rather than skip or use production configuration. The finite HTTP
+slice attaches only to an existing pinned clone and does not implicitly allocate,
+seed, apply SQL or replay failed requests.
+
+R3 logical pipeline preparation passed the coordinator's17/17 focused cases,
+zero skips/failures, including actual PG17 AST/bundle and in-memory metadata
+supplement. Frozen source8de02a17 was submitted for independent review. A single
+actual read-only preflight refused at control/OperationFailure127 before creating
+its evidence root. A separate bounded read-only inventory confirmed host Node and
+nodejs are absent, but an existing worker image has Node24.21.0. No package was
+installed or backup/restore run. The scoped solution under review is an owned,
+network-none parser container using that existing exact image, mounting only the
+public parser code/WASM read-only, never the secret backup root. Physical auth
+and all production application data/configuration remain unchanged.
+
+R3's framing/CR repair and isolated parser adapter passed coordinator25/25,
+zero skips/failures; the actual bundled CLI emits exactly64 hex bytes plus LF,
+with empty stderr. The initially suspected escaping defect was disproved, not
+patched. A read-only adapter preflight nevertheless refused on a real Docker
+template parse error. Bounded boundary diagnosis confirms source identity, paths,
+capacity and namespace pass; only the image-format probe fails. No root or
+container exists from these preflights. New adapter review found durable intent
+could be lost on a delayed create and ordinary TERM bypassed cleanup; both are
+assigned to the adapter's one fix pass, alongside the actual formatter repair.
+The previous25 tests are not acceptance of those changed runtime controls.
+
+## R3 Actual Attempt and R4 Direction
+
+Final R3 source128b1694 passes the coordinator's31/31 focused cases. Actual
+read-only preflight passes after using structured inspect instead of the broken
+custom Go template. One backup invocation then refuses at schema/OperationFailure
+137 during the mandatory synthetic parser control, BEFORE the exporter opens or
+any database dump is captured. Exit137 does not establish OOM or another cause.
+Exact owned cleanup passes; parser containers are absent and private partial
+control/failure artifacts remain. No application SQL/config/auth or clone changed.
+
+The selected R4 direction avoids further remote-runtime work: capture the same
+snapshot-bound archive/reference/integrity on the server, transfer ONLY the schema
+SQL files byte-for-byte into ignored private local storage, verify their captured
+hashes and run the already working pinned PG17 parser locally. Remote restore
+still requires strict catalog/index/ACL/data/sequence/isolation checks; a final
+local hash-bound source/restored schema comparison completes the package proof.
+Intermediate capture/restore states must explicitly say AST pending, not verified
+recovery. The exporter must close before local transfers; globals and row data
+stay remote. This is trusted coordinator evidence tied to immutable artifacts,
+not a new untrusted caller boolean or an excuse to waive schema comparison.
+R3 remains frozen; Hume owns only new R4 files and reuses the reviewed components.
+
+## R4 Capture and Actual Schema Equivalence
+
+Frozen R4 source13438c81 passes the coordinator's16/16 focused cases, zero skips.
+The previous preflight refusal was generated Python's invalid-escape SyntaxWarning:
+actual preflight passed but strict transport correctly refused its stderr. The
+raw-regex fix now compiles with stderr0 and warnings-as-errors, without weakening
+transport. The local capture receipt/byte gate precedes any original restore call.
+
+Actual R4 preflight and snapshot-bound capture/integrity pass. The exporter closed
+before transfer; only the two schema files were byte-transferred. New local
+directory ACL allows only the current user/System/Administrators, with zero other
+allow principals. Capture manifest SHA256 is
+c080298de3d04fc03f972e531d260ff47575f774bea7feb8ef7559556615c9a0.
+No clone, candidate migration or production application SQL has run.
+
+The old reader refused the REAL dump's three same-key restrict/unrestrict blocks
+and two same-DB reconnects (quoted source name/plain archive name). The immutable
+capture was not changed or repeated. A NEW local verifier-v2, separate from the
+frozen generators, validates complete PG17 SQL segments and exact psql transitions.
+Coordinator11/11 passes, with five loaded omissions. Actual byte-bound capture
+verification passes4817 statements/3 blocks/2 reconnects; source/archive share AST
+hashad5315f1c18776610ecaef7fde3b12e48d3858ae63ee59fc4f96ffcd3d8867bd.
+Its source3e13f258 and tests2da76d16 are independently reviewed before clone restore.
+Capture-generator pins and verifier pins are separate; no old receipt is forged
+and no unverified intermediate state is called full recovery. Receipt is private
+capture-ast-v2.json. Strict restore/data/ACL and final restored AST remain open.
+
+## R4 Restore Refusal and Logical Recovery Diagnosis
+
+Independent verifier-v2 review found parseable EOF was not necessarily a terminated
+psql statement at a meta boundary. The coordinator reproduced RED before requiring
+a positive terminal RawStmt length; a loaded omission restores the failure. Final
+13/13 passes. Sourcee01cf360, tests6651e0d2; the old3e13f258 receipt was preserved
+as superseded, not overwritten. Actual unchanged4817-statement equality passes
+with a fresh current-verifier receipt.
+
+One gated R4 restore ran against the owned network-none clone and refused at the
+strict catalog boundary, before final data/sequence/control acceptance. The clone
+was held only for bounded read-only diagnosis, then exact R4 cleanup passed.
+No candidate migration, source repair or application SQL ran. All capture files
+and failure/diagnosis evidence remain private and immutable.
+
+The diagnosis separates representation from a real recovery defect:1531 columns
+match by dense name order and every other property.62 raw attnum differences in8
+relations correspond to11 actual dropped-column slots (attisdropped/type0).
+Four constraint definition strings differ only in redundant parentheses, with
+equal actual PG17 ASTs preserving casts/literals/operators. However, graphql and
+graphql_public each truly lost four USAGE grants: owners match, no extra grants.
+They are not direct extension members and were omitted by the supplement's
+extension-only schema selector. This is NOT a verified recovery.
+
+The new bounded restorer2 uses the same captured archive/reference, a fresh owned
+clone/intent, full owner/grantor/grant-option recovery for ALL14 captured non-system
+schemas, logical column ordinal comparison and actual PG17 constraint AST proof.
+No diff-driven two-schema allowlist, string stripping, hand-repaired failed clone
+or unnecessary fresh source dump is selected. Constraint-only SQL witnesses are
+additional private DDL verification inputs, never globals, message rows or catalog
+password bodies; their bytes/pins must join the final proof. Full data/sequence/
+controls and source/restored schema AST still precede any recovery PASS.
+
+## Restorer2 Actual Checkpoint
+
+Frozen restorer2 modulef18f2bdf/tests6479fa23 passed coordinator15/15 with five
+loaded omissions and independent review without actionable P1/P2. It ran once
+against a NEW exact owned restore2 clone using the unchanged R4 capture, not a
+hand-repaired failed clone. Actual server comparison passed logical columns,
+constraint identities/properties, ALL14 schema owners/ACLs including grantors
+and grant options, other catalog groups, data, sequences and extension controls.
+The intermediate receipt explicitly remains verified=false/AST pending.
+
+Three private DDL files downloaded with exact byte hashes; download manifest
+9c9d7474...11eddfb50. No globals, user rows or password catalog was downloaded.
+Local final verification refused RESTORE2_SCHEMA_AST_DIFFERENCE. Both constraint
+witnesses were parsed, but their equality assertion occurs AFTER the schema
+assertion: constraint AST equality has not yet been accepted. No final verified
+receipt exists. The exact owned restore2 clone stays network-none for bounded
+read-only diagnosis; original R4 clone remains absent. No source repair, HBA
+reload or production application SQL was performed.
+
+Next: classify the actual local AST difference without exposing SQL literals,
+changing immutable captures or replaying restoration. Only a proved decomposition
+with exact catalog coverage may replace a raw representation comparison; any
+uncovered structural/ACL difference must still refuse. In parallel, bounded
+synthetic seed and HTTP transport source work may proceed, but may not attach,
+apply SQL or claim actual Auth/HTTP/Realtime/delivery acceptance.

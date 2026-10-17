@@ -1,21 +1,22 @@
 # LETSCUBE — handover
 
-**Current resume,2026-10-17,item77:** coordinator; main-based worktree
+**Current resume,2026-10-17,item77:** coordinator; worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, sourcef5e44185 (not main/deployed). V2 feedc82104d2,
-monotone revisions and commit-time ownership passed320/320, SQL/producer9/9,
-typecheck and build4a7dbfc49a80fe21/12.78s. Prior PG17/dispatcher170/220 stands.
-Lifecyclef044e3ae passed73/73 and independent review. Task7 componentf5e44185
-passed25/25 and one20-state1440/390 light/dark fictional render batch; not mounted
-or fullstack-accepted UI. No new actionable lifecycle review findings remain.
-Blocker: logical restore lost real extension metadata. Exact obsolete R2 was
-cleaned; backup/failure receipts retained. Physical launcher43/43 now fences
-same-CID restart inside its worker. It remains preparation-only, hard-blocked
-before writes until safe no-pending-reload proof. Kuhn owns separate read-only
-parser/config diagnosis; other worker scopes are complete. Next: faithful full-schema
-restore, HTTP/Realtime/rollback/delivery gates, then safe launch. No production
-application SQL, HBA reload, main push or native publication. Stable22/D366 stay
-unchanged. Root divergent; preserve foreign sidebar/search/version, A063 excluded.
+`codex/topic-alerts-20261016`, source0e2463f1 (not main/deployed). Accepted source
+418/418, PG17/dispatcher170/220, SQL assembly32/32 and HTTP selftest48/48 stand;
+the compact UI is not mounted. Task6: immutable R4 capture and source/archive
+4817-statement AST equality pass. Reviewed restorer2 (15/15) recovered ALL14
+schema ACLs and passed actual logical catalog/data/sequence/control comparison.
+Its three DDL files transferred byte-identically; local verification refuses
+RESTORE2_SCHEMA_AST_DIFFERENCE. Verified recovery is NOT established. Hume owns
+read-only local difference classification; frozen generators/capture/receipts
+must not change or be replayed. Exact owned restore2 clone remains network-none
+for bounded diagnosis and subsequent HTTP use. Leibniz owns synthetic seed source;
+Kuhn owns HTTP transport source, neither may execute remote changes. Next: resolve
+the actual schema difference, then real HTTP/Realtime/rollback/delivery gates.
+Physical backup remains hard-refused. No application SQL/HBA reload/main push/
+native publication; Stable22/D366 unchanged. Root divergent; preserve foreign
+sidebar/search/version paths, A063 excluded.
 [Detailed evidence and limits](operations/2026-10-16-topic-notification-overrides.md).
 
 **Accepted prior web release,2026-10-16, D-366:** coordinator; shared-web a07c5ae6 repair is
