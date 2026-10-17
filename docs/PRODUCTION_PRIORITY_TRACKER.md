@@ -3979,16 +3979,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     declared fingerprint groups are classified by object/field (ff73e83d), not
     normalized or granted a semantic-equality waiver.
     Preserve the accepted HTTP target and distinct R5; no restore/reset replay.
-    R5 candidate COMMIT acknowledged; seed refused/rolled back, zero QA users/
-    chats/sessions and runtime=false, enable not attempted. Correct the invalid
-    zero-event fixture assumption; first forward also rolled back. Full rollback
-    measurement d47f434e shows two invalidates AND B's ordinary chat_added/created
-    history, fences0. New forward2 must retain this history and all failure evidence.
-    Official isolated Node22 runtime smoke passes; actual SDK/hook baseline
-    source19 + IPC27 pass46/46, not wire acceptance. Single-socket Docker mount
+    R5 candidate/forward2 fixture now committed: exact actual rollback preflight
+    d76e6cd8 preceded seed/enable/readback3b7cd9b8. ParentsALLOW/fences0/runtime=true;
+    retain two invalidates AND B's ordinary chat_added/linked-created history.
+    Both failed attempts remain intact, no replay/adoption/reset.
+    Official isolated Node22 runtime smoke passes; actual SDK/hook/IPC bundle
+    source849ce348 passes55/55, not wire acceptance. Single-socket Docker mount
     failed before start; exact created container removed. Existing clone Perl/core
     is verified, allowing an in-clone relay without mounts/installs/PG restart.
-    Next corrected fixture/relay/bootstrap/
+    Next relay calibration/bootstrap/
     bounded host-inspector IPC; no R5 JWT/PostgREST/Realtime start yet.
     Realtime/delivery/launch remain open.
     Full delivery/Realtime, old-client compatibility and rollout stay open.

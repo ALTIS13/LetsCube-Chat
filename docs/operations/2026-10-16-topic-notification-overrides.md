@@ -1131,3 +1131,44 @@ its binary SHA3220cf58...7c511a and core INET/UNIX/Select/JSON modules are actua
 verified. Selected-path absence had not proved global absence. Use this existing
 runtime for a bounded opaque relay inside the owned clone. No additional runtime
 installation, broad directory/proc mount, HBA change or Postgres restart is needed.
+
+## Actual Forward Fixture Accepted
+
+New forward2 source0363830f/tests526c7a44 pass26/26 coordinator checks and
+independent review. They use the real captured membership-notification trigger,
+not only the new access signal. The synthetic A actor context is transaction-
+local; the existing invite/account/membership triggers remain enabled unchanged.
+
+The exact generated seed plus full factual readback ran once with ROLLBACK:
+d76e6cd8e26c82ff5ca532a31e5fb4344b99749c4c19060774d6b5f0e80e0b71.
+Readback matched, post-state was pristine/off and catalog/epoch stayed bound.
+Only after that proof passed did two guarded seed/enable COMMITs run once.
+New initial-stage receipt3b7cd9b8436ba5ecf1d7aa32220a3b425590e914c268205a66e4d548a3e5ccb0
+confirms ordinary invitation accounts, ALLOW parents, fences0 and retained normal
+notification/event history, runtime=true. Transport readiness remains false.
+Both earlier failed preparations and their evidence remain intact; no replay,
+history deletion, trigger bypass, candidate reapply or new clone was used.
+
+Public actual-hook/SDK baseline, finite inspector IPC and combined Node22 bundle
+are committed849ce348 on the feature branch. Final55/55 coordinator checks pass;
+measured B chat_added is remembered by the same ID and must survive the scenario.
+Independent delta review found no material issue. This is source preparation,
+not live Realtime/CAS-denial/rollback/provider/OS/production acceptance.
+
+## Actual Existing-Perl Transport Accepted
+
+Opaque Perl relayd0ac1150 passes14/14 real local stream controls; the new bounded
+operator7701a15f/tests05173b23 pass11/11 plus independent review. Generated
+Python and six Perl control helpers compile warning-free. Unknown detach ACK,
+PID reuse, foreign identity and resource-refused cleanup have meaningful controls.
+
+One actual Linux calibration now passes in6.3 seconds, receipt
+02fb21037aa2f1bd8d0e31a3ec32464a25c3a5448d999229eebe1d2c1e1aa97a.
+Read-only SQL through TCP127.0.0.1:54321 proves the same postgres/cluster/postmaster,
+logical WAL and Unix peer; a262144-byte synthetic response matches exactly.
+Cleanup signals only the saved PID/startticks/exe/cmd/source identity. Process
+absence and closed port are confirmed; PG epoch is unchanged. Source/log/PID/
+intent evidence stays retained. No runtime install, broad mount, HBA change,
+Postgres restart, JWT/PostgREST/Realtime startup or provider delivery occurred.
+Do not repeat accepted calibration without changed input. The next live lifetime
+must use a distinct owned service scope and reuse this accepted transport proof.

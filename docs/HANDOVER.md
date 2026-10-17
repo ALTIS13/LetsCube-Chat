@@ -2,20 +2,21 @@
 
 **Current resume, 2026-10-17, item77:** coordinator; worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, checkpoint `c37b2771` (not main/deployed).
+`codex/topic-alerts-20261016`, checkpoint `849ce348` (not main/deployed).
 Task6: actual HTTP48 passes (`b7b31942...8055150`); preserve its spent R4 fixture
 and proofs. Separate logical-WAL R5 recovery is verified (`2441c65f...353a878`,
 768 constraint ASTs); do not restore/reset either target. RT2.102.3/history72/31
 and per-object differences ff73e83d are inventoried, not a semantic-equality waiver.
-R5 candidate COMMIT is acknowledged; both attempted seeds rolled back before
-enable. QA users/chats/sessions/events remain zero, runtime=false. Full rollback
-measurement d47f434e proves the missing fixture assumption: membership creates
-two invalidates PLUS B's legitimate chat_added/created history, fences0.
-Next: Kuhn's new forward2 must retain this history and pass exact rollback
-preflight before any further COMMIT. Hume owns the existing-Perl/core bounded
-relay; Leibniz the measured B-history SDK baseline/inspector IPC bundle.
-SDK19+IPC27 pass46/46, including terminal one-dispatch failures; wire acceptance
-is still open. Node22 smoke passes; single-socket Docker bind refused before
+R5 candidate and forward2 fixture are now committed: exact actual rollback
+preflight d76e6cd8 passed first, then seed/enable/readback3b7cd9b8 passed once.
+Ordinary invited users retain two invalidates PLUS B's legitimate chat_added/
+linked-created history, both parents ALLOW, fences0, runtime=true. Keep original
+two failed attempts/proofs; no seed/candidate/reset replay. Existing-Perl relay
+calibration now passes actual Linux SQL/262144-byte stream and exact process/
+port cleanup (02fb2103), with unchanged PG epoch. Next: Hume's R5 PostgREST and
+Leibniz's Realtime/bootstrap source preparation, then service/SDK wire acceptance. Public actual-
+hook/SDK/IPC bundle is committed849ce348 and passes55/55; not a live result.
+Node22 smoke passes; single-socket Docker bind refused before
 process start and its exact created container was removed. Do not repeat that
 topology: use verified in-clone Perl, no install/broad mount/HBA/PG restart.
 No R5 JWT/PostgREST/RT startup. Client/provider/native/launch gates remain open;
