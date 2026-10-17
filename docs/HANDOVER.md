@@ -15,7 +15,21 @@ image IPv6 distribution disagreed with the IPv4 QA namespace. Explicit execution
 only IPv4 fixes it without HBA/DB changes. Do not rerun accepted boot/native work.
 Same-lifetime CAS/rollback source75/75 plus independent review accepted, not wire.
 Connected guard's feed-name P2 is fixed85dc7226; coordinator13/13 incl v2-only
-publication/filter omission controls. Finite parent/Node entry preparation runs.
+publication/filter omission controls. Node entry15/15 and actual isolated Node22
+Ready/IPC boundary94c31d67 pass, exact cleanup, no credentials/tenant. Finite
+parent HOST/process adapters and the new session/checkpoint lease are still being bound;
+source-only ports are not actual inspection or permission to start a tenant.
+Checkpoint sourcef78740ec/tests14/14 plus independent review pass; actual PG17
+initial readonly projection/validation1eca560d matches four sessions/fences0/
+retained initial history. Do not rerun this accepted calibration.
+Launch is not ready: actual metadata projection rejects inherited parent CHECK
+names on all seven existing partitions; exact readonly measurement identifies
+messages_payload_exclusive, not catalog/publication/epoch drift. Also the original
+finite QA sessions crossed their remaining30-minute admission threshold. Do not
+extend their expiry or weaken old checks. Kuhn owns structural inherited/new-child
+normalization; Leib owns a forward NEW-session lease/checkpoint adapter, created
+only just before an admitted run, retaining old rows. Hume freezes parent/HOST
+pending those contracts. No new sessions, services or tenant were created.
 No live relay/HTTP/RT, tenant or JWT.
 Next: finite composed service/SDK controller and actual delivery with fresh
 phase-aware guards. Provider/native/launch gates remain open; UI is unmounted.

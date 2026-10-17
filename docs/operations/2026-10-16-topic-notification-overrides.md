@@ -1299,3 +1299,90 @@ PGlite fixture contains the v2 table; legacy-only publication membership and
 omitting the v2 unfiltered-coverage check fail the literal controls. Baseline
 activeSlots0 is unchanged. This closes the source review finding, not actual
 connected tenant/slot acceptance; no rereview or old-suite replay is needed.
+
+## Actual Node22 Entry Boundary Accepted
+
+New finite entryd8f3a9ba generates8734c3be and pins current public phase bundle
+0f924d80 (11038678 bytes), sourceDigestf07d92df. Its four-byte length prefix is
+consumed exactly, SHA checked before compile, and one safe readiness frame precedes
+the actual phase IPC. Following stdin bytes survive fragmentation or a same-write
+config. Local15/15 includes real children, timeout/EOF/hash/size/output refusal,
+loaded omissions and actual bundle import; the local runtime is Node24, not22.
+
+One separate finite Linux Node22 run now accepts this CHANGED entry/bundle:
+94c31d67fd6f10ab63816f8a73dc3d31a0158d27e9587af50e98e3640f290dc2.
+Actual readiness is followed by the real phase IPC's expected unbound-config
+refusal with inspectCount0. No valid credentials, tenant or network inspection
+was supplied. Exact container cleanup and fresh unchanged R5 baseline pass.
+No copied repo/Git/external dependency is needed inside the Node container.
+This is a loader/IPC boundary, not an authenticated session/CDC delivery result.
+
+The finite parent composition still requires actual HOST/process/IPC adapters
+and phase checkpoint SQL. An unbound source kernel is not a runtime permit.
+The coordinator also identified an ignored-signal deadline gap in its draft:
+checking abort only before/after an awaited port cannot bound a never-resolving
+port. One genuine refusal/cleanup fix pass is in progress before acceptance.
+
+## Actual Initial Checkpoint Accepted
+
+Checkpoint reader/validatorf78740ec/tests81fa35c9 pass14/14 coordinator checks
+and independent review. Selected real DDL/PGlite cases cover own account/chat,
+all four sessions, exact CAS/fences, initial message history, terminal state,
+microsecond timestamps and canonical JS hashing. Five loaded omissions fail.
+Committed CAS is admitted transiently only for baseline INSPECT, not its ACK.
+
+One actual PG17 repeatable-read read-only UTC projection now passes against the
+unchanged owned R5 baseline before and after; no raw rows are saved or reported:
+1eca560dae74163721f30f8e4f593c2471bb0ec5739e84a7a7dd50e501439a43.
+Result initial/inspect is pristine, runtime=true; sessions4, fences0, messages0,
+requested notifications0, initialHistory1. This proves the initial SQL/runtime
+shape, not later producer/CAS/rollback or WS/CDC semantics. The parent must do
+fresh phase inspections during the actual run rather than echo this receipt.
+
+## Actual Metadata And Session-Lease Findings
+
+The first actual PG17 connected-metadata SELECT succeeds, but85dc7226's
+`validatePhase(started,baseline,current)` refuses. A safe readonly diagnosis
+confirms exact owner/CID/stage/UTC/epoch and candidate catalog3f87350b, publication
+coverage and all hashes; slots/owned tenant/extensions are0. All seven existing
+partitions have supported=false. The measured non-child-prefixed objects are
+only inherited CHECK `messages_payload_exclusive`: contype=c, conislocal=false,
+coninhcount1, conparentid0 and same parent constraint name. No mismatched index
+name exists. Generic prefix refusal is not a valid inheritance classifier.
+The fix must bind parent identity/definition, keep existing physical fingerprints
+unchanged, and meaningfully test dropped-column/fast-missing differences for a
+new partition. A broad schema waiver or deleting constraint checks is not a fix.
+
+An independent old full-fixture guard now refuses only its sessions fact. That
+fact is time-dependent (`not_after > clock_timestamp()+30 minutes`); rows were
+not changed, and Hume confirms no live commands. The clone remains running with
+the same PID/incarnation. The accepted initial checkpoint used a15-second live
+threshold at its measured time; neither old receipt is a fresh launch permit.
+Two partition-name diagnostic attempts refused at this stricter prestate before
+SQL; a scoped metadata-only read then measured the inherited CHECKs with exact
+incarnation/role/epoch guards, without claiming session/runtime admission.
+
+Next is a forward ordinary QA-session lease: append four NEW SIDs for the same
+owned invitation accounts, preserve every original session row, and create the
+lease only when the full controller is ready. Do not update old not_after,
+re-age a receipt, reset/reseed the fixture or rewrite its old stage proof.
+The new lease and checkpoint binding need explicit new proof/contracts before
+services or the fixed tenant can start. No new sessions or tenant were created.
+
+One exact-target rollback-only DDL measurement now creates planned child20 under
+the actual supabase_admin role, measures parent/old19/new20 metadata, then removes
+it with ROLLBACK. Cluster/postmaster/role/absence/no slots/no tenant checks raise
+before CREATE; parent attachment is checked afterwards. Full catalog and epoch
+match before/after. SQLffdc5069, evidence1bb7ac901e0809dbd8082ac5ad9f4f9699281eb502786446310324a75b061b04.
+Actual RT parent/old/new have nine contiguous live columns and no fast-missing
+values; there is no evidence to invent a broad dropped-column normalizer here.
+Old/new child owner is supabase_admin. Inherited CHECK expression matches, while
+parent is NOT VALID and children are validated. ACL entries are the same set but
+the old/new physical arrays differ in order. Keep old physical before/after
+comparison; canonicalize only justified new-child equivalence, not all metadata.
+
+Parent/core/HOST are frozen at02994173/8b7d1a79, local reported10/10 and6/6.
+They include the ignored-signal and absolute aggregate deadline repairs, but new
+partition/session contracts are not integrated and additional flow/unknown-ACK/
+rollback leaf controls remain. No active exec or live action belongs to that
+worker. This is a dependency handoff, not permission to run the old HOST.
