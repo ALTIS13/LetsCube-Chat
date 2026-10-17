@@ -993,3 +993,141 @@ The existing HTTP clone, data, fences and all original proofs stay unchanged.
 Hume owns the inert adaptation, Kuhn readonly source/clone history/component/
 plugin/role/tool metadata, and Leibniz independent review. No new allocation,
 PG restart, configuration change, migration-history write or RT startup occurred.
+
+## Actual History and Tool Metadata
+
+The first history probe's nullable-timestamp assumption was caught against the
+actual earlier receipt before execution. Its version column remains NOT NULL;
+nullable inserted_at and NULL values are accepted only when that column is
+actually nullable. Two genuine RED cases became 24/24 GREEN. Independent review
+found no other material issue. Its first actual run refused at tool inventory,
+not at source/clone history queries; no full metadata acceptance was inferred.
+Narrow diagnostics and a known-file control proved readlink -e unsupported in
+this image while -f resolves the existing regular target to the known hash.
+The frozen probe was retained; a two-flag-only wrapper passed 10/10 with regular
+file, stat/resolution-race and omission controls.
+
+Actual complete history V2 receipt:
+`4afbb84984274c9485ecb06271a9d410098cf27191751910c65d038f59efd29b`.
+Source/clone identities, PG epochs and both snapshots were checked before/after.
+Both exact version sets AND rows match: 72 tenant, 31 metadata. No history-copy,
+recovery or fabricated version rows are needed. Other production data/config/
+tenant rows/keys were not read. The declared 12-component fingerprint projection
+differs in seven groups: schemas, relations, columns, constraints, indexes, types,
+triggers. Columns count 190/185; other component counts match. Routines, policies,
+default ACLs, sequences and extension members match, with no unsupported shapes.
+This is not full-schema semantic equivalence or proof of actual schema drift.
+Readonly per-object/field classification is next; no normalization/waiver is implied.
+
+socat/python3/perl were absent only at the selected paths, not proved globally
+absent. wal2json 2.6 and pgoutput are regular hash-bound files, not execution or
+replication acceptance. Startup remains explicitly false.
+
+The separate R5 clone adapter initially passed 16/16 and generated an inert
+actual-input-bound plan. Independent review found two P2 correctness defects:
+the local DDL verifier did not validate a contradictory/missing logical epoch;
+cleanup could falsely report absence after a known CID was renamed. One focused
+RED/GREEN fix pass is underway. The old plan is retained and has NOT executed.
+No new allocation, container/PG restart, history write or RT startup occurred.
+
+## Separate Logical-WAL Recovery Accepted
+
+The two clone-adapter findings went genuinely RED against the frozen original,
+then GREEN: missing/contradictory local epoch now refuses; renamed or unknown
+saved CID cannot produce a false cleanup success. Final source 6963e42a/tests
+4fecf8d8 pass 22/22, zero skips, including two new compiled omissions. Original
+source/tests/inert plan stay preserved. An actual new-input plan was pinned;
+readonly preflight passed target absence and sufficient memory/disk capacity.
+
+One restore then ran ONLY on the new owned R5 target. Remote proof
+`169345999e1839636ab5d4a1856c8a6e666ce7a7d156742af9a82d2f0cb041aa`
+confirms logical WAL, catalog/data/sequences/controls/comments and 768 constraints,
+with AST still pending. The new file manifest and fresh epoch guards confirmed
+all three DDL hashes match the already retained local bytes, so three artifacts
+were reused and none redownloaded; no old receipt was relabelled as new.
+
+Local new-target schema/constraint verification now passes:
+`2441c65f68a6ad9fd5bd35444102fbe4b4d9552355b733cd364f2efa6353a878`,
+scope separate-realtime-logical-recovery, verified=true. Logical WAL and distinct
+CID/cluster from the protected HTTP clone are confirmed. This is baseline
+recovery acceptance, not candidate/fixture/Realtime or production acceptance.
+Do not replay restore/finalizer/reset on R5. Original R4 HTTP data/proofs remain
+untouched. Next: a current candidate plus fresh ordinary invited, unfenced RT
+fixture with both parents allowing alerts, then actual SDK/old-new consumer wire
+checks. Token issuance/startup waits for the finite runner preparation, not a
+new owner approval. No new R5 candidate/JWT/PostgREST/Realtime start occurred yet.
+
+## Realtime Preparation And Actual Fixture Refusal
+
+The reviewed per-object classifier passed15/15 and ran once, receipt
+ff73e83d3f48aeb72d32fac4ce1eb96d765a11c979df74d217163845ad50594f.
+It retains exact natural keys, physical dropped slots/attnum, missing-value
+metadata, partition inheritance and generated constraint-trigger names. Live
+partitions now include20 October instead of the retained13 October. No raw
+defaults, function bodies, tenant rows or keys were exposed; no normalization
+or full semantic-equivalence/recovery waiver is inferred.
+
+The official anonymous Node22-alpine pull and isolated nonroot/network-none
+runtime smoke passed at image digest0a7108bf...bc2e402, Node22.23.3. The temporary
+container is absent afterward. The original script was rejected at compile time
+by strict Python escape checking, before any server intent/effect. A new pinned
+wrapper changed only the version-regex raw-string prefix; original evidence stays.
+Pinned image run.sh/server script hashes match the selected upstream scripts,
+not an attestation of the whole Realtime image build.
+
+New prepare1f60d90a/tests cb5417e9 and classifier2f6d3f1a/tests ab0bef53 passed
+29/29 coordinator checks, zero skips, and independent source reviews. Actual R5
+candidate COMMIT is acknowledged, but seed failed before enable. Readonly state
+confirms zero QA users/chats/sessions and runtime=false. The failure markers stay
+intact; no candidate/seed/reset replay or successful-stage adoption is permitted.
+A rollback-only diagnostic obtained P0001, then a changed-verbosity diagnostic
+identified RT_SEED_UNFENCED_REQUIRED, with unchanged post-state both times.
+Source inspection localizes the incorrect assumption: real chat_members INSERT
+triggers emit invalidate events even with no legacy fence. The guard combined
+zero fences AND zero events. Correct the fixture to retain and explicitly account
+for legitimate invalidations, never delete them or disable the production trigger.
+
+Actual SDK/old75096aa3/current-hook baseline preparation passes14/14 and produces
+a self-contained Node22-target bundle, not actual wire acceptance. Disabled CAS,
+rollback and already-authorized callback boundaries remain open. A bounded
+stdin/stdout inspector protocol lets an external host guard freshly verify owned
+Docker/PG/service state without a Docker socket or production mounts in clients.
+No R5 JWT issuance, PostgREST/Realtime start, native or production action occurred.
+
+## Full Fixture Measurement And Relay Fallback
+
+The reviewed forward seed4f59c5fa passed17/17 and independent review, but its actual
+seed transaction also refused before enable. New intent/failure evidence is kept;
+no seed ACK, enable intent, fixture proof or successful stage exists. Both failed
+paths leave zero synthetic users/chats/sessions/events and runtime=false.
+
+An actual rollback-only diagnostic then measured the complete legitimate fixture,
+receipt d47f434ed9a31ed7c0dc47ef0ae7b3ec36e8df51b7c583cd3d74a772b7e6fe75:
+A has one invalidate; B has one invalidate plus one created event linked to an
+ordinary chat_added notification. Fences remain zero. Its payload keys are exactly
+actor_id/chat_id/chat_name/chat_type and chat matches the fixture. The transaction
+rolls back, including the notification; no production/person data is involved.
+This is why tests containing only the new access trigger were insufficient: the
+existing membership-notification trigger is also part of the real full schema.
+The next forward2 must retain this normal history. Its exact corrected transaction
+and readback must pass a rollback preflight BEFORE any further fixture COMMIT.
+
+Baseline client19 plus finite nonce-inspector IPC27 pass46/46 coordinator checks.
+Actual locked-SDK testing exposed automatic GET retries on503; one RED/GREEN pass
+now aborts non2xx/network failure after one dispatch and hides response bodies.
+IPC review found no material issue. The client still needs the measured B-history
+baseline correction; neither wire/CAS-denial/rollback/OS acceptance is implied.
+
+Node core relay source passes13/13 real-stream controls. Its calibration cleanup
+review found a resource-refusal leak; two real failing lifecycle cases went GREEN
+in7/7 with a separate exact-owned-CID cleanup guard and loaded omission control.
+The actual Docker single-Unix-socket bind was refused with invalid argument before
+the process started. The exact created CID was reconciled by owner/image/command/
+intent/mount/error hash and removed; PG epoch is unchanged. No live relay PASS.
+Do not repeat that mount topology or claim cross-container Unix acceptance.
+
+A bounded existing-tool inventory then found Perl5.42.0 at an exact Nix path;
+its binary SHA3220cf58...7c511a and core INET/UNIX/Select/JSON modules are actually
+verified. Selected-path absence had not proved global absence. Use this existing
+runtime for a bounded opaque relay inside the owned clone. No additional runtime
+installation, broad directory/proc mount, HBA change or Postgres restart is needed.

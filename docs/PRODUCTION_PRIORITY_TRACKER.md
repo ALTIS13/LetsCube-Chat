@@ -3973,10 +3973,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     retained-history rollback/resume. Clone now A/B fenced, oldA retired/runtime
     enabled; no reset/replay. Readonly Realtime preflight passes: image 2.102.3,
     publications present, but clone WAL is replica. Exact-version startup also
-    changes metadata/partitions. Next: separate RT-owned logical-WAL target from
-    the same immutable capture, accepted algorithms and new proofs; preserve the
-    accepted HTTP target. Capacity/history checks precede allocation, then actual
-    legacy WS/REST with a fresh fixture. No allocation/restart/config change yet.
+    changes metadata/partitions. Separate R5 logical-WAL recovery is now VERIFIED
+    2441c65f after adapter22/22; new-target DDL hashes allowed honest reuse of all
+    three existing artifacts. Exact source/clone histories match72/31; seven
+    declared fingerprint groups are classified by object/field (ff73e83d), not
+    normalized or granted a semantic-equality waiver.
+    Preserve the accepted HTTP target and distinct R5; no restore/reset replay.
+    R5 candidate COMMIT acknowledged; seed refused/rolled back, zero QA users/
+    chats/sessions and runtime=false, enable not attempted. Correct the invalid
+    zero-event fixture assumption; first forward also rolled back. Full rollback
+    measurement d47f434e shows two invalidates AND B's ordinary chat_added/created
+    history, fences0. New forward2 must retain this history and all failure evidence.
+    Official isolated Node22 runtime smoke passes; actual SDK/hook baseline
+    source19 + IPC27 pass46/46, not wire acceptance. Single-socket Docker mount
+    failed before start; exact created container removed. Existing clone Perl/core
+    is verified, allowing an in-clone relay without mounts/installs/PG restart.
+    Next corrected fixture/relay/bootstrap/
+    bounded host-inspector IPC; no R5 JWT/PostgREST/Realtime start yet.
     Realtime/delivery/launch remain open.
     Full delivery/Realtime, old-client compatibility and rollout stay open.
     No production migration/UI/native release or feature completion inferred.

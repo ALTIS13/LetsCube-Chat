@@ -2,21 +2,23 @@
 
 **Current resume, 2026-10-17, item77:** coordinator; worktree
 `C:/Users/maksi/.codex/worktrees/android-current-20261015/LetsCube-Chat`, branch
-`codex/topic-alerts-20261016`, checkpoint `ede0024c` (not main/deployed).
-Task6 logical recovery, actual candidate/invitation seed and PostgREST forward
-recovery pass. Actual HTTP48 passes in 313158 ms: account/device CAS, real
-producers, terminal suppression, retired-session refusal and retained-history
-rollback/resume; receipt `b7b31942...8055150`, not fullstack acceptance. Reviewed
-finite QA budget is 480 s; per-op 15 s, cap80 and all fresh guards remain.
-Clone now has oldA retired, runtime enabled and A/B fenced. Do not replay/reset/
-reseed or rewrite original recovery/server/lease evidence. Readonly Realtime
-preflight passes (`04ad8b76...4c56540`): actual image 2.102.3, required publications
-present, but clone WAL is replica, not logical. Exact-version source also shows
-Realtime startup/connect creates metadata/partitions. Next: a separately owned
-logical-WAL RT clone from the SAME immutable capture, reusing accepted recovery
-algorithms with new target proofs. Existing HTTP clone/data/evidence stay intact.
-Hume owns inert new-clone source, Kuhn readonly history/component checks; no new
-allocation/restart yet. Legacy WS/REST/client/provider/native/launch remain open;
+`codex/topic-alerts-20261016`, checkpoint `c37b2771` (not main/deployed).
+Task6: actual HTTP48 passes (`b7b31942...8055150`); preserve its spent R4 fixture
+and proofs. Separate logical-WAL R5 recovery is verified (`2441c65f...353a878`,
+768 constraint ASTs); do not restore/reset either target. RT2.102.3/history72/31
+and per-object differences ff73e83d are inventoried, not a semantic-equality waiver.
+R5 candidate COMMIT is acknowledged; both attempted seeds rolled back before
+enable. QA users/chats/sessions/events remain zero, runtime=false. Full rollback
+measurement d47f434e proves the missing fixture assumption: membership creates
+two invalidates PLUS B's legitimate chat_added/created history, fences0.
+Next: Kuhn's new forward2 must retain this history and pass exact rollback
+preflight before any further COMMIT. Hume owns the existing-Perl/core bounded
+relay; Leibniz the measured B-history SDK baseline/inspector IPC bundle.
+SDK19+IPC27 pass46/46, including terminal one-dispatch failures; wire acceptance
+is still open. Node22 smoke passes; single-socket Docker bind refused before
+process start and its exact created container was removed. Do not repeat that
+topology: use verified in-clone Perl, no install/broad mount/HBA/PG restart.
+No R5 JWT/PostgREST/RT startup. Client/provider/native/launch gates remain open;
 UI is not mounted.
 Reuse accepted source418/PG170/dispatch220/assembler32/selftest51. No production
 SQL/HBA/main push/native publication/paid allocation. Stable22/D366 unchanged by

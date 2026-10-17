@@ -23,18 +23,31 @@ full requirements; cross-task requirements remain open until their consumers pas
 | 3 | Terminal suppression and structural lock repair source accepted,30d8dd80; final integrated PG17 suite170/170 includes the changed source and native/album binding. Full-schema/runtime remains open. |
 | 4 | Native/album bindingbdb346f4 plus prior maintained single/legacy/preparation reviewed; affected dispatcher220/220 and integrated PG17 suite170/170, zero skips. Actual provider/OS release gates remain open. |
 | 5 | State8016c799 and reviewed presentation4fc8e3af verified,155/155 and181/181; source requires the additive SQL, not a standalone release. |
-| 6 | Logical recovery, candidate/invitation seed and PostgREST accepted. Actual HTTP48 PASS in 313158 ms, receipt b7b31942: account/device CAS, real producers, terminal suppression, old-session refusal and retained-history rollback. Readonly RT preflight passes; actual image 2.102.3, but current clone WAL is replica. Prepare a separate logical-WAL RT target from the same immutable capture with new proofs; preserve old clone/fences/evidence. Source selftest51/lease19/batch38 pass; earlier418/PG170/dispatch220/assembler32 reused. Actual RT/old-client/provider/native/production launch remain open. |
+| 6 | Actual HTTP48 PASS in 313158 ms, receipt b7b31942: account/device CAS, real producers, terminal suppression, session refusal and retained-history rollback. Separate R5 logical-WAL recovery VERIFIED 2441c65f after reviewed 22/22 adapter; all three DDL artifacts reused only after fresh new-target hashes matched. Exact RT histories match 72/31; seven declared metadata groups await classification. Next new-target candidate/unfenced fixture and actual SDK/old-new wire acceptance. Original HTTP clone/fences/evidence stay intact. Source selftest51/lease19/batch38 and earlier418/PG170/dispatch220/assembler32 reused. RT/provider/native/production launch remain open. |
 | 7 | Compact componentf5e44185 passed25/25 and fictional20-state1440/390 light/dark pixels. No header mount, fullstack visual acceptance, reachable production toggle or native release for item77. Full Task6 gate still precedes release acceptance. |
 
 Next Task6 gate: actual readonly Realtime preflight passes (`04ad8b76`), image
-2.102.3 pinned, publications present. Clone `wal_level=replica` prevents logical
-replication. Exact-version startup/connect also creates metadata/partitions.
-Prepare a separate RT-owned target from the same immutable capture, with logical
-WAL from first boot, accepted recovery algorithms and new target proofs. Preserve
-the original HTTP clone/data/evidence; no old replay/reset or new source dump.
-Capacity and source/clone migration-history compatibility precede allocation.
-No allocation/restart/configuration change yet. Fresh unfenced fixture, actual
-old/new WS/REST and delivery acceptance remain open.
+2.102.3 pinned, publications present. The original HTTP clone remains replica;
+distinct R5 is now restored with logical WAL and verified new-target schema/
+constraint proof (`2441c65f`). Exact histories match 72/31; current seven-component
+fingerprint differences are not semantic drift proof and need classification.
+Preserve both targets/evidence; no restore/reset replay or new source dump.
+R5 candidate COMMIT is acknowledged; seed refused and rolled back, QA rows zero
+and runtime=false, enable not attempted. Correct the fixture's invalid zero-event
+assumption: real membership INSERTs emit legitimate invalidate events even before
+any legacy fence. Preserve those events and failed evidence; use a reviewed new
+forward-only completion, not replay/reset/adoption. Classification ff73e83d retains
+rolling-partition and physical differences without a semantic-equivalence waiver.
+First forward seed also rolled back: full rollback-only measurement d47f434e
+shows A invalidate1, B invalidate1+created1 and ordinary chat_added1, fences0.
+Retain this legitimate history in the new forward2 fixture and old/new baseline.
+Official isolated Node22 runtime smoke passes; actual SDK/hook baseline19 plus
+inspector IPC27 pass46/46, including one-dispatch abort. Single-socket Docker bind
+refused before start; exact created container removed. Existing Perl/core verified
+inside the clone permits a bounded relay without installs/mounts/PG restart.
+Wire acceptance remains open. Next: corrected fixture, bounded
+relay/bootstrap and host-verified client inspector IPC; no R5 JWT/PostgREST/RT
+startup. Delivery/client/native/production acceptance remains open.
 
 Detailed failures, evidence and limitations: [execution record](../../operations/2026-10-16-topic-notification-overrides.md).
 
