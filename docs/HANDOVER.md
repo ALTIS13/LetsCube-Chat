@@ -4,7 +4,7 @@
 [the current release record](operations/2026-10-18-cursor-return-notifications.md).
 Cursor's coordinated SQL is installed; chat/cache/reconnect and iPhone first-load,
 WebKit replacement and cold same-session restore defects are repaired. Web
-`dc381840` is healthy with public/container parity. Actual installed iPhone PWA
+build `00df21e65e13fa57` is healthy with public/container parity. Actual installed iPhone PWA
 sender/text, sender-only, none and exact notification activation pass. Global Web
 previews are ON after fresh verified backup/raising CAS/readback; Topic overrides
 remain OFF. QA grant/admission/subscription are retired and the rental released.

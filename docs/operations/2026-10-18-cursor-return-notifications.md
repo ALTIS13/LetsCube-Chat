@@ -143,7 +143,8 @@ Final Android source `4d394ecf`, build23, APK SHA-256
 Gradle34s. Original signer, four Firebase values, release flags and APK/AAB/web
 parity pass. Realme primary20 ->23 in-place retains UID/data directory/first
 install and its already-authenticated owned QA session; a fresh device row
-reports23 under the same session. No clear/uninstall or protected-app update.
+reports23 under the same session. No clear/uninstall; other protected apps were
+not updated.
 Codex Process Jobs refused this Windows host (`win32` unsupported); no detached
 job was started, and the foreground release builder completed normally.
 
