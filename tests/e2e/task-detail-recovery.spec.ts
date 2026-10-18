@@ -8,7 +8,7 @@ let bundle: Awaited<ReturnType<typeof compileFixture>>;
 test.beforeAll(async()=>{bundle=await compileFixture({styles:true});});
 
 for(const theme of ["light","dark"] as const) test(`fictional detail recovery retains drafts and compact Retry (${theme})`,async({page},testInfo)=>{
-  const f=await mountFixture(page,bundle,{mode:"modal",theme,
+  const f=await mountFixture(page,bundle,{mode:"modal",theme,autoSubscribe:false,
     initial:{errors:{tasks:{code:"57014",message:"FICTIONAL_BACKEND_SECRET"}}}});
   try {
     const evidence=resolve(".ops-private/20261007-task-detail-recovery");

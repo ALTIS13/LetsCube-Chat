@@ -10,7 +10,8 @@ test.after(async()=>{await browser?.close();});
 async function fixture(options: any = {}, code=bundle) {
   const context=await browser.newContext({serviceWorkers:"block"});
   const page=await context.newPage();
-  const f=await mountFixture(page,code,options);
+  // These D354 cases control row events/reads; join catch-up has its own timed fixture.
+  const f=await mountFixture(page,code,{...options,autoSubscribe:false});
   await f.idle();
   return {...f, async close(){try{await f.close();}finally{await context.close();}}};
 }

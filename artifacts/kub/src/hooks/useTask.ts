@@ -177,10 +177,14 @@ export function useTask(taskId: string | null) {
   // Realtime — server-side filter on task_id so we only get our row's events.
   useEffect(() => {
     if (!taskId || !userId) return;
+    let active = true;
+    const joined = new Set<string>();
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debouncedFetch = () => {
+      if (!active) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
+        timer = null;
         void fetchTask();
       }, 250);
     };
@@ -215,11 +219,20 @@ export function useTask(taskId: string | null) {
         { event: "*", schema: "public", table: "task_checklist_items", filter: `task_id=eq.${taskId}`, handler: debouncedFetch },
       ],
       (name, status) => {
+        if (!active) return;
+        if (status === "SUBSCRIBED") {
+          joined.add(name);
+          // Read after all three bindings join; CDC does not replay an offline gap.
+          if (joined.size === 3) debouncedFetch();
+        } else {
+          joined.delete(name);
+        }
         if (import.meta.env.DEV) console.debug("[tasks:detail]", name, status);
       },
     );
     for (const { name } of channels) registerChannel(name);
     return () => {
+      active = false;
       if (timer) clearTimeout(timer);
       for (const { name, channel } of channels) {
         rt.removeChannel(channel);

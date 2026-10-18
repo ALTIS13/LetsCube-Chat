@@ -19,7 +19,8 @@ const boundaries = new Map([
       channel(name) {
         const channel = {name, active:true, handlers:[],
           on(kind, filter, callback) {this.handlers.push({filter, callback}); return this;},
-          subscribe(callback) {callback?.('SUBSCRIBED'); return this;}};
+          subscribe(callback) {this.status=callback;
+            if(window.fixture.autoSubscribe) callback?.('SUBSCRIBED'); return this;}};
         window.fixture.channels.push(channel); return channel;
       },
       removeChannel(channel) {channel.active=false; return Promise.resolve();}
@@ -123,7 +124,7 @@ async function compileFixture({ change, styles = false } = {}) {
   return {js:result.outputFiles[0].text,css};
 }
 
-async function mountFixture(page, bundle, {mode="hook", initial={}, theme="dark"} = {}) {
+async function mountFixture(page, bundle, {mode="hook", initial={}, theme="dark", autoSubscribe=true} = {}) {
   assert.equal(process.env.KUB_QA_ALLOW_MUTATIONS,"0","this fixture requires the read-only QA gate");
   const faults = [], network = [];
   page.on("pageerror", error => faults.push(error.message));
@@ -138,10 +139,10 @@ async function mountFixture(page, bundle, {mode="hook", initial={}, theme="dark"
     network.push("unexpected network request"); return route.abort();
   });
   await page.goto(ORIGIN);
-  await page.evaluate(({mode,initial,theme}) => {
+  await page.evaluate(({mode,initial,theme,autoSubscribe}) => {
     document.documentElement.classList.toggle("dark",theme === "dark");
     const AT='2026-10-07T12:00:00Z';
-    const f=window.fixture={mode,theme,taskId:'task-a',plans:[initial],batches:[],channels:[],writes:0,reads:[],state:null};
+    const f=window.fixture={mode,theme,autoSubscribe,taskId:'task-a',plans:[initial],batches:[],channels:[],writes:0,reads:[],state:null};
     f.profile = id => ({id,full_name:'Fictional QA',username:null,avatar_url:null,bio:null,role:'user',
       is_test_account:true,profile_frame:null,profile_background:null,presence_status:null,
       online_at:null,created_at:AT,updated_at:AT});
@@ -209,7 +210,7 @@ async function mountFixture(page, bundle, {mode="hook", initial={}, theme="dark"
     };
     f.release = index => f.batches[index].release();
     f.releaseTable = (index,table) => f.batches[index].parts.get(table)?.release();
-  },{mode,initial,theme});
+  },{mode,initial,theme,autoSubscribe});
   if (bundle.css) await page.addStyleTag({content:bundle.css});
   await page.addScriptTag({content:bundle.js});
   await page.waitForFunction(() => window.fixture.batches.length > 0);
