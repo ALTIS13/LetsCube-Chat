@@ -15,6 +15,14 @@ const { webPushDescriptorFingerprint } = await import("data:text/javascript;base
 // synthetic Auth/roles/schema boundaries, not HTTP/JWT or iPhone acceptance.
 const proposal = new URL("../../docs/proposals/2026-10-17-web-message-preview.sql", import.meta.url);
 const rollback = new URL("../../docs/proposals/2026-10-17-web-message-preview.rollback.sql", import.meta.url);
+const upgrade = new URL("../../supabase/migrations/20261018013000_web_preview_install_admission.sql", import.meta.url);
+async function preSidecarSource() {
+  const source = await readFile(new URL("../../supabase/migrations/20261017104253_coordinated_notification_release.sql", import.meta.url), "utf8");
+  const feature = source.lastIndexOf("'letscube:web-message-preview',0)");
+  const start = source.lastIndexOf("DO $prestate$", feature);
+  assert.ok(feature > start && start > 0, "frozen pre-sidecar Web migration block");
+  return "BEGIN;\nSET LOCAL search_path=pg_catalog;\n" + source.slice(start);
+}
 const sub = id(50), mid = id(141);
 const contextKeys = ["preview_v", "recipient_id", "session_id", "subscription_id", "subscription_fingerprint",
   "revision", "preview_level", "installation_consent", "observed_at_epoch_ms", "expires_at_epoch_ms"].sort();
@@ -59,7 +67,7 @@ async function present(db) {
   assert.equal((await db.query("select to_regprocedure('public.web_message_preview_enroll(uuid,bigint,text,text,text,integer)') is not null as present")).rows[0].present,
     true, "EXPLICIT_BROWSER_GRANT_RPC_REQUIRED");
 }
-async function fixture(t, { sql, baseline = false } = {}) {
+async function fixture(t, { sql, baseline = false, preSidecar = false } = {}) {
   const db = await deliveryFixture({ candidate: true }); t.after(() => db.close());
   await db.exec(`create table auth.users(id uuid primary key);
     insert into auth.users select id from public.profiles;
@@ -78,7 +86,7 @@ async function fixture(t, { sql, baseline = false } = {}) {
     update public.profiles set full_name='Fixture sender' where id='${sender}';`);
   const note = (await db.query("select id from public.notifications where user_id=$1 and payload->>'message_id'=$2", [user, mid])).rows[0].id;
   if (!baseline) {
-    const source = sql ?? await sqlSource();
+    const source = preSidecar ? await preSidecarSource() : sql ?? await sqlSource();
     if (source) await db.exec(source);
     await present(db);
     await db.exec("update private.web_message_preview_runtime set enabled=true where singleton");
@@ -407,9 +415,13 @@ test("prestate refuses changed trusted helper bodies before creating any feature
 
 const siblingInstall = id(53);
 
-async function runtimeOff(t) {
-  const f = await fixture(t);
+async function runtimeOff(t, { migrated = false, sql } = {}) {
+  const f = await fixture(t, { preSidecar: migrated, sql });
   await f.db.exec("update private.web_message_preview_runtime set enabled=false where singleton");
+  if (migrated) {
+    assert.equal((await f.db.query("select to_regclass('private.web_message_preview_install_admissions') is null as absent")).rows[0].absent, true);
+    await f.db.exec(await readFile(upgrade, "utf8"));
+  }
   await f.db.exec(`insert into public.push_subscriptions(id,user_id,is_active) values('${siblingInstall}','${user}',true)`);
   return f;
 }
@@ -417,6 +429,10 @@ async function admit(db, subscription = sub, when = "future", revoked = false) {
   const expires = when === "stale" ? "clock_timestamp() - interval '1 minute'" : "clock_timestamp() + interval '1 day'";
   await asRole(db, "service_role", `select public.web_message_preview_install_set($1, ${expires}, false)`, [subscription]);
   if (revoked) await asRole(db, "service_role", "select public.web_message_preview_install_set($1, null, true)", [subscription]);
+}
+async function retainedRelationLock(db, relation) {
+  return (await db.query(`select exists(select 1 from pg_locks
+    where pid=pg_backend_pid() and granted and relation=$1::regclass and mode='RowShareLock') as held`, [relation])).rows[0].held;
 }
 
 test("a per-install admission enrolls only that install while the global runtime stays off", async t => {
@@ -458,6 +474,175 @@ test("a revoked or stale per-install admission falls back to the generic preview
   const [generic] = await ctx(live.db);
   assert.equal(generic.installation_consent, false);
   assert.equal(generic.preview_level, "none");
+});
+
+for (const migrated of [false, true]) {
+  const path = migrated ? "actual upgrade" : "proposal";
+  test(`sidecar ${path}: admission expiry bounds context grant and content`, async t => {
+    const f = await runtimeOff(t, { migrated });
+    await asRole(f.db, "service_role", "select public.web_message_preview_install_set($1, clock_timestamp()+interval '5 seconds', false)", [sub]);
+    const limit = (await f.db.query("select floor(extract(epoch from expires_at)*1000)::bigint as ms from private.web_message_preview_install_admissions")).rows[0].ms;
+    const [before] = await ctx(f.db);
+    const { rows: [ack], secret } = await enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint);
+    assert.ok(ack.installation_consent && ack.expires_at_epoch_ms <= limit, "enroll ACK must not outlive operator admission");
+    const [row] = await content(f.db, secret, f.note);
+    assert.equal(row.body, "WEB CANARY FIXED");
+    assert.ok(row.expires_at_epoch_ms <= limit, "content lease must not outlive operator admission");
+    assert.equal((await f.db.query("select g.expires_at<=a.expires_at as bounded from private.web_message_preview_grants g join private.web_message_preview_install_admissions a using(subscription_id)")).rows[0].bounded, true);
+    assert.equal((await f.db.query("select enabled from private.web_message_preview_runtime where singleton")).rows[0].enabled, false);
+  });
+
+  test(`sidecar ${path}: admission expiry during enroll rolls back the grant`, async t => {
+    const f = await runtimeOff(t, { migrated });
+    const [before] = await ctx(f.db);
+    await f.db.exec(`create function private.fixture_admission_enroll_wait() returns trigger language plpgsql as $$
+      begin perform pg_sleep(0.6); return new; end $$;
+      create trigger fixture_admission_enroll_wait before insert on private.web_message_preview_grants
+        for each row execute function private.fixture_admission_enroll_wait();`);
+    await asRole(f.db, "service_role", "select public.web_message_preview_install_set($1, clock_timestamp()+interval '0.4 seconds', false)", [sub]);
+    await assert.rejects(enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint), /web_preview_disabled/);
+    assert.equal((await f.db.query("select count(*)::int as n from private.web_message_preview_grants")).rows[0].n, 0);
+  });
+
+  test(`sidecar ${path}: admission expiry during content denies the final result`, async t => {
+    const f = await runtimeOff(t, { migrated });
+    await admit(f.db);
+    const [before] = await ctx(f.db);
+    const { secret } = await enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint);
+    assert.equal((await content(f.db, secret, f.note)).length, 1);
+    await f.db.exec(`alter function private.topic_alert_source_lock(uuid,uuid) rename to fixture_original_topic_alert_source_lock;
+      create function private.topic_alert_source_lock(p_user uuid,p_chat uuid) returns void language plpgsql volatile
+        security definer set search_path='' as $$ begin
+          perform private.fixture_original_topic_alert_source_lock(p_user,p_chat);
+          perform pg_sleep(0.6);
+        end $$;
+      alter function private.topic_alert_source_lock(uuid,uuid) owner to postgres;`);
+    await asRole(f.db, "service_role", "select public.web_message_preview_install_set($1, clock_timestamp()+interval '0.4 seconds', false)", [sub]);
+    await expectDenied(f, secret);
+  });
+
+  test(`sidecar ${path}: rollback closes operator admission and existing capability`, async t => {
+    const f = await runtimeOff(t, { migrated });
+    await admit(f.db);
+    const [before] = await ctx(f.db);
+    const { secret } = await enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint);
+    assert.equal((await content(f.db, secret, f.note)).length, 1);
+    await f.db.exec(`create function private.fixture_rollback_admission_first() returns trigger language plpgsql as $$ begin
+        if exists(select 1 from private.web_message_preview_install_admissions where revoked_at is null) then
+          raise exception 'fixture_rollback_must_retire_admission_before_grant';
+        end if;
+        return new;
+      end $$;
+      create trigger fixture_rollback_admission_first before update on private.web_message_preview_grants
+        for each row execute function private.fixture_rollback_admission_first();`);
+    await f.db.exec(await readFile(rollback, "utf8"));
+    await expectDenied(f, secret);
+    const [after] = await ctx(f.db);
+    assert.equal(after.installation_consent, false);
+    await assert.rejects(enroll(f.db, after.revision, "message", sub, after.subscription_fingerprint), /web_preview_disabled/);
+    assert.equal((await f.db.query("select count(*)::int as n from private.web_message_preview_install_admissions where revoked_at is null")).rows[0].n, 0);
+  });
+
+  test(`sidecar ${path}: subscription lock precedes every admission read in enroll and content`, async t => {
+    const f = await runtimeOff(t, { migrated });
+    await admit(f.db);
+    const [before] = await ctx(f.db);
+    // Observe the real SQL lock order at the admission read, not source-string order.
+    await f.db.exec(`alter table private.web_message_preview_install_admissions rename to fixture_admission_rows;
+      create function private.fixture_locked_admission_expiry(p_value timestamptz) returns timestamptz
+        language plpgsql volatile as $$ begin
+          if not exists(select 1 from pg_catalog.pg_locks where pid=pg_backend_pid() and granted
+            and relation='public.push_subscriptions'::regclass and mode='RowShareLock') then
+            raise exception 'fixture_subscription_lock_must_precede_admission';
+          end if;
+          return p_value;
+        end $$;
+      create view private.web_message_preview_install_admissions as select subscription_id,recipient_id,
+        private.fixture_locked_admission_expiry(expires_at) as expires_at,revoked_at from private.fixture_admission_rows;
+      alter view private.web_message_preview_install_admissions owner to postgres;`);
+    const { secret, rows } = await enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint);
+    assert.equal(rows[0].installation_consent, true);
+    assert.equal((await content(f.db, secret, f.note)).length, 1);
+  });
+
+  test(`sidecar ${path}: content retains admission read lock and setter locks subscription`, async t => {
+    const f = await runtimeOff(t, { migrated });
+    await admit(f.db);
+    const [before] = await ctx(f.db);
+    const { secret } = await enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint);
+    await f.db.exec("begin");
+    try {
+      assert.equal((await content(f.db, secret, f.note)).length, 1);
+      assert.equal(await retainedRelationLock(f.db, "public.push_subscriptions"), true);
+      assert.equal(await retainedRelationLock(f.db, "private.web_message_preview_install_admissions"), true);
+    } finally { await f.db.exec("rollback"); }
+    await f.db.exec("begin");
+    try {
+      await asRole(f.db, "service_role", "select public.web_message_preview_install_set($1,null,true)", [sub]);
+      assert.equal(await retainedRelationLock(f.db, "public.push_subscriptions"), true);
+    } finally { await f.db.exec("rollback"); }
+    // Both serialized descriptor/setter orders retain their intended meaning.
+    await f.db.exec(`update public.push_subscriptions set auth='replacement' where id='${sub}'`);
+    const [retired] = await ctx(f.db);
+    await assert.rejects(enroll(f.db, retired.revision, "message", sub, retired.subscription_fingerprint), /web_preview_disabled/);
+    await admit(f.db);
+    assert.equal((await enroll(f.db, retired.revision, "message", sub, retired.subscription_fingerprint)).rows[0].installation_consent, true);
+    await expectDenied(f, secret);
+  });
+}
+
+test("sidecar compiled lock omissions break the ordinary retained-lock assertions", async t => {
+  const source = await sqlSource();
+  const controls = [
+    ["content admission read lock", s => replaceOnce(s,
+      "WHERE admission.subscription_id=s.id AND admission.recipient_id=seed.recipient_id\n        AND admission.revoked_at IS NULL AND admission.expires_at>clock_timestamp()\n      FOR SHARE NOWAIT;",
+      "WHERE admission.subscription_id=s.id AND admission.recipient_id=seed.recipient_id\n        AND admission.revoked_at IS NULL AND admission.expires_at>clock_timestamp();"),
+    "private.web_message_preview_install_admissions", false],
+    ["setter subscription lock", s => replaceOnce(s,
+      "SELECT user_id INTO owner_id FROM public.push_subscriptions WHERE id=p_subscription AND is_active FOR UPDATE;",
+      "SELECT user_id INTO owner_id FROM public.push_subscriptions WHERE id=p_subscription AND is_active;"),
+    "public.push_subscriptions", true],
+  ];
+  for (const [name, mutate, relation, setter] of controls) await t.test(name, async t => {
+    const f = await runtimeOff(t, { sql: mutate(source) });
+    await admit(f.db);
+    const [before] = await ctx(f.db);
+    const { secret } = await enroll(f.db, before.revision, "message", sub, before.subscription_fingerprint);
+    await assert.rejects(async () => {
+      await f.db.exec("begin");
+      try {
+        if (setter) await asRole(f.db, "service_role", "select public.web_message_preview_install_set($1,null,true)", [sub]);
+        else assert.equal((await content(f.db, secret, f.note)).length, 1);
+        assert.equal(await retainedRelationLock(f.db, relation), true);
+      } finally { await f.db.exec("rollback"); }
+    }, error => error.code === "ERR_ASSERTION", "omitting the lock must fail its literal retained-lock assertion");
+  });
+});
+
+test("sidecar rollback also disables the frozen pre-sidecar state", async t => {
+  const f = await granted(t, { preSidecar: true });
+  assert.equal((await f.db.query("select to_regclass('private.web_message_preview_install_admissions') is null as absent")).rows[0].absent, true);
+  await f.db.exec(await readFile(rollback, "utf8"));
+  await expectDenied(f);
+  const [after] = await ctx(f.db);
+  assert.equal(after.installation_consent, false);
+  assert.equal((await f.db.query("select enabled from private.web_message_preview_runtime where singleton")).rows[0].enabled, false);
+});
+
+test("sidecar actual upgrade preserves existing grants choices sessions and ACLs", async t => {
+  const f = await granted(t, { preSidecar: true });
+  await f.db.exec("update private.web_message_preview_runtime set enabled=false where singleton");
+  await f.db.exec(await readFile(upgrade, "utf8"));
+  assert.equal((await f.db.query("select enabled from private.web_message_preview_runtime where singleton")).rows[0].enabled, false);
+  assert.equal((await content(f.db, f.secret, f.note)).length, 0);
+  await admit(f.db);
+  assert.equal((await content(f.db, f.secret, f.note)).length, 1);
+  const [after] = await ctx(f.db);
+  assert.equal(after.revision, f.grant.revision);
+  assert.equal(after.session_id, session);
+  assert.equal((await f.db.query("select preview_level from public.notification_preview_preferences where user_id=$1", [user])).rows[0].preview_level, "message");
+  await assert.rejects(asRole(f.db, "authenticated", "select public.web_message_preview_install_set($1,clock_timestamp()+interval '1 day',false)", [sub]), error => error.code === "42501");
+  await assert.rejects(asRole(f.db, "service_role", "select * from private.web_message_preview_install_admissions"), error => error.code === "42501");
 });
 
 test("prestate refuses a changed definer search_path even when its trusted body is unchanged", async t => {

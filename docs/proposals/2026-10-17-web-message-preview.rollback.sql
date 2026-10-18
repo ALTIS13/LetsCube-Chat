@@ -16,16 +16,24 @@ BEGIN
 END $prestate$;
 SET LOCAL ROLE postgres;
 UPDATE private.web_message_preview_runtime SET enabled=false WHERE singleton;
+DO $admissions$
+BEGIN
+  -- Retire admission before grant, matching enrollment's lock order.
+  -- The sidecar may not have been applied, or its transaction may have rolled back.
+  IF to_regclass('private.web_message_preview_install_admissions') IS NOT NULL THEN
+    UPDATE private.web_message_preview_install_admissions SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL;
+    IF EXISTS(SELECT 1 FROM private.web_message_preview_install_admissions
+      WHERE revoked_at IS NULL AND expires_at>clock_timestamp())
+    THEN RAISE EXCEPTION 'web_preview_rollback_selfcheck_failed'; END IF;
+  END IF;
+END $admissions$;
 UPDATE private.web_message_preview_grants SET grant_hash=NULL,installation_consent=false,
   preview_level='none',expires_at=NULL,revision=least(revision+1,9007199254740991);
-UPDATE private.web_message_preview_install_admissions SET revoked_at=clock_timestamp() WHERE revoked_at IS NULL;
 DO $selfcheck$
 BEGIN
   IF (SELECT enabled FROM private.web_message_preview_runtime WHERE singleton) IS DISTINCT FROM false
     OR EXISTS(SELECT 1 FROM private.web_message_preview_grants
       WHERE grant_hash IS NOT NULL OR installation_consent OR preview_level<>'none' OR expires_at IS NOT NULL)
-    OR EXISTS(SELECT 1 FROM private.web_message_preview_install_admissions
-      WHERE revoked_at IS NULL AND expires_at>clock_timestamp())
   THEN RAISE EXCEPTION 'web_preview_rollback_selfcheck_failed'; END IF;
 END $selfcheck$;
 COMMIT;

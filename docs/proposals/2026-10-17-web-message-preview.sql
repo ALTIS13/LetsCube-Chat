@@ -113,7 +113,8 @@ DECLARE owner_id uuid;
 BEGIN
   IF p_subscription IS NULL OR p_revoke IS NULL THEN
     RAISE EXCEPTION 'web_preview_input_refused' USING ERRCODE='22023'; END IF;
-  SELECT user_id INTO owner_id FROM public.push_subscriptions WHERE id=p_subscription AND is_active;
+  -- SHARE/UPDATE, not KEY SHARE: descriptor updates must serialize with admission.
+  SELECT user_id INTO owner_id FROM public.push_subscriptions WHERE id=p_subscription AND is_active FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_subscription_refused'; END IF;
   IF p_revoke THEN
     UPDATE private.web_message_preview_install_admissions
@@ -149,11 +150,11 @@ AS $fn$
 BEGIN
   IF ROW(NEW.user_id,NEW.endpoint,NEW.p256dh,NEW.auth,NEW.is_active)
     IS DISTINCT FROM ROW(OLD.user_id,OLD.endpoint,OLD.p256dh,OLD.auth,OLD.is_active) THEN
+    UPDATE private.web_message_preview_install_admissions SET revoked_at=clock_timestamp()
+      WHERE subscription_id=OLD.id AND revoked_at IS NULL;
     UPDATE private.web_message_preview_grants SET grant_hash=NULL,installation_consent=false,
       preview_level='none',expires_at=NULL,revision=least(revision+1,9007199254740991)
       WHERE subscription_id=OLD.id;
-    UPDATE private.web_message_preview_install_admissions SET revoked_at=clock_timestamp()
-      WHERE subscription_id=OLD.id AND revoked_at IS NULL;
   END IF;
   RETURN NULL;
 END $fn$;
@@ -176,19 +177,22 @@ BEGIN
   SELECT 1::smallint,u,sid,s.id,d.fp,coalesce(g.revision,0),
     CASE WHEN eligible.ok THEN g.preview_level ELSE 'none' END,
     coalesce(eligible.ok,false),floor(extract(epoch FROM ts)*1000)::bigint,
-    CASE WHEN eligible.ok THEN floor(extract(epoch FROM least(g.expires_at,a.not_after))*1000)::bigint END
+    CASE WHEN eligible.ok THEN floor(extract(epoch FROM least(g.expires_at,a.not_after,
+      CASE WHEN NOT runtime.enabled THEN admission.expires_at END))*1000)::bigint END
   FROM public.push_subscriptions s
   CROSS JOIN LATERAL (SELECT private.web_message_preview_descriptor(s.id,s.user_id,s.endpoint,s.p256dh,s.auth) AS fp) d
   JOIN auth.sessions a ON a.id=sid AND a.user_id=u
   LEFT JOIN private.web_message_preview_grants g ON g.subscription_id=s.id
   LEFT JOIN public.notification_preview_preferences pref ON pref.user_id=u
+  LEFT JOIN private.web_message_preview_install_admissions admission ON admission.subscription_id=s.id
+  CROSS JOIN LATERAL (SELECT EXISTS(SELECT 1 FROM private.web_message_preview_runtime r
+    WHERE r.singleton AND r.enabled) AS enabled) runtime
   CROSS JOIN LATERAL (SELECT s.is_active AND d.fp IS NOT NULL AND g.recipient_id=u AND g.session_id=sid
     AND g.subscription_fingerprint=d.fp AND g.installation_consent AND g.grant_hash IS NOT NULL
     AND g.preview_level IN ('sender','message') AND g.preview_level=pref.preview_level
     AND g.issued_at<=ts AND g.expires_at>ts
     AND a.created_at<=ts AND (a.not_after IS NULL OR a.not_after>ts)
-    AND (EXISTS(SELECT 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled)
-      OR private.web_message_preview_install_open(s.id,u)) AS ok) eligible
+    AND (runtime.enabled OR private.web_message_preview_install_open(s.id,u)) AS ok) eligible
   WHERE s.id=p_subscription_id AND s.user_id=u AND d.fp IS NOT NULL;
 END $fn$;
 
@@ -201,7 +205,7 @@ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog SET lock_t
 AS $fn$
 DECLARE u uuid; sid uuid; s public.push_subscriptions%ROWTYPE;
   g private.web_message_preview_grants%ROWTYPE; a auth.sessions%ROWTYPE;
-  pref text; fp text; ts timestamptz;
+  pref text; fp text; ts timestamptz; runtime_enabled boolean; admission_expires timestamptz;
 BEGIN
   IF p_subscription_id IS NULL OR p_expected_revision IS NULL
     OR p_expected_revision NOT BETWEEN 0 AND 9007199254740990
@@ -214,18 +218,19 @@ BEGIN
   IF u IS NULL THEN RAISE EXCEPTION 'web_preview_session_refused' USING ERRCODE='42501'; END IF;
   sid:=(auth.jwt()->>'session_id')::uuid;
   PERFORM 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled FOR SHARE;
-  IF NOT FOUND THEN
-    PERFORM 1 FROM private.web_message_preview_install_admissions admission
-      JOIN public.push_subscriptions installed ON installed.id=admission.subscription_id
-      WHERE admission.subscription_id=p_subscription_id AND admission.recipient_id=u AND installed.user_id=u AND installed.is_active
-        AND admission.revoked_at IS NULL AND admission.expires_at>clock_timestamp()
-      FOR SHARE OF admission;
-    IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_disabled'; END IF;
-  END IF;
+  runtime_enabled:=FOUND;
+  -- All readers/writers take subscription before admission, then grant.
   SELECT p.preview_level INTO pref FROM public.notification_preview_preferences p WHERE p.user_id=u FOR SHARE;
   IF pref IS DISTINCT FROM p_preview_level THEN RAISE EXCEPTION 'web_preview_choice_refused'; END IF;
   SELECT x.* INTO s FROM public.push_subscriptions x WHERE x.id=p_subscription_id AND x.user_id=u AND x.is_active FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_subscription_refused'; END IF;
+  IF NOT runtime_enabled THEN
+    SELECT admission.expires_at INTO admission_expires FROM private.web_message_preview_install_admissions admission
+      WHERE admission.subscription_id=s.id AND admission.recipient_id=u
+        AND admission.revoked_at IS NULL AND admission.expires_at>clock_timestamp()
+      FOR SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'web_preview_disabled'; END IF;
+  END IF;
   fp:=private.web_message_preview_descriptor(s.id,s.user_id,s.endpoint,s.p256dh,s.auth);
   IF fp IS DISTINCT FROM p_subscription_fingerprint THEN RAISE EXCEPTION 'web_preview_descriptor_refused'; END IF;
   INSERT INTO private.web_message_preview_grants(subscription_id,recipient_id,session_id,subscription_fingerprint,
@@ -240,12 +245,13 @@ BEGIN
     OR public.native_message_preview_recipient() IS DISTINCT FROM u
     OR (auth.jwt()->>'exp')::bigint<=extract(epoch FROM ts)
   THEN RAISE EXCEPTION 'web_preview_session_refused' USING ERRCODE='42501'; END IF;
+  IF admission_expires<=ts THEN RAISE EXCEPTION 'web_preview_disabled'; END IF;
   -- Authenticated enrollment accepts only the browser-generated secret's hash.
   -- Never receive, generate, return or persist a plaintext grant in this path.
   UPDATE private.web_message_preview_grants x SET recipient_id=u,session_id=sid,subscription_fingerprint=fp,
     revision=g.revision+1,preview_level=p_preview_level,installation_consent=true,
     grant_hash=decode(p_grant_hash,'hex'),last_grant_hash=decode(p_grant_hash,'hex'),issued_at=ts,
-    expires_at=least(ts+make_interval(secs=>p_ttl_seconds),a.not_after) WHERE x.subscription_id=s.id;
+    expires_at=least(ts+make_interval(secs=>p_ttl_seconds),a.not_after,admission_expires) WHERE x.subscription_id=s.id;
   RETURN QUERY SELECT c.* FROM public.web_message_preview_context(s.id) c;
 END $fn$;
 
@@ -286,20 +292,28 @@ AS $fn$
 DECLARE seed private.web_message_preview_grants%ROWTYPE; g private.web_message_preview_grants%ROWTYPE;
   s public.push_subscriptions%ROWTYPE; a auth.sessions%ROWTYPE; n public.notifications%ROWTYPE;
   m public.messages%ROWTYPE; mid uuid; pref text; ts timestamptz; deadline timestamptz;
+  runtime_enabled boolean; admission_expires timestamptz;
 BEGIN
   IF p_grant_secret IS NULL OR octet_length(p_grant_secret)<>69 OR p_grant_secret !~ '^wpg1_[0-9a-f]{64}$'
     OR p_notification_id IS NULL OR current_setting('transaction_isolation')<>'read committed' THEN RETURN; END IF;
   SELECT x.* INTO seed FROM private.web_message_preview_grants x WHERE x.grant_hash=sha256(convert_to(p_grant_secret,'UTF8'));
   IF NOT FOUND THEN RETURN; END IF;
   PERFORM 1 FROM private.web_message_preview_runtime r WHERE r.singleton AND r.enabled FOR SHARE NOWAIT;
-  IF NOT FOUND AND NOT private.web_message_preview_install_open(seed.subscription_id,seed.recipient_id) THEN RETURN; END IF;
-  -- Keep the same pref -> subscription -> grant order as authenticated enrollment.
+  runtime_enabled:=FOUND;
+  -- Keep pref -> subscription -> admission -> grant order, including retirement.
   SELECT p.preview_level INTO pref FROM public.notification_preview_preferences p WHERE p.user_id=seed.recipient_id FOR SHARE NOWAIT;
   IF pref IS DISTINCT FROM seed.preview_level OR pref NOT IN ('sender','message') THEN RETURN; END IF;
   SELECT x.* INTO s FROM public.push_subscriptions x WHERE x.id=seed.subscription_id AND x.user_id=seed.recipient_id AND x.is_active FOR SHARE NOWAIT;
   IF NOT FOUND THEN RETURN; END IF;
   IF private.web_message_preview_descriptor(s.id,s.user_id,s.endpoint,s.p256dh,s.auth)
     IS DISTINCT FROM seed.subscription_fingerprint THEN RETURN; END IF; -- DESCRIPTOR_GUARD
+  IF NOT runtime_enabled THEN
+    SELECT admission.expires_at INTO admission_expires FROM private.web_message_preview_install_admissions admission
+      WHERE admission.subscription_id=s.id AND admission.recipient_id=seed.recipient_id
+        AND admission.revoked_at IS NULL AND admission.expires_at>clock_timestamp()
+      FOR SHARE NOWAIT;
+    IF NOT FOUND THEN RETURN; END IF;
+  END IF;
   SELECT x.* INTO g FROM private.web_message_preview_grants x WHERE x.subscription_id=seed.subscription_id
     AND x.grant_hash=sha256(convert_to(p_grant_secret,'UTF8')) AND x.revision=seed.revision
     AND x.recipient_id=seed.recipient_id AND x.session_id=seed.session_id
@@ -323,8 +337,9 @@ BEGIN
   -- caller-supplied bypass flag and no network/effect while locks are held.
   PERFORM private.topic_alert_source_lock(g.recipient_id,m.chat_id);
   ts:=clock_timestamp();
-  IF g.expires_at<=ts OR (a.not_after IS NOT NULL AND a.not_after<=ts) THEN RETURN; END IF;
-  deadline:=least(ts+interval '15 seconds',g.expires_at,a.not_after);
+  IF g.expires_at<=ts OR (a.not_after IS NOT NULL AND a.not_after<=ts)
+    OR admission_expires<=ts THEN RETURN; END IF;
+  deadline:=least(ts+interval '15 seconds',g.expires_at,a.not_after,admission_expires);
   RETURN QUERY SELECT 1::smallint,g.recipient_id,g.session_id,g.subscription_id,g.subscription_fingerprint,g.revision,
     n.id,m.chat_id,m.id,g.preview_level,label.name,label.name,
     CASE WHEN g.preview_level='sender' THEN 'Новое сообщение' ELSE coalesce(nullif(left(btrim(regexp_replace(
