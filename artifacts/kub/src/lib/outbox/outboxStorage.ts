@@ -4,13 +4,12 @@
  *
  * IndexedDB, because it is the one store every engine this product ships in —
  * Safari in the installed iPhone app, Android's WebView, WebView2 on Windows —
- * keeps across a restart, and because a voice note's bytes will live here too,
- * which `localStorage` cannot hold. Where it cannot be opened — a private
- * window, storage refused — the outbox still works in memory for the life of
- * the page, which is what it did before this existed.
+ * keeps across a restart. Where it cannot be opened, the caller keeps the
+ * failed local message but must not claim that it is saved for a restart.
  */
 
 import type { OutboxEntry } from "./outboxRules.ts";
+import { idbTransaction } from "./idbTransaction.ts";
 
 export interface OutboxStorage {
   put(entry: OutboxEntry): Promise<void>;
@@ -37,15 +36,12 @@ const DB_NAME = "kub-outbox";
 const DB_VERSION = 1;
 const STORE = "entries";
 
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+const unavailable = () => Object.assign(new Error("OUTBOX_STORAGE_UNAVAILABLE"), { code: "OUTBOX_STORAGE_UNAVAILABLE" });
 
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    let refused = false;
+    const fail = () => { refused = true; reject(unavailable()); };
     const open = factory.open(DB_NAME, DB_VERSION);
     open.onupgradeneeded = () => {
       const db = open.result;
@@ -54,61 +50,41 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
         store.createIndex("userId", "userId", { unique: false });
       }
     };
-    open.onsuccess = () => resolve(open.result);
-    open.onerror = () => reject(open.error);
-    open.onblocked = () => reject(new Error("outbox database blocked"));
+    open.onsuccess = () => { if (refused) open.result.close(); else resolve(open.result); };
+    open.onerror = open.onblocked = fail;
   });
 }
 
 /**
- * The persistent store, falling back to memory the first time IndexedDB fails
- * and staying there: a store that works for one write and fails the next would
- * lose exactly the messages it was asked to keep.
+ * A successful operation means the transaction committed, not just its request.
+ * Unavailable storage rejects; it must not masquerade as a durable memory copy.
  */
 export function browserOutboxStorage(factory: IDBFactory | undefined = globalThis.indexedDB): OutboxStorage {
-  const memory = memoryOutboxStorage();
   let database: Promise<IDBDatabase> | null = null;
-  let failed = !factory;
-
-  const db = (): Promise<IDBDatabase> | null => {
-    if (failed || !factory) return null;
-    database ??= openDatabase(factory).catch((error: unknown) => {
-      failed = true;
-      throw error;
-    });
-    return database;
-  };
-
-  const withStore = async <T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | undefined> => {
-    const opening = db();
-    if (!opening) return undefined;
+  const withStore = async <T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
+    if (!factory) throw unavailable();
     try {
-      const handle = await opening;
-      return await request(run(handle.transaction(STORE, mode).objectStore(STORE)));
+      database ??= openDatabase(factory).then((handle) => {
+        handle.onversionchange = () => { handle.close(); database = null; };
+        handle.onclose = () => { database = null; };
+        return handle;
+      }).catch(() => { database = null; throw unavailable(); });
+      const handle = await database;
+      return await idbTransaction(handle, STORE, mode, run);
     } catch {
-      failed = true;
-      return undefined;
+      throw unavailable();
     }
   };
 
   return {
     async put(entry) {
-      await memory.put(entry);
       await withStore("readwrite", (store) => store.put(entry));
     },
     async remove(clientMessageId) {
-      await memory.remove(clientMessageId);
       await withStore("readwrite", (store) => store.delete(clientMessageId));
     },
     async list(userId) {
-      const stored = await withStore("readonly", (store) => store.index("userId").getAll(userId) as IDBRequest<OutboxEntry[]>);
-      const held = await memory.list(userId);
-      // Both, by id: what this page holds in memory is at least as new as what
-      // it wrote to disk.
-      const byId = new Map<string, OutboxEntry>();
-      for (const entry of stored ?? []) byId.set(entry.clientMessageId, entry);
-      for (const entry of held) byId.set(entry.clientMessageId, entry);
-      return [...byId.values()];
+      return withStore("readonly", (store) => store.index("userId").getAll(userId) as IDBRequest<OutboxEntry[]>);
     },
   };
 }

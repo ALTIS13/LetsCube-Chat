@@ -1498,14 +1498,22 @@ export function useMessages(
     });
   }, [sendLocalMessage]);
 
-  const discardLocalMessage = useCallback((messageId: string) => {
+  const discardLocalMessage = useCallback(async (messageId: string) => {
     const activeChatId = chatIdRef.current;
     if (!activeChatId) return;
-    // Out of the outbox too, or it would go the moment the connection answers.
+    const user = currentUserRef.current;
+    const sameAccount = captureMessageAccount(user?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     const held = (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === messageId);
+    if (!user || !sameAccount() || !held || held.user_id !== user.id) return;
     const clientId = held?.client_message_id ?? (messageId.startsWith("tmp:") ? messageId.slice(4) : null);
-    if (clientId) void appOutbox.discard(clientId);
+    const outcome = clientId ? await appOutbox.discard(clientId, user.id) : { ok: true };
+    if (!sameAccount()) return;
+    if (!outcome.ok) {
+      setActionRefusal("Не удалось удалить сообщение с устройства. Повторите удаление перед перезапуском приложения.");
+      return;
+    }
     removeMessage(activeChatId, messageId);
+    setActionRefusal(null);
   }, [removeMessage]);
 
   // ── Edit ────────────────────────────────────────────────────────────────

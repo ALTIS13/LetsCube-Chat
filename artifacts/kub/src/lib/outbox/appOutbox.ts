@@ -17,6 +17,7 @@ import { blockedSendRefusal } from "@/lib/personalModeration";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { playMessageSentSoundFor } from "@/hooks/useCallSound";
+import { guardAgainstReload } from "@/lib/reloadGuard";
 import type { OutboxEntry } from "./outboxRules";
 import { browserOutboxStorage } from "./outboxStorage";
 import { createOutboxRunner, type SendAttempt } from "./outboxRunner";
@@ -122,6 +123,9 @@ function rowOnScreen(entry: OutboxEntry): MessageWithSender | null {
 
 /** The sentence a refused send shows, decided as the send path always has. */
 export function refusalSentence(chatId: string, error: unknown): string {
+  if (error && typeof error === "object" && "code" in error && error.code === "OUTBOX_STORAGE_UNAVAILABLE") {
+    return "Не удалось сохранить сообщение на устройстве. Повторите отправку.";
+  }
   const refusal = blockedSendRefusal({
     chatType: useAppStore.getState().chats.find((item) => item.id === chatId)?.type ?? null,
     error: error as Parameters<typeof blockedSendRefusal>[0]["error"],
@@ -132,6 +136,8 @@ export function refusalSentence(chatId: string, error: unknown): string {
 export const appOutbox = createOutboxRunner<MessageWithSender>({
   storage: browserOutboxStorage(),
   send: sendEntry,
+  onStorageError: () => reportError(new Error("OUTBOX_STORAGE_UNAVAILABLE"), { category: "message_send_failed" }),
+  holdPersistence: () => guardAgainstReload("outgoing-in-memory"),
   onSent: (entry, row) => {
     const store = useAppStore.getState();
     store.replaceMessage(entry.chatId, entry.tempId, row);

@@ -1,7 +1,7 @@
 # Production Completion Continuation
 
-This report is chronological. Latest physical outcome:
-[two-message Topic canary, OFF and cleanup](#physical-topic-canary-7d511).
+This report is chronological. Latest Topic outcome:
+[physical b875, retained enforcement and production ON](#topic-production-enforcement).
 Latest release:
 [navigation/D369 web and Native27](#navigation-and-d369-release).
 Retain [Native26 ordinary UI logout/binding](#native26-ordinary-ui-logout-and-binding-1533z),
@@ -805,3 +805,120 @@ active subscriptions0, protocol1 subscriptions0 and current message grants0;
 original `none`/`pushEnabled=true` remains. Device inventory no longer contains
 the released iPhone. No new activation, Auth or device case is dispatched by
 these final readbacks.
+
+## Topic Production Enforcement
+
+Successor cohort `b875a0659e90` uses the ordinary v2 lookup/parser rather than
+the intentionally fenced legacy SELECT. The changed private oracle passes13
+controls; the finite ACK driver passes12, with no message resend or lost-ACK
+replay. The first empty plain-pipe attempt exits before setup/Auth on EOF and
+confirms OFF/cleanup; its spent intent is retained, not reused.
+
+Actual Stable27 Realme and installed iPhone17ProMax/iOS26.3.1 PWA establish:
+
+| Message | Realme / FCM | iPhone PWA / Web Push |
+| --- | --- | --- |
+| 1, runtime ON | muted parent + enabled child: provider ACK and exact OS card | allowed parent + inherit: ACK and synthetic OS body |
+| 2, ON | allowed parent + disabled child: no provider row/new exact card | muted parent + enabled child: ACK and synthetic OS body |
+| 3, ON | allowed parent + inherit: ACK and exact OS card | allowed parent + disabled child: no provider row/new exact body |
+
+Both ordinary v2 receivers read exactly1/2/3 retained messages/notifications.
+Mark-read on ordinal1 passes for each, followed by three-row/read1 snapshots.
+The reviewed compatible OFF transaction then commits; message4 is sent once.
+Both exact installation outboxes are absent. This is **correct**, because the
+[original rollback contract](../superpowers/plans/2026-10-16-topic-notification-overrides.md)
+retains disabled-child enforcement and merely stops enabled-child parent bypass.
+The driver's B-positive expectation was wrong; its raw REFUSED/historyVerified=false
+is retained. It did not execute final same-SID retain or OS4 observation, and
+those claims are not manufactured from a later read.
+
+Exact-target read-only metadata at18:46:23Z independently confirms four planned
+messages/eight notifications, only ordinal1 read for both receivers, and false
+alert decisions for ordinal4 under OFF. This is administrative metadata, not
+ordinary-client lookup4. Combined with the already accepted236-request real
+HTTP/current+old-hook cases and actual Edge producer/claim/recheck cases, these
+observations satisfy enforcement-preserving rollout. No second paid cohort is
+required merely to reproduce a private instrument's incorrect expected allow.
+D356's remaining read/invite/manual-jump actions and the broader OEM/platform
+matrix remain separate work.
+
+Cleanup is exact and complete. Native UI logout/binding retirement and API
+session absence pass. The fixture misclassified expected SQL55000/HTTP500 as
+unknown because it checked HTTP400, so its original group-delete step never ran.
+Recovery677 refuses before DELETE because the group also contains two canonical
+membership system events. Read-only counts confirm four planned text plus two
+system events; R2 checks those exact shapes and rejects foreign text. Actual
+`63f9c1afa1ff` deletes the one three-QA-member group once with ACK/readback,
+retires its new SID and retains all older sessions. The original failed results
+remain immutable; they are not relabeled PASS.
+
+PWA `none`/account push-enabled true is restored through ordinary UI, followed
+by UI logout and current-grants0/fresh-SIDs0. The rental is released; exact
+subscription retirement `a67e204c391d` has one PATCH ACK, protocol retirement,
+new-SID absence and older-session retention. Poststate active subscriptions0,
+protocol1 subscriptions0, grants0. No Auth/controller/group/rental remains held.
+
+**Production ON:** fresh fully decoded/TOC-verified archive `e8b421dc93a0`,
+6,750,450B, SHA256
+`a06912a27cf58dab1b2032731c7b6e5a838e63507c6b0d5e79389dbe0426efbd`,
+precedes the raising singleton CAS. Actual operator ACK and independent readback
+at18:55:56Z show Topic ON, schema `445bf979…`, catalog `f5933dfc…`, unchanged RLS,
+Web-preview/album flags and no DDL. Apply SQL SHA256 `1a5a642b…` has a byte-identical
+tracked `.migration-backup` mirror. Compatible rollback SQL `d0b49ecc…` and an
+ON-state decoded archive are retained; rollback was not dispatched. Archives and
+SQL are one-time operational evidence, not replayable durable CLI migrations.
+Future rollback requires a fresh verified archive and current exact guards, not
+replay of a now-expired transaction. Shared web `da28afbd` and Stable27 bytes are
+unchanged by this runtime activation.
+
+## D371 Durability Repair In Progress
+
+Real Chromium/WebKit controller/storage reproduction exposes request-success
+before native delete-transaction abort: apparent successful discard, followed by
+one restored row/send callback after reload. D371 is now tracked. Source repairs
+wait for transaction commit, retain an unsuccessful cancellation visibly, and
+fence late local send-ACK publication. Fresh review also exposes the automatic-
+reload path around RAM-only failed cancellation; it must retain a reload veto
+until committed deletion. These are real product findings, not attribution to
+Nikita's unverified voice report.
+
+The analogous media repair is coupled to a measured WebKit File/Blob IndexedDB
+limitation: ArrayBuffer plus metadata commits and restores a File across a fresh
+document, whereas native File/Blob storage fails its positive control. A compatible
+versioned bytes representation is being implemented without deleting old records
+or changing the database name. Current dirty source and reserved Android28 are
+not yet released; affected regressions and review must finish first.
+
+### D371--D373 Source Acceptance
+
+The candidate is now frozen for release. Final changed-boundary integration:
+93/93 text/caption/retention/restore-order/native-metadata checks, zero failures
+or skips. Media61/61 includes23 real Chromium/WebKit IDB cases, zero skips.
+D373 readability4/4 and Mediabunny notice9/9 pass; coordinator inspects their
+1440/390 light/dark pixels. Final typecheck/diff-check pass. Genuine web Vite
+build emits `sw.js build 57324683d19ea671` and `built in23.72s`; existing sourcemap /
+large-chunk warnings remain, not hidden as a clean diagnostic log.
+
+Review-discovered defects are included, not deferred: late server-ACK local
+publication after discard, quiet reload with unsaved text/cancellation, external
+caption retention overtaking deletion, and Retry treating storage-failed retained
+work as a live waiter. Explicit enqueue after **committed** deletion remains
+allowed; uncommitted/failed cancellation still refuses it, and stale automatic
+retain cannot clear the marker. The obsolete external-retention omission became
+redundant after central serialization and was removed rather than forcing a false
+failure; the stale-restore omission is still killed by literal restored-row count.
+Caption fixture supplies actual owner/epoch/lifetime and awaits committed async
+UI removal; no production assertion is weakened.
+
+Media writes now use `storage_v:1` ArrayBuffer DTOs for main/preview files while
+reading old File records. Size remains25MiB per file. No DB name/version change,
+destructive migration or new dependency. Pending/failed operations retain memory
+and a reload veto rather than claiming a saved device copy. This is not a promise
+that a forced process kill can preserve bytes whose storage operation failed.
+
+The unchanged Mediabunny1.56.1 dependency is MPL-2.0, not MIT. A packaged static
+notice and full licence copy identify the exact upstream source, discoverable
+from Settings and entry HTML; both Vite bases and Capacitor/AAPT asset-only checks
+retain bytes. This is a technical compliance correction, not a legal assurance
+or proof from a signed APK. Android0.1.27/build28 is reserved; native signing,
+installation/publication and actual deployed web parity remain the next steps.

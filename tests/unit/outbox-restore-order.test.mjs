@@ -182,6 +182,7 @@ async function assertDiscardedSnapshot(t, enqueued, createRunner = createOutboxR
   if (pending) assert.equal((await pending).kind, "waiting");
   gate.resolve([row]); const restored = await starting; await flush();
   assert.deepEqual(h.sent, [], "DISCARD_MUST_SURVIVE_STALE_RESTORE_SNAPSHOT");
+  assert.equal(restored.length, 0, "DISCARD_MUST_NOT_PUBLISH_STALE_RESTORE_LIST");
   assert.deepEqual(restored, []); assert.equal(h.runner.size(), 0);
   assert.equal((await h.runner.enqueue(entry("fresh", 1))).kind, "sent"); assert.deepEqual(h.sent, ["fresh"]);
 }
@@ -193,7 +194,8 @@ for (const enqueued of [false, true]) {
 check("loaded omission of restore discard tombstones is killed by stale snapshot publication", async t => {
   const createRunner = loadedOmission("discardedDuringRestore.has(entry.clientMessageId) || ", "");
   await assert.rejects(() => assertDiscardedSnapshot(t, true, createRunner),
-    error => error.code === "ERR_ASSERTION" && /DISCARD_MUST_SURVIVE_STALE_RESTORE_SNAPSHOT/.test(error.message));
+    error => error.code === "ERR_ASSERTION" && error.actual === 1 && error.expected === 0
+      && /DISCARD_MUST_NOT_PUBLISH_STALE_RESTORE_LIST/.test(error.message));
 });
 
 check("discard tombstones survive a failed restore until successful same-owner initialization", async t => {
@@ -226,6 +228,10 @@ check("explicit current reenqueue keeps its new payload despite an older discard
   const first = h.runner.enqueue(row); await flush(); await h.runner.discard("same");
   assert.equal((await first).kind, "waiting");
   const second = h.runner.enqueue({ ...row, content: "Explicit current reenqueue" }); await flush();
+  assert.equal((await h.runner.retain({ ...row, content: "Late automatic retained text" })).ok, false);
+  assert.equal((await h.disk.list(ME))[0].content, "Explicit current reenqueue");
   gate.resolve([row]); await starting; assert.equal((await second).kind, "sent"); await flush();
   assert.deepEqual(h.sent, ["same"]); assert.deepEqual(payloads, ["Explicit current reenqueue"]);
+  assert.equal((await h.runner.retain(row)).ok, false, "late automatic retain cannot resurrect an acknowledged new intent");
+  assert.deepEqual(await h.disk.list(ME), []);
 });

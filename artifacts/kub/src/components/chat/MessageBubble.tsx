@@ -1557,8 +1557,6 @@ export function MessageBubble({
               // outside the bubble and overlapped the avatar.
               isMe && isLastInGroup ? "rounded-br-none" : "",
               !isMe && isLastInGroup ? "rounded-bl-none" : "",
-              message.pending && "opacity-70",
-              message.failed && "opacity-60",
               isSelectionMode && "cursor-pointer [&_a]:pointer-events-none [&_audio]:pointer-events-none [&_button]:pointer-events-none [&_input]:pointer-events-none [&_video]:pointer-events-none",
             )}
           >

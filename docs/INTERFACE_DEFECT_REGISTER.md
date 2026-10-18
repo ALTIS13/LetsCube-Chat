@@ -10998,9 +10998,15 @@ choice justifying itself:
 
 - **It is young** — under a year old at the time of this decision, on its 56th release. A library of this kind
   earns trust by surviving browsers changing under it, and it has not had long to.
-- **MPL-2.0, not MIT.** Using it unmodified as a dependency is unencumbered; **modifying its files obliges us to
-  publish those modifications**. So the rule is: use it, do not fork it into the tree. If a change is needed, it
-  goes upstream or the file stays untouched and the behaviour is wrapped.
+- **MPL-2.0, not MIT.** The installed `mediabunny@1.56.1` is also the existing media-editor reuse candidate;
+  use the dependency, not a library-code fork. Distributing bundled/minified code, even unmodified, requires
+  telling recipients where to obtain the MPL-covered source. `artifacts/kub/public/open-source.html` records
+  the version, upstream copyright, full MPL-2.0 copy and exact upstream `v1.56.1` source URL, discoverable from
+  Settings and the entry HTML. Any future changes to covered library files must be made available under MPL;
+  using the dependency does not by itself require publishing unrelated LETSCUBE files. If a change is needed,
+  send it upstream or wrap the untouched library. This is a technical compliance record, not a legal guarantee.
+  Sources: [Mozilla FAQ, Q8/Q16](https://www.mozilla.org/en-US/MPL/2.0/FAQ/),
+  [exact upstream source](https://github.com/Vanilagy/mediabunny/tree/v1.56.1).
 - **It documents no behaviour when WebCodecs is absent.** That is our problem to solve, not its bug, and the
   feature detection above is not optional because of it.
 
@@ -25909,3 +25915,86 @@ permission fault is not required to close this shared-DOM repair. Broader physic
 fault/OEM checks remain separate QA coverage, not a known remaining D-370 bug.
 [Release and retained evidence](operations/2026-10-18-production-completion.md#navigation-and-d369-release).
 [Physical subcase and limits](operations/2026-10-18-production-completion.md#physical-topic-canary-7d511).
+
+## D-371 `[~]` Cancelled queued message can return after a storage transaction abort
+
+**Severity:** high. Local unsent-message cancellation and cold restore, all shared
+clients using IndexedDB. This is a reproduced storage/controller defect, not an
+attribution to a tester's unverified report.
+
+**Surface:** `artifacts/kub/src/lib/outbox/outboxStorage.ts`,
+`outboxRunner.ts`, `artifacts/kub/src/hooks/useMessages.ts`.
+
+**Reproduction:** in real Chromium and WebKit IndexedDB, enqueue an offline
+synthetic message, invoke the actual runner's discard, then abort the native
+delete transaction after its request-success handler but before commit. The old
+discard resolves and its current queue is empty. After reloading the document,
+the real storage/runner restores one row and invokes send once. The identical
+control without abort restores zero rows and sends zero times. The send leaf is
+controlled; no authenticated server delivery or personal content was used.
+
+**Cause:** the storage acknowledged request success rather than transaction
+completion. Its memory fallback concealed persistence errors; the runner and UI
+removed their evidence without a durable-delete outcome. A memory-only restore
+tombstone could not survive process loss.
+
+**Source accepted, release pending:** transaction-complete acknowledgement, explicit failure
+propagation, immediate same-lifetime cancellation, and UI removal only after
+committed deletion. Failed deletion must remain visible/retryable rather than
+claiming durable cancellation. Preserve FIFO, owner/epoch isolation and the
+existing restore/discard fences. Pending/failed text writes and cancellation
+veto quiet reload until commit. Refused caption retention shares the runner's
+write barrier; a late local ACK cannot reinsert a discarded bubble. An explicit
+new enqueue after committed deletion remains allowed, while automatic stale
+retention stays refused. Failed retained work is distinct from a live queue
+attempt, so voice-prefix Retry can recover after a transient storage failure.
+The final affected integration passes93/93, including caption omissions and
+existing restore-order contracts. This does not claim forced native disk failure.
+
+**Evidence:** finite two-engine reproduction on 2026-10-18, four contexts,
+native request-success/abort ordering, positive commit controls and fresh
+document restore. All browsers closed, no production/Auth/device effects.
+
+## D-372 `[~]` Outgoing media can be reported saved without a committed device copy
+
+**Severity:** high. Outgoing media persistence, cancellation, reload protection
+and retry. Source: `lib/outbox/outgoingMediaStorage.ts`, `appOutgoingMedia.ts`,
+`lib/reloadGuard.ts`.
+
+**Evidence:** actual Chromium IndexedDB save/drop transaction abort after request
+success exposes false durability; a held old restore can re-add cancelled media.
+The old reload guard equates eligible byte size with a saved device copy, so a
+pending or failed save is not protected. These are synthetic product-path tests,
+not authenticated server delivery or attribution to a tester's recording.
+
+The WebKit positive control separately rejects both File and Blob structured
+storage with native `UnknownError`. ArrayBuffer plus file metadata commits and
+restores exact bytes/File in a fresh document. This is an observed engine boundary,
+not proof that all iPhones fail to store File objects.
+
+**Source accepted, release pending:** shared transaction-complete ACK, explicit committed /
+pending / failed persistence state, owner-scoped cancellation/restore fences and
+reload veto. A compatible versioned bytes DTO retains old-record support; no
+database rename, destructive migration or new dependency. Actual media suite
+passes61/61, including23 new Chromium/WebKit native-IDB cases and zero skips:
+commit/abort, main/preview bytes across a fresh document, malformed-record refusal,
+owner separation, held byte conversion/delete ordering and background retry.
+Legacy File coexistence is tested in Chromium, where that old representation
+can actually commit. Adjacent caption integration passes with the text repair;
+native lifecycle and authenticated upload are not inferred from browser proof.
+
+## D-373 `[~]` Pending and failed message wrappers dim readable text and actions
+
+**Severity:** medium. `components/chat/MessageBubble.tsx`, outgoing pending /
+failed states in both themes.
+
+**Evidence:** coordinator-reviewed synthetic D371 renders expose very dim text
+and Retry/Edit/Delete controls. Actual-component measurements put action contrast
+at2.42:1/3.16:1 because whole-bubble opacity also composites its descendants.
+
+**Source fix:** remove only the pending/failed wrapper opacity. Keep the clock,
+failure icon, retry/edit/delete callbacks, message colours, radius and layout.
+Four actual-component RED/GREEN cases include a literal opacity-omission control;
+action contrast is at least4.75:1. Coordinator and worker inspect1440/390, light/
+dark PNGs: no overlaps or clipped actions. Synthetic QA0 only, no external
+requests. Source is ready; production/native release is still pending.

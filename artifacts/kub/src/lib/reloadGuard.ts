@@ -28,9 +28,9 @@
  *  - **an open dialog**: every `KubModal` is on `lib/modalStack.ts`, and what
  *    was typed into one — the settings, a task, a report, a new group — is in
  *    that dialog and nowhere else;
- *  - **an attachment on its way that lives only in memory**: a file above
- *    `PERSIST_LIMIT_BYTES` is not written to the device (item 52), so a reload
- *    would drop it, where a smaller one is sent again after the reload.
+ *  - **outgoing media without a committed device copy**: a pending/failed save
+ *    or an oversized file would be lost. A pending/failed deletion could instead
+ *    resurrect a cancelled upload, so it also prevents a quiet reload.
  *
  * The composer's text is deliberately not on it: it is written to
  * `localStorage` per chat and read back when the composer mounts, so a reload
@@ -46,8 +46,7 @@
  */
 
 import { openModalLayerCount } from "./modalStack.ts";
-import { allOutgoingEntries } from "./outgoingMedia.ts";
-import { persistable } from "./outbox/outgoingMediaStorage.ts";
+import { outgoingMediaPersistenceWouldLose } from "./outbox/appOutgoingMedia.ts";
 
 /** Why a reload would cost something, named so a test or a console can say which. */
 export type ReloadLoss =
@@ -83,7 +82,7 @@ export function guardAgainstReload(loss: ReloadLoss): () => void {
 export function reloadWouldLose(): ReloadLoss[] {
   const losses = new Set<ReloadLoss>(held.values());
   if (openModalLayerCount() > 0) losses.add("dialog");
-  if (allOutgoingEntries().some((entry) => !persistable(entry))) losses.add("outgoing-in-memory");
+  if (outgoingMediaPersistenceWouldLose()) losses.add("outgoing-in-memory");
   return [...losses].sort();
 }
 

@@ -97,12 +97,14 @@ and [FIFO/Topic continuation](../../operations/2026-10-18-outbox-restore-and-top
 
 ## Task1: Finish Topic Notification Acceptance (#75--77,95)
 
-**State:** IN PROGRESS; actual cohort7d511 completes two physical messages in a
-temporary global ON window, followed by actual OFF readback at 17:34:30Z. No permanent
-enable or whole-matrix acceptance. Exact cleanup and A1 RO diagnosis are complete:
-legacy SELECT0 is expected after enabled-CAS fencing, not missing production data.
-Private v2 read-oracle/finite ACK-driver repair and the four-message/history/
-mark-read/OFF-fallback cases remain; no new rental until those instruments are ready.
+**State:** Topic enforcement is RELEASED/ON at18:55:56Z after fresh verified
+backup/CAS/readback. Actual b875 covers three ON provider/OS cases, ordinary v2
+history/read and compatible OFF suppression plus retained administrative data.
+The original driver remains REFUSED because it wrongly expected OFF to revive a
+disabled child. Accepted prior fullstack/current+old clients compose with these
+physical cases; no fabricated same-SID final retain/OS4 claim. Exact recovery and
+all QA/rental cleanup pass. D356's remaining actions below are still IN PROGRESS.
+[Decision, actual rollout and boundaries](../../operations/2026-10-18-production-completion.md#topic-production-enforcement).
 **Files:** `tests/server/topic-notification-realtime-client.hook.mjs`, its focused
 control tests, existing notification consumer/SQL contracts and private finite
 runtime operators. Product files change only after a reproduced failure.
@@ -147,10 +149,11 @@ notification decision/read RPCs; current and pinned old client sources.
   enabled-CAS fence; exact outbox JOIN/ACK proves the underlying notification row.
   Public clients use v2 RPCs. The private raw-table read and fake CAS without the
   fence explain its faulty expectation, not a public producer/feed defect/new D.
-- [ ] Complete Linnaeus's successor private v2 read-oracle repair plus finite
-  ACK-driver readiness before another rental. Preserve frozen27 evidence and the
-  two actual provider/OS positive/inverse subcases; four-message/history/mark-read/
-  OFF-fallback cases remain unrun, historyVerified=false. Do not relax RLS/fences.
+- [x] Successor v2 oracle13/driver12 and actual b875 physical/read cases accepted;
+  retained OFF disabled enforcement is correct. Exact cleanup and fresh guarded
+  production ON/readback pass. Keep original historyVerified=false/failure results
+  and limits; ordinary final same-SID retain/OS4 was not run. Reuse the accepted
+  HTTP/current+old-client/Edge matrix; do not replay a rental for wrong expected allow.
 - [x] Bounded 450s controller retains expected failed=true with API/native cleanup
   PASS, all old SIDs/zero gaps. Fresh verified backup/mirrored guarded OFF and
   separate readback at 17:34:30Z preserve schema/catalog. Initial BACKUP refusal is
@@ -249,10 +252,19 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   physical503 was injected; this is an explicit QA limit, not a new closure gate.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
   boundary and publish independently accepted slices.
+- [x] Reproduce and repair D371 transaction-ACK/cancel durability, retained-prefix
+  ordering, quiet-reload veto, late local ACK and explicit retry distinction.
+  Final affected text/caption/restore/metadata integration passes93; forced
+  native-disk failure and whole-platform coverage are not claimed.
+- [ ] Publish D371/D372/D373 and packaged OSS notice on web and Stable28 after
+  final build, original signer/Firebase/assets and Realme27 ->28/public bytes.
 
 ## Task3: Media Completion (#25,29,104--105)
 
-**State:** QUEUED; D-365/#104 is DONE, not an outstanding position repair.
+**State:** IN PROGRESS; D372 durable media representation/cancel/reload repair is
+source-accepted61/61, including23 actual Chromium/WebKit cases without skips.
+Pre-send editor remains next, not shipped. D-365/#104 is DONE, not an outstanding
+position repair.
 **Files:** Existing media upload/playback/album/cache/editor components and tests.
 **Interfaces:** Existing HD/original choice, durable upload identity, variant
 metadata and positional intent; preserve original bytes and explicit downloads.

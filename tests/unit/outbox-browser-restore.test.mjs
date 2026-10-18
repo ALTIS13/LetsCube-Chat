@@ -13,7 +13,7 @@ const chat = "22222222-2222-4222-8222-000000000001";
 const origin = "http://outbox-restore.invalid";
 
 function modules({ baseline = false } = {}) {
-  return Object.fromEntries(["outboxRules.ts", "outboxStorage.ts", "outboxRunner.ts"].map(name => {
+  return Object.fromEntries(["outboxRules.ts", "outboxStorage.ts", "outboxRunner.ts", "idbTransaction.ts"].map(name => {
     const source = baseline && name === "outboxRunner.ts"
       ? execFileSync("git", ["show", "c92e408075f3dc696363c0e4cfcdda11ecf02992:" + prefix + name],
         { cwd: fileURLToPath(root), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })

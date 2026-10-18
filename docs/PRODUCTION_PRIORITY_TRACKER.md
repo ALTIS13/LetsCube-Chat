@@ -23,28 +23,24 @@ same-copy grant-option negative/exact ROLLBACK, DDL768 constraints and independe
 artifact/custody/exact PG+Node cleanup pass. Restore360.972s, verify7.308s.
 No live source DB or new dump; only this retained-snapshot subcase is closed.
 Item82/D-342 remains open for off-host custody/current RPO and wider guarantees.
-Topic isolated activation c8901ef3d64a remains accepted. Actual cohort7d511 runs
-two physical messages during temporary ON: A enabled-over-muted FCM/OS positive,
-then disabled-over-allowed FCM0/no NEW ordinal2; B inherit-over-allowed and enabled-
-over-muted Web/OS positives. Four-message/history/mark-read/OFF-fallback matrix
-is incomplete, `historyVerified=false`. Accepted RO diagnosis: A1 legacy SELECT0
-is expected after enabled CAS/fence; the exact outbox JOIN/ACK proves its retained
-note exists. The private action used the fenced legacy API, unlike the public v2
-client; no producer/feed defect or new D follows. Controller `failed=true` retains API/
-native cleanup PASS/all old SIDs/zero gaps. Actual OFF readback at 17:34:30Z follows
-verified backup/mirror without SQL relaxation; both decoded archives retained.
-PWA choice/push state restored, fresh SIDs/grants0 and both rentals released.
-Exact cleanup f3c8d49a170b passes: one inactive/protocol-retired subscription,
-one PATCH ACK, fresh API logout204/SID absence and all older SIDs retained;
-cleanupComplete. No Auth/controller/rental is held. Coordinator owns the next
-doc commit checkpoint; this worker does not push. Linnaeus owns successor private
-v2 read-oracle repair; no new rental before v2 read and finite ACK-driver readiness.
-[Physical outcome and limits](operations/2026-10-18-production-completion.md#physical-topic-canary-7d511).
+Topic is globally ON after fresh verified backup/raising CAS and independent
+readback at18:55:56Z. Successor b875 establishes three actual Realme/iPhone ON
+provider/OS cases, ordinary v2 history1/2/3 and ordinal1 mark-read for both.
+Compatible OFF retains disabled-child enforcement: both ordinal4 outboxes0 are
+correct, not a missing fallback. Exact RO confirms four messages/eight notes/read1
+per actor retained. The driver's incorrect B-positive expectation remains a raw
+REFUSED/historyVerified=false, not a manufactured whole-four-case PASS. Accepted
+real HTTP/current+old-hook/Edge proofs compose with this physical evidence.
+Exact recovery deletes only the own three-QA-member group once and retires new
+SIDs while retaining older sessions; PWA original none/push-enabled is restored,
+subscription/grant retirement passes, rental released. No group/Auth/controller/
+rental remains. D356's other actions and the wider platform matrix stay separate.
+[Current rollout and exact limits](operations/2026-10-18-production-completion.md#topic-production-enforcement).
 Nikita's nine newer entries (6 text/1 voice/2 images) are reconciled into #2/#87
 and provisional #52, not nine defects. Tester build and cache cause remain
 unknown; no new D or closure of all complaints follows. The synthetic actual-
 React/SDK/HTTP-cache warm-photo candidate completed GREEN_NO_SOURCE_PATCH; #87
-stays open. Remaining Topic/D356, broader platform QA and external recovery stay
+stays open. Remaining D356, broader platform QA and external recovery stay
 open. Do not replay accepted cases.
 Actual D356 held-access76749ab0ab0f now passes genuine same-document UI Auth,
 new-SID route/jump, zero late effects and exact cleanup; other actions stay open.
@@ -631,9 +627,11 @@ while the hint was offered **and the page was visible**, not wall clock since it
 Current as of 2026-10-18; the dated detail under queue items is history, not a
 competing version or permission gate. Web notification text is accepted; Android27
 is released with guest upgrade/public bytes verified, not all signed-in paths.
-Topic is partial after two physical messages and actual OFF rollback/readback;
-A1 legacy0 is explained by the expected fence; the private v2 oracle needs repair,
-not the public feed. Exact owned cleanup is complete. The warm-photo candidate
+Topic enforcement is ON after physical b875, compatible retained-disable rollback
+and fresh verified backup/CAS/readback; raw incomplete instrumentation remains
+documented, not promoted to a whole-client-matrix claim. Exact owned cleanup is
+complete. D371 text/media durability and reload safeguards are in progress for
+web/Android28, not yet released. The warm-photo candidate
 under #2/#87 is completed GREEN_NO_SOURCE_PATCH, not whole-report closure.
 D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,

@@ -56,9 +56,17 @@ function entry(id: string, size = 1_000, chatId = CHAT): OutgoingMediaEntry {
 }
 
 test("a voice note is kept; a file larger than the limit is left to memory", () => {
+  assert.equal(PERSIST_LIMIT_BYTES, 26_214_400);
   assert.equal(persistable(entry("a", 1_500_000)), true);
   assert.equal(persistable(entry("b", PERSIST_LIMIT_BYTES)), true);
   assert.equal(persistable(entry("c", PERSIST_LIMIT_BYTES + 1)), false);
+  assert.equal(persistable(entry("negative", -1)), false);
+  assert.equal(persistable(entry("fraction", 1.5)), false);
+  const preview = entry("preview");
+  preview.attachment.previewFile = { size: 26_214_400 } as File;
+  assert.equal(persistable(preview), true);
+  preview.attachment.previewFile = { size: 26_214_401 } as File;
+  assert.equal(persistable(preview), false);
 });
 
 test("what is written carries the file and not the preview's address, which dies with the page", () => {

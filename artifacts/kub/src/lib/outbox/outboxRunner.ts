@@ -33,6 +33,8 @@ export type SendOutcome<Row> =
   | { kind: "waiting" }
   | { kind: "refused"; error: unknown };
 
+export type RetainOutcome = { ok: true } | { ok: false; error: unknown };
+
 export interface OutboxRunnerDeps<Row> {
   storage: OutboxStorage;
   send: (entry: OutboxEntry) => Promise<SendAttempt<Row>>;
@@ -40,8 +42,12 @@ export interface OutboxRunnerDeps<Row> {
   onSent: (entry: OutboxEntry, row: Row) => void;
   /** Unanswered: the bubble waits with its clock. */
   onWaiting: (entry: OutboxEntry) => void;
-  /** Refused: the bubble turns red and leaves the outbox. */
+  /** Refusal or failed local persistence: show failure, not a saved clock. */
   onRefused: (entry: OutboxEntry, error: unknown) => void;
+  /** Remote ACK remains valid even if its local cleanup could not commit. */
+  onStorageError?: (error: unknown) => void;
+  /** Hold quiet reload while a write or cancellation has no committed copy. */
+  holdPersistence?: () => (() => void);
   now?: () => number;
   timers?: { set: (callback: () => void, ms: number) => unknown; clear: (handle: unknown) => void };
 }
@@ -55,13 +61,52 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
 
   const entries = new Map<string, OutboxEntry>();
   const busy = new Set<string>();
+  // A failed write keeps the work present, but only an explicit enqueue may
+  // put it back in the live queue. A persistence-only retain does not do that.
+  const requiresExplicitRetry = new Set<string>();
   const waiters = new Map<string, (outcome: SendOutcome<Row>) => void>();
   const discardedDuringRestore = new Set<string>();
+  // Commit permits a new explicit enqueue, never an automatic old-prefix
+  // retain. Keep that distinction across this singleton's stop/start.
+  const cancellations = new Map<string, "pending" | "committed" | "requeued">();
+  const discarding = new Map<string, Promise<{ ok: boolean }>>();
+  const persistenceHolds = new Map<string, () => void>();
+  const writes = new Map<string, Promise<void>>();
   let wake: unknown = null;
   let userId: string | null = null;
   let accountEpoch = 0;
   let restored = false;
   let restoring: Promise<OutboxEntry[]> | null = null;
+  const keyFor = (entry: Pick<OutboxEntry, "userId" | "clientMessageId">) => `${entry.userId}:${entry.clientMessageId}`;
+  const cancelled = (entry: OutboxEntry) => {
+    const state = cancellations.get(keyFor(entry));
+    return state === "pending" || state === "committed";
+  };
+  const holdPersistence = (key: string) => {
+    if (!persistenceHolds.has(key) && deps.holdPersistence) persistenceHolds.set(key, deps.holdPersistence());
+  };
+  const releasePersistence = (key: string) => {
+    persistenceHolds.get(key)?.();
+    persistenceHolds.delete(key);
+  };
+  const readyAt = (at: number) => entriesToSend([...entries.values()], at,
+    new Set([...busy, ...[...entries.values()].filter(cancelled).map((entry) => entry.clientMessageId)]));
+  const persist = (entry: OutboxEntry): Promise<void> => {
+    const key = keyFor(entry);
+    holdPersistence(key);
+    const writing = Promise.resolve(writes.get(key)).catch(() => undefined).then(() => {
+      if (cancelled(entry)) throw new Error("OUTBOX_DISCARD_PENDING");
+      return deps.storage.put(entry);
+    });
+    writes.set(key, writing);
+    const finished = (committed: boolean) => {
+      if (writes.get(key) !== writing) return;
+      writes.delete(key);
+      if (committed && !cancelled(entry)) releasePersistence(key);
+    };
+    void writing.then(() => finished(true), () => finished(false));
+    return writing;
+  };
 
   const settle = (id: string, outcome: SendOutcome<Row>) => {
     const resolve = waiters.get(id);
@@ -73,7 +118,7 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
     if (wake !== null) timers.clear(wake);
     wake = null;
     if (!restored) return;
-    const due = nextDueAt(entriesToSend([...entries.values()], Number.POSITIVE_INFINITY, busy));
+    const due = nextDueAt(readyAt(Number.POSITIVE_INFINITY));
     if (due === null) return;
     wake = timers.set(() => {
       wake = null;
@@ -91,26 +136,33 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
     } catch (error) {
       result = { failed: { error } };
     }
-    // Discarded while it was out: whatever the server said, the person has
-    // already taken it off the screen.
-    if (!ownsSession() || entries.get(entry.clientMessageId) !== entry) return;
-    busy.delete(entry.clientMessageId);
+    // Cancellation requested while it was out: its late result cannot undo it.
+    if (!ownsSession() || entries.get(entry.clientMessageId) !== entry || cancelled(entry)) return;
 
     if ("sent" in result) {
+      // Retain ownership through cleanup: a concurrent discard can commit and
+      // remove the bubble while this await is still pending.
+      try { await deps.storage.remove(entry.clientMessageId); }
+      catch (error) { if (ownsSession()) deps.onStorageError?.(error); }
+      if (!ownsSession() || entries.get(entry.clientMessageId) !== entry || cancelled(entry)) return;
       entries.delete(entry.clientMessageId);
-      await deps.storage.remove(entry.clientMessageId);
-      if (!ownsSession()) return;
+      busy.delete(entry.clientMessageId);
+      requiresExplicitRetry.delete(entry.clientMessageId);
       deps.onSent(entry, result.sent);
       settle(entry.clientMessageId, { kind: "sent", row: result.sent });
       return;
     }
+    busy.delete(entry.clientMessageId);
     const failure: SendFailure = classifySendFailure(result.failed);
     if (failure === "refused") {
       entries.delete(entry.clientMessageId);
+      requiresExplicitRetry.delete(entry.clientMessageId);
       // A missing mention schema is retryable without dropping identities.
       // Keep it on disk, but do not loop a refused send in this session.
-      if (result.failed.retainForRetry) await deps.storage.put(entry);
-      else await deps.storage.remove(entry.clientMessageId);
+      try {
+        if (result.failed.retainForRetry) await persist(entry);
+        else await deps.storage.remove(entry.clientMessageId);
+      } catch (error) { if (ownsSession()) deps.onStorageError?.(error); }
       if (!ownsSession()) return;
       deps.onRefused(entry, result.failed.error ?? null);
       settle(entry.clientMessageId, { kind: "refused", error: result.failed.error ?? null });
@@ -119,8 +171,18 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
     const attempts = entry.attempts + 1;
     const waiting: OutboxEntry = { ...entry, attempts, nextAttemptAt: now() + retryDelay(attempts) };
     entries.set(entry.clientMessageId, waiting);
-    await deps.storage.put(waiting);
-    if (!ownsSession() || entries.get(entry.clientMessageId) !== waiting) return;
+    busy.add(entry.clientMessageId);
+    try { await persist(waiting); }
+    catch (error) {
+      if (ownsSession() && entries.get(entry.clientMessageId) === waiting && !cancelled(waiting)) {
+        requiresExplicitRetry.add(entry.clientMessageId);
+        deps.onRefused(waiting, error);
+        settle(entry.clientMessageId, { kind: "refused", error });
+      }
+      return;
+    }
+    if (!ownsSession() || entries.get(entry.clientMessageId) !== waiting || cancelled(waiting)) return;
+    busy.delete(entry.clientMessageId);
     deps.onWaiting(waiting);
     settle(entry.clientMessageId, { kind: "waiting" });
   };
@@ -138,12 +200,12 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
     try {
       do {
         again = false;
-        const ready = entriesToSend([...entries.values()], now(), busy);
+        const ready = readyAt(now());
         await Promise.all(ready.map((entry) => attempt(entry, epoch)));
         if (epoch !== accountEpoch) return;
         // Whatever went out and landed may have released the next one of its
         // chat, which is due at once.
-        if (ready.length > 0 && entriesToSend([...entries.values()], now(), busy).length > 0) again = true;
+        if (ready.length > 0 && readyAt(now()).length > 0) again = true;
       } while (again && epoch === accountEpoch);
     } finally {
       if (epoch === accountEpoch) {
@@ -161,8 +223,9 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
       restoring = null;
       if (stored === null) {
         // Unknown older entries must not be overtaken. A later explicit start
-        // may retry; the browser store normally supplies its memory fallback.
+        // may retry; unknown persistence must not become an empty memory list.
         for (const entry of entries.values()) {
+          if (busy.has(entry.clientMessageId)) continue; // Its own put must decide whether it is saved.
           deps.onWaiting(entry);
           settle(entry.clientMessageId, { kind: "waiting" });
         }
@@ -196,6 +259,7 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
       discardedDuringRestore.clear();
       entries.clear();
       busy.clear();
+      requiresExplicitRetry.clear();
       if (wake !== null) timers.clear(wake);
       wake = null;
       for (const id of [...waiters.keys()]) settle(id, { kind: "waiting" });
@@ -210,25 +274,58 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
       discardedDuringRestore.clear();
       entries.clear();
       busy.clear();
+      requiresExplicitRetry.clear();
       if (wake !== null) timers.clear(wake);
       wake = null;
       for (const id of [...waiters.keys()]) settle(id, { kind: "waiting" });
+    },
+
+    /** Persist a refused prefix without scheduling or replacing a send waiter. */
+    async retain(entry: OutboxEntry): Promise<RetainOutcome> {
+      const epoch = accountEpoch;
+      const retained = structuredClone(entry);
+      const own = () => epoch === accountEpoch && userId === retained.userId;
+      if (cancellations.has(keyFor(retained))) return { ok: false, error: new Error("OUTBOX_DISCARD_PENDING") };
+      if (!own()) return { ok: false, error: new Error("OUTBOX_SCOPE_CHANGED") };
+      try { await persist(retained); }
+      catch (error) {
+        if (own() && !cancelled(retained)) deps.onStorageError?.(error);
+        return { ok: false, error };
+      }
+      if (cancelled(retained)) return { ok: false, error: new Error("OUTBOX_DISCARD_PENDING") };
+      if (!own()) return { ok: false, error: new Error("OUTBOX_SCOPE_CHANGED") };
+      return { ok: true };
     },
 
     /** Keeps a message on the device, then sends it; answers with that first attempt. */
     async enqueue(entry: OutboxEntry): Promise<SendOutcome<Row>> {
       const epoch = accountEpoch;
       const queued: OutboxEntry = structuredClone({ ...entry, nextAttemptAt: now() });
+      const key = keyFor(queued), cancellation = cancellations.get(key);
+      if (cancellation === "pending" || (cancellation === "committed" && userId !== queued.userId)) {
+        return { kind: "refused", error: new Error("OUTBOX_DISCARD_PENDING") };
+      }
+      if (cancellation === "committed") cancellations.set(key, "requeued");
       if (userId !== queued.userId) {
-        await deps.storage.put(queued);
-        return { kind: "waiting" };
+        try { await persist(queued); return { kind: "waiting" }; }
+        catch (error) { return { kind: "refused", error }; }
       }
       entries.set(queued.clientMessageId, queued);
+      requiresExplicitRetry.delete(queued.clientMessageId);
       // A concurrently finishing attempt cannot send this before persistence.
       busy.add(queued.clientMessageId);
       const outcome = new Promise<SendOutcome<Row>>((resolve) => waiters.set(queued.clientMessageId, resolve));
-      await deps.storage.put(queued);
+      try { await persist(queued); }
+      catch (error) {
+        if (epoch === accountEpoch && entries.get(queued.clientMessageId) === queued && !cancelled(queued)) {
+          requiresExplicitRetry.add(queued.clientMessageId);
+          deps.onRefused(queued, error);
+          settle(queued.clientMessageId, { kind: "refused", error });
+        }
+        return outcome;
+      }
       if (epoch === accountEpoch && entries.get(queued.clientMessageId) === queued) {
+        if (cancelled(queued)) { settle(queued.clientMessageId, { kind: "waiting" }); return outcome; }
         busy.delete(queued.clientMessageId);
         if (!restored && !restoring) {
           deps.onWaiting(queued);
@@ -248,18 +345,51 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
       void drain();
     },
 
-    /** «Удалить» on a waiting message: it will not be sent. */
-    async discard(clientMessageId: string) {
-      // A pending list may already contain this row, even after disk removal.
-      if (!restored) discardedDuringRestore.add(clientMessageId);
-      entries.delete(clientMessageId);
-      await deps.storage.remove(clientMessageId);
-      settle(clientMessageId, { kind: "waiting" });
-      schedule();
+    /** Local cancellation is immediate; removal is confirmed only after commit. */
+    async discard(clientMessageId: string, forUserId = userId): Promise<{ ok: boolean }> {
+      const epoch = accountEpoch;
+      if (!forUserId || forUserId !== userId) return { ok: false };
+      const held = entries.get(clientMessageId);
+      if (held && held.userId !== forUserId) return { ok: false };
+      const key = keyFor({ userId: forUserId, clientMessageId });
+      const pending = discarding.get(key);
+      if (pending) return pending;
+      cancellations.set(key, "pending");
+      holdPersistence(key);
+      const own = () => epoch === accountEpoch && forUserId === userId;
+      const operation = (async () => {
+        try {
+          await writes.get(key)?.catch(() => undefined);
+          if (!own()) return { ok: false };
+          await deps.storage.remove(clientMessageId);
+          cancellations.set(key, "committed");
+          // Commit removes the reload risk even if its UI owner has retired.
+          releasePersistence(key);
+          if (!own()) return { ok: false };
+          // An in-progress list may already hold the pre-delete disk snapshot.
+          if (!restored) discardedDuringRestore.add(clientMessageId);
+          entries.delete(clientMessageId);
+          busy.delete(clientMessageId);
+          requiresExplicitRetry.delete(clientMessageId);
+          settle(clientMessageId, { kind: "waiting" });
+          void drain();
+          return { ok: true };
+        } catch {
+          if (own()) settle(clientMessageId, { kind: "waiting" });
+          return { ok: false };
+        } finally { discarding.delete(key); }
+      })();
+      discarding.set(key, operation);
+      return operation;
     },
 
     has(clientMessageId: string) {
       return entries.has(clientMessageId);
+    },
+
+    /** Live queued work, rather than failed work retained for an explicit retry. */
+    isQueued(clientMessageId: string) {
+      return entries.has(clientMessageId) && !requiresExplicitRetry.has(clientMessageId);
     },
 
     size() {

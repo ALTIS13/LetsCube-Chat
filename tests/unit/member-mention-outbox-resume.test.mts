@@ -383,10 +383,14 @@ async function epochFixture(omission?: Omission) {
     "lib/realtimeRevival": "export const CONNECTION_REVIVED_EVENT='synthetic-revived';",
     "lib/attachmentUpload": "export const uploadAttachmentBytes=async()=>{throw Error('unexpected upload')};",
     "lib/outbox/outboxStorage": `import {memoryOutboxStorage} from '${path.join(root, "lib/outbox/outboxStorage.ts").replaceAll("\\", "/")}'; const storage=memoryOutboxStorage();export const browserOutboxStorage=()=>storage;`,
-    "lib/outbox/outgoingMediaStorage": `import {memoryOutgoingMediaStorage} from '${path.join(root, "lib/outbox/outgoingMediaStorage.ts").replaceAll("\\", "/")}'; const storage=memoryOutgoingMediaStorage();export const browserOutgoingMediaStorage=()=>storage;`,
+    "lib/outbox/outgoingMediaStorage": `import {memoryOutgoingMediaStorage} from '${path.join(root, "lib/outbox/outgoingMediaStorage.ts").replaceAll("\\", "/")}'; export {persistable} from '${path.join(root, "lib/outbox/outgoingMediaStorage.ts").replaceAll("\\", "/")}'; const storage=memoryOutgoingMediaStorage();export const browserOutgoingMediaStorage=()=>storage;`,
   };
   return build({ write: false, bundle: true, platform: "browser", format: "iife", define: { "process.env.NODE_ENV": '"development"' },
     plugins: [{ name: "isolated-outbox-fixture", setup(build: any) {
+      // The real app imports these leaves relatively; no implicit IDB fallback is a fixture contract.
+      build.onResolve({ filter: /^\.\/(?:outboxStorage|outgoingMediaStorage)(?:\.ts)?$/ }, (args: any) => ({
+        path: "lib/outbox/" + path.basename(args.path).replace(/\.ts$/, ""), namespace: "fixture",
+      }));
       build.onResolve({ filter: /^@\// }, (args: any) => {
         const relative = args.path.slice(2);
         if (stubs[relative]) return { path: relative, namespace: "fixture" };

@@ -136,7 +136,6 @@ import {
   rememberOutgoing,
   type OutgoingMediaEntry,
 } from "@/lib/outgoingMedia";
-import { browserOutboxStorage } from "@/lib/outbox/outboxStorage";
 import type { OutboxEntry } from "@/lib/outbox/outboxRules";
 import { appOutbox } from "@/lib/outbox/appOutbox";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
@@ -1315,7 +1314,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         if (!prefixOwner.accepted) {
           const owner = prefixOwner;
           // A reopened view must not overwrite the runner's existing prefix waiter.
-          if (!owner.attempt && appOutbox.has(owner.row.client_message_id!)) {
+          if (!owner.attempt && appOutbox.isQueued(owner.row.client_message_id!)) {
             patchOutgoingPlaceholder(sendChatId, outgoingTempId(firstTarget.clientMessageId), (message) => ({
               ...message, pending: true, failed: false, upload_waiting: true,
             }));
@@ -1334,16 +1333,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           if (!sameAccount() || textResult.status === "stale" || captionPrefixOwnersRef.current.get(firstTarget.id) !== owner) return false;
           if (textResult.status === "failed") {
             // Ordinary refusals leave the runner: retain this sole text owner on the device too.
-            const prefixStorage = browserOutboxStorage();
-            await prefixStorage.put(structuredClone(prefixEntry(owner)));
+            const retention = await appOutbox.retain(structuredClone(prefixEntry(owner)));
             const retainedMedia = outgoingEntry(outgoingTempId(firstTarget.clientMessageId)) as CaptionLinkedMedia | null;
             const prefixStillShown = useAppStore.getState().messages[sendChatId]?.some((message) =>
               message.user_id === userId && message.client_message_id === owner.row.client_message_id);
             if (sameAccount() && !prefixStillShown && (captionPrefixOwnersRef.current.get(firstTarget.id) !== owner ||
                 (retainedMedia && retainedMedia.captionPrefix?.entry.clientMessageId !== owner.row.client_message_id))) {
-              await prefixStorage.remove(owner.row.client_message_id!);
+              await appOutbox.discard(owner.row.client_message_id!, userId);
               return false;
             }
+            if (!retention.ok && retainedMedia?.captionPrefix?.entry.clientMessageId !== owner.row.client_message_id) return false;
             if (!sameAccount() || captionPrefixOwnersRef.current.get(firstTarget.id) !== owner) return false;
             patchOutgoingPlaceholder(sendChatId, outgoingTempId(firstTarget.clientMessageId), (message) => ({
               ...message, pending: false, failed: true, upload_waiting: false,

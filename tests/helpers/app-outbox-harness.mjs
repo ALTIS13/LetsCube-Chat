@@ -67,7 +67,7 @@ export function appOutboxHarness({ fetch, storage, mutate, clock } = {}) {
   const store = load("store/app.store.ts").useAppStore;
   const outbox = load("lib/outbox/appOutbox.ts").appOutbox;
   return {
-    outbox, store, storage: deviceStorage, loaded,
+    outbox, store, storage: deviceStorage, loaded, load,
     show(entry) {
       store.getState().setCurrentUser({ id: entry.userId });
       store.getState().addMessage(entry.chatId, {

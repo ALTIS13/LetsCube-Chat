@@ -1111,6 +1111,16 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
             >
               <div className="space-y-3">
                 <ReleaseDistributionSection />
+                <a
+                  href={`${import.meta.env.BASE_URL || "/"}open-source.html`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="open-source-notices-link"
+                  className="inline-flex min-h-11 items-center gap-2 text-sm text-[color:var(--kub-accent-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+                >
+                  <KubIcon name="externalLink" size={16} />
+                  Лицензии открытого ПО
+                </a>
                 {/* The sections guard themselves too; this keeps the spacer from being
                     the one thing the browser build still renders here. Autostart joins
                     `StorageSection` behind the same gate rather than claiming a row of

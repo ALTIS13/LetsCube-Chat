@@ -17,6 +17,7 @@
  */
 
 import { snapshotOutgoingEntry, type OutgoingMediaEntry } from "../outgoingMedia.ts";
+import { idbTransaction } from "./idbTransaction.ts";
 
 /** The largest file kept across a restart. A voice note is well under 2 MB. */
 export const PERSIST_LIMIT_BYTES = 25 * 1024 * 1024;
@@ -34,7 +35,8 @@ export interface OutgoingMediaStorage {
 
 /** Whether this entry is kept across a restart at all. */
 export function persistable(entry: OutgoingMediaEntry): boolean {
-  return entry.attachment.file.size <= PERSIST_LIMIT_BYTES;
+  return validSize(entry.attachment.file.size)
+    && (entry.attachment.previewFile == null || validSize(entry.attachment.previewFile.size));
 }
 
 /** What is written: everything but the preview's object URL, which dies with the page. */
@@ -65,6 +67,88 @@ export function memoryOutgoingMediaStorage(): OutgoingMediaStorage {
 const DB_NAME = "kub-outbox-media";
 const DB_VERSION = 1;
 const STORE = "media";
+const unavailable = () => new Error("OUTGOING_MEDIA_STORAGE_UNAVAILABLE");
+const validSize = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0
+  && (value as number) <= PERSIST_LIMIT_BYTES;
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+const id = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 1024;
+const nullableId = (value: unknown) => value === null || id(value);
+
+type FileBytesV1 = { file_v: 1; bytes: ArrayBuffer; name: string; type: string; lastModified: number; size: number };
+type FileSource = Omit<FileBytesV1, "bytes"> & { file: File };
+
+function fileSource(file: File): FileSource {
+  if (!(file instanceof File) || !validSize(file.size) || file.name.length > 4096 || file.type.length > 1024
+    || !Number.isSafeInteger(file.lastModified)) throw unavailable();
+  return { file_v: 1, file, name: file.name, type: file.type, lastModified: file.lastModified, size: file.size };
+}
+
+async function fileBytes(source: FileSource): Promise<FileBytesV1> {
+  const { file, ...metadata } = source;
+  const bytes = await file.arrayBuffer();
+  if (!(bytes instanceof ArrayBuffer) || bytes.byteLength !== metadata.size) throw unavailable();
+  return { ...metadata, bytes };
+}
+
+function readFileBytes(value: unknown): FileBytesV1 | null {
+  if (!record(value) || Object.keys(value).length !== 6
+    || !["file_v", "bytes", "name", "type", "lastModified", "size"].every(key => Object.hasOwn(value, key))
+    || value.file_v !== 1 || !validSize(value.size) || !(value.bytes instanceof ArrayBuffer)
+    || value.bytes.byteLength !== value.size || typeof value.name !== "string" || value.name.length > 4096
+    || typeof value.type !== "string" || value.type.length > 1024 || !/^[\x20-\x7e]*$/.test(value.type)
+    || value.type !== value.type.toLowerCase() || !Number.isSafeInteger(value.lastModified)) return null;
+  return value as FileBytesV1;
+}
+
+function entryShape(value: unknown): value is OutgoingMediaEntry {
+  if (!record(value) || !id(value.tempId) || !id(value.chatId) || !nullableId(value.replyToId)
+    || (value.topicId !== undefined && !nullableId(value.topicId))
+    || (value.caption !== null && typeof value.caption !== "string")
+    || typeof value.clientSentAt !== "string" || !Number.isFinite(Date.parse(value.clientSentAt))
+    || !record(value.attachment)) return false;
+  const attachment = value.attachment;
+  return id(attachment.id) && id(attachment.clientMessageId) && validSize(attachment.size)
+    && typeof attachment.name === "string" && typeof attachment.mimeType === "string"
+    && ["image", "video", "audio", "voice", "video_message", "file"].includes(String(attachment.kind));
+}
+
+// Snapshot metadata before any asynchronous byte conversion; neither File reaches IDB.
+function prepareBytes(userId: string, entry: OutgoingMediaEntry) {
+  const held = toPersisted(userId, entry);
+  if (!id(userId) || !entryShape(held.entry)) throw unavailable();
+  const { file, previewFile, ...attachment } = held.entry.attachment;
+  const main = fileSource(file), preview = previewFile == null ? previewFile : fileSource(previewFile);
+  if (held.entry.attachment.size !== main.size) throw unavailable();
+  const metadata = structuredClone({ ...held, entry: { ...held.entry, attachment } });
+  return async () => ({ ...metadata, storage_v: 1,
+    entry: { ...metadata.entry, attachment: { ...metadata.entry.attachment, file: await fileBytes(main),
+      ...(preview === undefined ? {} : { previewFile: preview === null ? null : await fileBytes(preview) }) } } });
+}
+
+function readStored(value: unknown, userId: string): OutgoingMediaEntry | null {
+  if (!record(value) || value.userId !== userId || !entryShape(value.entry) || value.tempId !== value.entry.tempId) return null;
+  const entry = value.entry, attachment = entry.attachment;
+  try {
+    if (Object.hasOwn(value, "storage_v")) {
+      if (value.storage_v !== 1) return null;
+      const main = readFileBytes(attachment.file);
+      const preview = attachment.previewFile == null ? attachment.previewFile : readFileBytes(attachment.previewFile);
+      if (!main || main.size !== attachment.size || (attachment.previewFile != null && !preview)) return null;
+      const restore = (file: FileBytesV1) => new File([file.bytes], file.name, { type: file.type, lastModified: file.lastModified });
+      return snapshotOutgoingEntry({ ...entry, attachment: { ...attachment, file: restore(main),
+        ...(preview === undefined ? {} : { previewFile: preview === null ? null : restore(preview) }),
+        previewUrl: null, uploaded: null } });
+    }
+    // Existing v1 object stores contain unversioned native File records.
+    const main = fileSource(attachment.file);
+    if (main.size !== attachment.size) return null;
+    if (attachment.previewFile != null) fileSource(attachment.previewFile);
+    return snapshotOutgoingEntry(entry);
+  } catch { return null; }
+}
+
+// All media-storage instances on the same factory share ordering, including byte reads.
+const writes = new WeakMap<IDBFactory, Promise<void>>();
 
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -77,49 +161,55 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
       }
     };
     open.onsuccess = () => resolve(open.result);
-    open.onerror = () => reject(open.error);
-    open.onblocked = () => reject(new Error("outgoing media database blocked"));
+    open.onerror = () => reject(unavailable());
+    open.onblocked = () => reject(unavailable());
   });
 }
 
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/** IndexedDB, and nothing at all once it has failed: memory already holds the entry. */
+/** A successful write means commit; unavailable storage leaves memory as the only copy. */
 export function browserOutgoingMediaStorage(factory: IDBFactory | undefined = globalThis.indexedDB): OutgoingMediaStorage {
   let database: Promise<IDBDatabase> | null = null;
-  let failed = !factory;
 
-  const withStore = async <T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | undefined> => {
-    if (failed || !factory) return undefined;
+  const withStore = async <T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
+    if (!factory) throw unavailable();
     try {
-      database ??= openDatabase(factory);
+      database ??= openDatabase(factory).then((handle) => {
+        handle.onversionchange = () => { handle.close(); database = null; };
+        return handle;
+      }).catch(() => { database = null; throw unavailable(); });
       const handle = await database;
-      return await request(run(handle.transaction(STORE, mode).objectStore(STORE)));
+      return await idbTransaction(handle, STORE, mode, run);
     } catch {
-      failed = true;
-      return undefined;
+      throw unavailable();
     }
+  };
+
+  const write = <T>(run: () => Promise<T>): Promise<T> => {
+    if (!factory) return Promise.reject(unavailable());
+    const work = (writes.get(factory) ?? Promise.resolve()).then(run);
+    writes.set(factory, work.then(() => undefined, () => undefined));
+    return work;
   };
 
   return {
     async save(userId, entry) {
       if (!persistable(entry)) return;
-      await withStore("readwrite", (store) => store.put(toPersisted(userId, entry)));
+      const encode = prepareBytes(userId, entry);
+      await write(async () => {
+        const value = await encode();
+        await withStore("readwrite", (store) => store.put(value));
+      });
     },
     async drop(tempId) {
-      await withStore("readwrite", (store) => store.delete(tempId));
+      await write(() => withStore("readwrite", (store) => store.delete(tempId)));
     },
     async list(userId) {
+      if (factory) await writes.get(factory);
       const records = await withStore(
         "readonly",
-        (store) => store.index("userId").getAll(userId) as IDBRequest<Array<PersistedOutgoingMedia & { tempId: string }>>,
+        (store) => store.index("userId").getAll(userId) as IDBRequest<unknown[]>,
       );
-      return (records ?? []).map((record) => record.entry);
+      return records.flatMap(record => { const entry = readStored(record, userId); return entry ? [entry] : []; });
     },
   };
 }

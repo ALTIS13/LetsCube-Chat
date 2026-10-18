@@ -85,13 +85,14 @@ test("every open dialog counts, because what was typed into one is nowhere else"
 });
 
 test("an attachment on its way counts only when a reload would drop it", () => {
-  // Item 52 keeps files up to the limit on the device, and they are sent again
-  // after a reload. Above it a file lives in memory alone.
+  // Eligible size does not prove persistence: this test has no committed device copy.
   rememberOutgoing(outgoing("small", PERSIST_LIMIT_BYTES));
-  assert.deepEqual(reloadWouldLose(), [], "a file the device keeps is not lost by a reload");
+  assert.deepEqual(reloadWouldLose(), ["outgoing-in-memory"]);
   rememberOutgoing(outgoing("large", PERSIST_LIMIT_BYTES + 1));
   assert.deepEqual(reloadWouldLose(), ["outgoing-in-memory"]);
   forgetOutgoing("tmp:large");
+  assert.deepEqual(reloadWouldLose(), ["outgoing-in-memory"]);
+  forgetOutgoing("tmp:small");
   assert.deepEqual(reloadWouldLose(), []);
 });
 

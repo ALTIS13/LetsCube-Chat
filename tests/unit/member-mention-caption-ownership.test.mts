@@ -48,12 +48,11 @@ function chatSource() {
     cleared: ["captionPrefixOwnersRef.current.delete(firstTarget.id);", ""],
     linkage: ["...(prefixOwner && attachment.id === firstTarget.id ? {", "...(false ? {"],
     restore: ["const restoredPrefix = originalEntry?.captionPrefix;", "const restoredPrefix = undefined;"],
-    retain: ["await prefixStorage.put(structuredClone(prefixEntry(owner)));", ""],
-    queued: ["!owner.attempt && appOutbox.has(owner.row.client_message_id!)", "false"],
+    retain: ["const retention = await appOutbox.retain(structuredClone(prefixEntry(owner)));", "const retention = { ok: true };"],
+    queued: ["!owner.attempt && appOutbox.isQueued(owner.row.client_message_id!)", "false"],
     clearRef: ["accountEpoch += 1;\n        captionPrefixOwnersRef.current.clear();", "accountEpoch += 1;"],
     persistEpoch: ["if (!sameAccount() || captionPrefixOwnersRef.current.get(firstTarget.id) !== owner) return false;", ""],
     editUnlink: ["discardSend(msg);", "discardLocalMessage(msg.id);"],
-    discardedRetention: ["await prefixStorage.remove(owner.row.client_message_id!);", ""],
   };
   const mutation = process.env.D331_CAPTION_MUTANT;
   if (mutation) {
@@ -127,10 +126,11 @@ async function harness(options: HarnessOptions = {}) {
   const mediaRecords = new Map<string, any>();
   const stageEffects: string[] = [];
   const listeners = new Set<(next: any, previous: any) => void>();
-  const currentUserRef = { current: { id: ME } as any };
+  const currentUserRef = { current: { id: ME } as any, accountEpoch: 0 };
+  const hookLifetimeRef = { current: Symbol("caption-fixture") };
   const stagedAttachmentsRef = { current: options.attachments ?? [attachment(FIRST), attachment(SECOND)] };
   const captionPrefixOwnersRef = { current: new Map() };
-  const state: any = { currentUser: currentUserRef.current, chats: [], messages: {},
+  const state: any = { currentUser: currentUserRef.current, accountEpoch: 0, chats: [], messages: {},
     addMessage: (chatId: string, row: any) => upsert(chatId, row),
     replaceMessage: (chatId: string, oldId: string, row: any) => {
       state.messages[chatId] = (state.messages[chatId] ?? []).filter((m: any) => m.id !== oldId);
@@ -168,12 +168,11 @@ async function harness(options: HarnessOptions = {}) {
     "lib/supabase/client.ts": { createClient: () => client },
     "lib/monitoring.ts": { reportError: noop }, "lib/personalModeration.ts": { blockedSendRefusal: () => null },
     "lib/messageAckError.ts": { getMessageAckUserMessage: () => "retry", sanitizeMessageAckError: (error: any) => ({ error }) },
+    "hooks/useCallSound.ts": { playMessageSentSoundFor: noop },
     "lib/outbox/outboxStorage.ts": { browserOutboxStorage: () => storage },
     "lib/attachmentUpload.ts": { uploadAttachmentBytes: async () => uploaded },
   };
   const load = modules(stubs);
-  const appOutbox = load("lib/outbox/appOutbox.ts").appOutbox;
-  await appOutbox.start(ME);
   const out = load("lib/outgoingMedia.ts");
   const mediaStorage = load("lib/outbox/outgoingMediaStorage.ts");
   stubs["lib/outbox/outgoingMediaStorage.ts"] = { ...mediaStorage, browserOutgoingMediaStorage: () => ({
@@ -186,6 +185,8 @@ async function harness(options: HarnessOptions = {}) {
       .map((record) => structuredClone(record.entry)),
   }) };
   const mediaDevice = load("lib/outbox/appOutgoingMedia.ts");
+  const appOutbox = load("lib/outbox/appOutbox.ts").appOutbox;
+  await appOutbox.start(ME);
   mediaDevice.keepOutgoingMediaFor(ME);
   const mention = load("lib/memberMentions.ts");
   const optimistic = load("lib/optimisticMessage.ts");
@@ -225,6 +226,8 @@ async function harness(options: HarnessOptions = {}) {
   const send = callback(chatFile, "sendStagedAttachments", { ...env, patchOutgoingPlaceholder });
   const discardLocalMessage = callback("hooks/useMessages.ts", "discardLocalMessage", {
     chatIdRef: { current: CHAT }, useAppStore, appOutbox, removeMessage: state.removeMessage,
+    currentUserRef, hookLifetimeRef, setActionRefusal: noop,
+    captureMessageAccount: callback("hooks/useMessages.ts", "captureMessageAccount", { useAppStore }),
   });
   const discard = callback(chatFile, "discardSend", { ...env, discardLocalMessage, revokeAttachmentPreview: noop });
   const abortUploadsIfAccountChanged = callback(chatFile, "abortUploadsIfAccountChanged", {
@@ -247,7 +250,9 @@ async function harness(options: HarnessOptions = {}) {
   const switchAccount = (id: string | null) => {
     const previous = { ...state };
     state.currentUser = id ? { id } : null;
+    state.accountEpoch += 1;
     currentUserRef.current = state.currentUser;
+    currentUserRef.accountEpoch = state.accountEpoch;
     for (const listener of listeners) listener(state, previous);
   };
   return { send, discard, state, load, out, appOutbox, background, stagedAttachmentsRef, stageEffects, payloads, stored, mediaStored,
@@ -491,6 +496,8 @@ test("discarding a prefix from a reopened view during retention cannot resurrect
     h.remount().discard(prefix);
     saved.resolve();
     assert.equal(await sending, false);
+    await until(() => !h.stored.has(prefix.client_message_id));
+    await until(() => h.state.messages[CHAT].filter((m: any) => m.type === "text").length === 0);
     assert.equal(h.stored.has(prefix.client_message_id), false);
     assert.equal(h.out.outgoingEntry(`tmp:${FIRST}`).captionPrefix, undefined);
     assert.equal(h.state.messages[CHAT].filter((m: any) => m.type === "text").length, 0);
@@ -561,6 +568,22 @@ test("discarding the failed prefix does not resurrect its text when the staged v
     assert.equal(h.payloads.filter((p) => p.type === "text").length, 1);
     assert.equal(h.state.messages[CHAT].filter((m: any) => m.type === "text").length, 0);
     assert.equal(Object.hasOwn(h.payloads.at(-1), "mention_entities"), false);
+  } finally { h.cleanup(); }
+});
+
+test("voice prefix retry resumes after a failed first PUT and successful retain without duplicate text", async () => {
+  const h = await harness({ attachments: [attachment(FIRST, "voice")],
+    textPut: async (_entry, count) => {
+      if (count === 1) throw Object.assign(Error("OUTBOX_STORAGE_UNAVAILABLE"), { code: "OUTBOX_STORAGE_UNAVAILABLE" });
+    } });
+  try {
+    assert.equal(await h.send(content, undefined, undefined, undefined, mentions()), false);
+    assert.equal(h.payloads.length, 0, "failed local persistence cannot dispatch a message");
+    const voice = h.out.outgoingEntry(`tmp:${FIRST}`).attachment;
+    assert.equal(await h.send(content, FIRST, [voice], undefined, mentions()), true,
+      "an explicitly retried retained prefix must not be mistaken for a live attempt");
+    assert.equal(h.payloads.filter((p) => p.type === "text").length, 1);
+    assert.equal(h.payloads.filter((p) => p.type === "audio").length, 1);
   } finally { h.cleanup(); }
 });
 
@@ -653,11 +676,13 @@ test("account epoch fences A-null-A relogin while ACK waits and preserves a rest
     const restored = { ...original, attachment: { ...original.attachment, name: "new-session" } };
     h.out.rememberOutgoing(restored);
     assert.equal(await sending, false);
+    assert.ok(h.out.outgoingEntry(`tmp:${FIRST}`), "new-session carrier must survive the old send continuation");
     assert.equal(h.out.outgoingEntry(`tmp:${FIRST}`).attachment.name, "new-session");
     assert.equal(h.stageEffects.length, before);
     assert.equal(h.listeners.size, 0);
     ack.resolve(canonical(h.payloads[0]));
     await flush();
+    assert.ok(h.out.outgoingEntry(`tmp:${FIRST}`), "new-session carrier must survive the late ACK");
     assert.equal(h.out.outgoingEntry(`tmp:${FIRST}`).attachment.name, "new-session");
   } finally { ack.resolve(canonical(h.payloads[0])); await sending; h.cleanup(); }
 });
@@ -702,8 +727,7 @@ test("caption ownership omission mutants fail literal runtime assertions", { ski
     ["cleared", "an explicitly cleared composer caption"], ["linkage", "refused prefix remains"],
     ["restore", "refused prefix remains"], ["retain", "refused prefix remains"],
     ["queued", "reopening during prefix ACK"], ["clearRef", "account transition immediately"],
-    ["persistEpoch", "late prefix persistence completion"], ["editUnlink", "editing the failed prefix into"],
-    ["discardedRetention", "discarding a prefix from a reopened"]]) {
+    ["persistEpoch", "late prefix persistence completion"], ["editUnlink", "editing the failed prefix into"]]) {
     const env = { ...process.env, D331_CAPTION_MUTANT: mutant };
     delete env.NODE_TEST_CONTEXT;
     const result = spawnSync(process.execPath, ["--test", `--test-name-pattern=${pattern}`, fileURLToPath(import.meta.url)], {
