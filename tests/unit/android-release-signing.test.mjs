@@ -21,8 +21,8 @@ const { verifyAndroidReleaseArtifactMetadata } = releaseBuilder;
 
 test("Android release metadata has the canonical production version", () => {
   assert.deepEqual(readAndroidReleaseMetadata(root), {
-    versionName: "0.1.27",
-    versionCode: 28,
+    versionName: "0.1.28",
+    versionCode: 29,
   });
 });
 

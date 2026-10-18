@@ -44,6 +44,23 @@ test("notice payload: exact version, upstream source and unmodified full MPL", (
   assert.doesNotMatch(html, /https?:[^"\s]+\.(?:js|css|woff2)/, "notice must not fetch third-party resources");
 });
 
+for (const component of [
+  { name: "react-easy-crop", version: "6.2.4", license: "MIT", installed: join(kub, "node_modules/react-easy-crop"),
+    file: "licenses/react-easy-crop-6.2.4-MIT.txt", copyright: "Copyright (c) 2022 Valentin Hervieu" },
+  { name: "normalize-wheel", version: "1.0.1", license: "BSD-3-Clause", installed: join(root, "node_modules/.pnpm/normalize-wheel@1.0.1/node_modules/normalize-wheel"),
+    file: "licenses/normalize-wheel-1.0.1-BSD-3-Clause.txt", copyright: "Copyright (c) 2015, Facebook, Inc. All rights reserved." },
+]) {
+  test(`cropper notice: ${component.name} exact installed license and copyright`, () => {
+    const manifest = JSON.parse(readFileSync(join(component.installed, "package.json"), "utf8"));
+    assert.equal(manifest.version, component.version);assert.equal(manifest.license, component.license);
+    assert.deepEqual(readFileSync(join(publicDir, component.file)), readFileSync(join(component.installed, "LICENSE")));
+    const html = readFileSync(noticePath, "utf8");
+    assert.ok(html.includes(`${component.name} ${component.version}`));
+    assert.ok(html.includes(component.copyright));
+    assert.ok(html.includes(`href="${component.file}"`));
+  });
+}
+
 test("discovery: Settings and entry HTML link to the packaged base-relative notice", () => {
   const settings = readFileSync(join(kub, "src/components/settings/SettingsScreen.tsx"), "utf8");
   const link = settings.match(/<a\s[^>]*data-testid="open-source-notices-link"[\s\S]*?<\/a>/)?.[0];
@@ -73,6 +90,9 @@ for (const base of ["/", "/nested/"]) {
     });
     assert.deepEqual(readFileSync(join(output, "open-source.html")), readFileSync(noticePath));
     assert.deepEqual(readFileSync(join(output, "licenses/MPL-2.0.txt")), readFileSync(licensePath));
+    for (const name of ["react-easy-crop-6.2.4-MIT.txt", "normalize-wheel-1.0.1-BSD-3-Clause.txt"]) {
+      assert.deepEqual(readFileSync(join(output, "licenses", name)), readFileSync(join(publicDir, "licenses", name)));
+    }
     const html = readFileSync(join(output, "index.html"), "utf8");
     assert.ok(html.includes(`href="${base}open-source.html"`), "actual HTML transform must retain discovery");
     if (base === "/") rootBundle = output;
@@ -101,6 +121,9 @@ test("actual Capacitor copy retains the notice and full license in Android publi
   await copy(config, "android");
   assert.deepEqual(readFileSync(join(config.android.webDirAbs, "open-source.html")), readFileSync(noticePath));
   assert.deepEqual(readFileSync(join(config.android.webDirAbs, "licenses/MPL-2.0.txt")), readFileSync(licensePath));
+  for (const name of ["react-easy-crop-6.2.4-MIT.txt", "normalize-wheel-1.0.1-BSD-3-Clause.txt"]) {
+    assert.deepEqual(readFileSync(join(config.android.webDirAbs, "licenses", name)), readFileSync(join(publicDir, "licenses", name)));
+  }
   results.push({ packaging: "capacitor-copy", assets: config.android.webDirAbs, exactNotice: true, exactLicense: true });
 });
 

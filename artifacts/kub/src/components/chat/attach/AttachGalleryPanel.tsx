@@ -4,6 +4,7 @@ import { FOCUS_RING } from "@/lib/controlSurface";
 import { cn } from "@/lib/utils";
 import { AttachSelectionCircle } from "./AttachSelectionCircle";
 import { RAISED_TARGET, type AttachPick } from "./attachTypes";
+import { isCanvasPhotoCandidate } from "@/lib/photoEncoding";
 
 const PHOTO_DISABLED_SINK = "disabled:bg-black disabled:text-white/60 disabled:cursor-not-allowed";
 
@@ -20,6 +21,7 @@ interface AttachGalleryPanelProps {
   selected: string[];
   onToggle: (id: string) => void;
   onMove: (id: string, direction: -1 | 1) => void;
+  onEdit?: (id: string) => void;
   /**
    * Room kept under the grid for what floats over it, in pixels, measured from
    * the floating stack itself. A fixed class was right while only the send
@@ -48,7 +50,7 @@ interface AttachGalleryPanelProps {
  * white glass rim vanished on the near-white sheet and the veil alone left the
  * cells within a few values of it.
  */
-export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove, reserveBottom }: AttachGalleryPanelProps) {
+export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove, onEdit, reserveBottom }: AttachGalleryPanelProps) {
   const arrangement = attachGalleryArrangement(picks.length);
   const albumPreview = selectedInOrder(picks, selected);
 
@@ -176,15 +178,33 @@ export function AttachGalleryPanel({ entries, picks, selected, onToggle, onMove,
                 </span>
               )}
               {pick.kind === "video" && (
-                <span className="absolute bottom-1.5 left-1.5 flex h-6 items-center gap-1 rounded-full bg-black/55 px-2 text-[11px] font-semibold text-white">
+                <span className="absolute bottom-[3.25rem] left-1.5 flex h-6 items-center gap-1 rounded-full bg-black/55 px-2 text-[11px] font-semibold text-white">
                   <KubIcon name="video" size={12} />
-                  Видео
+                  {pick.edited ? "Обрезано" : "Видео"}
                 </span>
               )}
               <span className="absolute right-1.5 top-1.5">
                 <AttachSelectionCircle number={number} over="photo" />
               </span>
             </button>
+            {onEdit && (pick.kind === "video" || (pick.kind === "image" && isCanvasPhotoCandidate(pick.file.type))) && (
+              <button
+                type="button"
+                data-attach-edit={pick.id}
+                aria-label={`Редактировать ${noun.toLowerCase()} ${index + 1}`}
+                title={pick.kind === "video" ? "Обрезать видео" : pick.preparedPhoto ? "Изменить отредактированное фото" : "Редактировать фото"}
+                onClick={() => onEdit(pick.id)}
+                className={cn("absolute bottom-1 right-1 z-10 flex size-11 items-center justify-center rounded-full bg-black/75 text-white", FOCUS_RING)}
+              >
+                <KubIcon name="edit" size={19} />
+              </button>
+            )}
+            {pick.preparedPhoto && (
+              <span data-attach-edited="" className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/80 px-1.5 py-1 text-[10px] font-semibold text-white">
+                {pick.preparedPhoto.quality === "original" ? "HD" : pick.preparedPhoto.quality === "compact" ? "SD" : "Стандарт"}
+                <KubIcon name="edit" size={12} className="ml-1 inline-block" />
+              </span>
+            )}
             {number !== null && selected.length > 1 && (
               <div className="absolute left-1 top-1 z-10 flex gap-0.5 rounded-full bg-black/70 p-0.5 text-white">
                 <button

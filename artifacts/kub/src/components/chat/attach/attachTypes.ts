@@ -1,6 +1,7 @@
 import type { KubIconName } from "@/components/kub";
 import type { AttachTabId } from "@/lib/attachSheet";
 import type { IncomingFilesSource } from "@/lib/mediaCompression";
+import type { PreparedAttachPhoto } from "@/lib/attachSheet";
 
 /** Each tab's glyph, in the tab row and on a placeholder's panel. */
 export const ATTACH_TAB_ICONS: Record<AttachTabId, KubIconName> = {
@@ -22,6 +23,9 @@ export interface AttachPick {
   /** An object URL for a photo or a video; revoked when the sheet closes. */
   url: string | null;
   source: IncomingFilesSource;
+  /** Applied pixels and their actual quality; raw source/undo stay in sheet RAM. */
+  preparedPhoto?: PreparedAttachPhoto;
+  edited?: boolean;
 }
 
 export function attachPickKind(file: File): AttachPickKind {

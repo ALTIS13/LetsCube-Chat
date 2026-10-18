@@ -1,7 +1,7 @@
 # LETSCUBE — handover
 
 **Current State, 2026-10-18:** Owner: Codex coordinator, canonical branch
-`codex/topic-alerts-20261016`; follows the approved
+`codex/media-editor-20261018`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
 Stage: Topic overrides are globally ON after the physical b875 cohort, accepted
 retained-disable rollback contract and fresh verified backup/guarded CAS; separate
@@ -15,7 +15,15 @@ are fixed/released within the recorded browser/guest-native coverage; no forced
 native disk failure or all-platform claim. No QA group/Auth/controller/rental held.
 Later documentation-only web images may be newer; they do not change that native
 product pin. Verify their actual image/content rather than replaying native builds.
-Next: Task3 pre-send photo/video editor, photo first, per the completion plan.
+Stage: Task3 pre-send photo/video editor in the existing canonical worktree;
+[bounded editor plan](superpowers/plans/2026-10-18-media-editor.md).
+Photo compositor26, video helper20, final mounted flow27 and scoped spec/quality
+review are source-accepted; all confirmed review P2s are repaired. Actual editor/
+gallery390/1440 light/dark pixels are inspected. Vite13.55s/build2ccb5c0ed567a7de
+and actual cold-offline6-asset byte checks pass; final frontend typecheck passes.
+Native candidate0.1.28/build29 is reserved, not built/published. Source is not
+deployed yet. Next: commit/import audit, signed candidate/Realme/public checks
+and reviewed shared/native release. [Evidence](operations/2026-10-18-media-editor.md).
 Use the measured MIT cropper/installed Mediabunny boundary; no hand-rolled crop
 interaction or unedited-original fallback after a failed privacy edit. Nikita's
 nine entries map to #2/#87 plus provisional #52; warm-photo return is GREEN/no

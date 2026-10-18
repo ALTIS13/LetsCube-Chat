@@ -25,7 +25,9 @@ approval round. This extends the existing attach flow, not a new upload path.
   An unchanged intent returns the identical input File (`changed:false`).
   Abort/decode/invalid crop/export errors reject; no unedited fallback.
 - AttachPhotoEditor props: `file`, `url`, `quality`, `onApply(result)`,
-  `onCancel()`. It owns geometry/marks/async cancellation only. AttachSheet owns
+  `onCancel()`, optional explicit `onRestore()`. onApply may refuse with false
+  (for example if result URL allocation fails); keep the editor recoverable.
+  It owns geometry/marks/async cancellation only. AttachSheet owns
   owner/accountEpoch/chat/topic/pick-generation fences and atomic replacement.
   Cancel preserves File/order/caption/HD. The current edited File is the only
   byte-bearing outgoing source; raw originals/undo never enter persisted metadata.
@@ -40,21 +42,30 @@ approval round. This extends the existing attach flow, not a new upload path.
 
 ## Work Sequence
 
-1. [ ] Linnaeus: image compositor/types/export + real synthetic pixel tests.
-2. [ ] Nash: editor UI, cropper dependency/lock and packaged MIT notices;
+1. [x] Linnaeus: image compositor/types/export + real synthetic pixel tests26/26;
+   source acceptance only, no native/export or publication inference.
+2. [x] Nash: editor UI, cropper dependency/lock and packaged MIT/BSD notices;
    focused component tests. No AttachSheet/Gallery/ChatWindow writes.
-3. [ ] Coordinator: gallery entry, sheet ownership and existing preparation path.
-4. [ ] Pascal: independent mounted integration/cancellation/owner/DTO tests,
-   then scoped review. No production or personal captures.
-5. [ ] Inspect exact editor390/1440, both themes; crop/cover/pen/keyboard/touch,
+3. [x] Coordinator: gallery entry, sheet ownership and existing preparation path;
+   final pending-Send intent repair/review and combined flow27/27 pass.
+4. [x] Pascal: independent mounted integration/cancellation/owner/DTO tests16/16
+   and real omission control; final combined photo/video flow27/27 and scoped
+   spec/quality review pass after the confirmed P2 repairs.
+   No production or personal captures.
+5. [x] Inspect exact editor390/1440, both themes; crop/cover/pen/keyboard/touch,
    Apply/Cancel/no-op/album/caption/reload/owner controls. Typecheck + build.
 6. [ ] Commit/review/publish shared web after own-tree import and production
    image/content checks. Native packages are separate immutable release steps.
-7. [ ] Video: bounded trim/preview using installed Mediabunny1.56.1; invalidate
+7. [x] Video source: bounded trim/preview using installed Mediabunny1.56.1; invalidate
    ladder cache by actual File identity; no original fallback after an edit
    failure. Check installed allowRotationMetadata API, copy:false, required
-   tracks, cancellation/disposal and actual encoded interval/audio. Keep item25
-   open until its required video and photo subcases are covered.
+   tracks, cancellation/disposal and actual encoded interval/audio. Crop/rotate
+   for video are optional follow-ups, not a reason to delay the requested trim.
+   Same-size replacement cache readiness is repaired; actual mounted RED/GREEN
+   plus22 adjacent pure checks pass. Keep item25
+   open until its required video and photo subcases are released. Local WebKit
+   explicitly refuses unsupported encoding; successful native/iPhone editing is
+   not inferred. [Evidence and remaining release checks](../../operations/2026-10-18-media-editor.md).
 
 ## Acceptance Boundaries
 
@@ -66,7 +77,7 @@ runtime change. Reuse D371--D373 accepted tests rather than replay their cohorts
 
 ## Reuse Evidence
 
-Existing [reference section18.3](../../operations/reference-clients.md#183-photo-editor-and-the-hd-badge)
+Existing [reference section18.3](../../operations/reference-clients.md)
 records actual Telegram Android12.10.3 on2026-09-20. Official sources:
 [cropper usage](https://github.com/ValentinH/react-easy-crop),
 [MIT licence](https://github.com/ValentinH/react-easy-crop/blob/main/LICENSE),

@@ -26004,3 +26004,26 @@ action contrast is at least4.75:1. Coordinator and worker inspect1440/390, light
 dark PNGs: no overlaps or clipped actions. Synthetic QA0 only, no external
 requests. Released in `efcc9da0` on verified shared web and Stable28; native
 asset parity includes the same component. [Release](operations/2026-10-18-production-completion.md#durability-and-readability-release).
+
+## D-374 `[~]` Video selection facts and preparation outlive their File or panel
+
+**Severity:** medium. `hooks/useVideoSendLadder.ts`; discovered while integrating
+the pre-send editor, not attributed to an unverified tester recording.
+
+**Observed cause:** inspection was keyed by pick ID and byte count while its
+read cache used only pick ID. A different File of equal size therefore retained
+old readiness, dimensions and rungs. Separately, cancellation was installed only
+after awaiting capability inspection, allowing work to start after panel unmount.
+
+**Actual RED/GREEN:** mounted Chromium hook with calibrated1920/1080 ->720p and
+same-name/same-size640/360 replacement. Old hook remains ready and never reads
+the replacement; fixed hook retires old facts synchronously, reads the exact new
+File and returns source-only. A held capability response released after unmount
+made the old hook encode/return a selection; the fixed hook returns null and
+starts zero encoders. Positive same-File rerender remains one inspection.
+
+Source fix: selection revision, File-bound read cache, preparation controller
+before the first await, lifetime/selection fences and current-only progress/
+cleanup. The actual browser test and22 adjacent ladder/plan checks pass; a later
+focused browser run covers the added held-response case. Scoped review and
+publication are pending. No authenticated send/native/device proof is inferred.

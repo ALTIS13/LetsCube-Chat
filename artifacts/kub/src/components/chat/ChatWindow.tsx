@@ -95,7 +95,7 @@ import {
 } from "@/lib/mediaCompression";
 import { removeLocation } from "@/lib/mediaLocation";
 import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
-import type { AttachSendRequest } from "@/lib/attachSheet";
+import type { AttachSendRequest, PreparedAttachPhoto } from "@/lib/attachSheet";
 import { recordingMinimumMs } from "@/lib/recordingGesture";
 import {
   MAX_STAGED_ATTACHMENTS,
@@ -892,6 +892,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       photoQuality?: MediaQuality;
       /** What a file weighed before the sheet replaced it with a smaller one (D-175). */
       originalSizes?: ReadonlyMap<File, number>;
+      preparedPhotos?: ReadonlyMap<File, PreparedAttachPhoto>;
     } = {},
   ): Promise<StagedAttachment[]> => {
     if (!files.length) return [];
@@ -919,6 +920,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         return [];
       }
       const preparation = planAttachmentPreparation(sourceFile.type, compress);
+      const preparedPhoto = sourceFile.type.startsWith("image/") ? options.preparedPhotos?.get(sourceFile) : undefined;
       let file = sourceFile;
       // A video the attach sheet already encoded arrives here as the small file,
       // so nothing downstream can tell it was made smaller. The sheet hands over
@@ -926,7 +928,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       // tray can say «после сжатия» about a wait somebody sat through (D-175).
       const pickedSize = options.originalSizes?.get(sourceFile) ?? sourceFile.size;
       let optimized = pickedSize > sourceFile.size;
-      let decodedDimensions: MediaDimensions | null = null;
+      let decodedDimensions: MediaDimensions | null = preparedPhoto
+        ? { width: preparedPhoto.width, height: preparedPhoto.height } : null;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
         // The attach sheet refuses an oversized original before staging, so what
@@ -936,7 +939,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           errors.push(limitError);
           continue;
         }
-      } else if (preparation === "compress") {
+      } else if (preparation === "compress" && !preparedPhoto) {
         const prepared = await runScopedStagedPreparation(
           uploadScope,
           scopeToken,
@@ -980,7 +983,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         }
         dimensions = preparedDimensions.value;
       }
-      const uncompressed = preparation === "original";
+      const uncompressed = preparation === "original" && !preparedPhoto;
       let previewFile: File | null = null;
       let previewSize: { width: number; height: number } | null = null;
       if (
@@ -1013,7 +1016,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         // re-encoded at all, and a quality would be a claim about nothing.
         mediaQuality: file.type.startsWith("video/")
           ? (uncompressed ? "original" : DEFAULT_MEDIA_QUALITY)
-          : uncompressed
+          : preparedPhoto ? preparedPhoto.quality : uncompressed
             ? undefined
             : photoQuality,
         uncompressed,
@@ -1640,6 +1643,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       compress: request.compress,
       photoQuality: request.photoQuality,
       originalSizes: request.originalSizes,
+      preparedPhotos: request.preparedPhotos,
     });
     if (!staged.length) return;
     await sendStagedAttachments(request.caption, undefined, staged, undefined, request.mentionEntities);

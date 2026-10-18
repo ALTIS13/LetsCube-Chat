@@ -255,6 +255,13 @@ export function moveSelected(selected: readonly string[], id: string, direction:
 
 export type AttachSendMode = "compressed" | "original";
 
+/** RAM-only identity of an already flattened edit; never persisted with a raw source. */
+export interface PreparedAttachPhoto {
+  width: number;
+  height: number;
+  quality: MediaQuality;
+}
+
 /** What the sheet hands the conversation to send, caption included. */
 export interface AttachSendRequest {
   files: File[];
@@ -278,6 +285,7 @@ export interface AttachSendRequest {
    * transcoded video arrives looking as though it had always been that size.
    */
   originalSizes?: ReadonlyMap<File, number>;
+  preparedPhotos?: ReadonlyMap<File, PreparedAttachPhoto>;
 }
 
 /** Files that reached the composer another way — pasted, dropped, shot on a webcam — and open the sheet. */

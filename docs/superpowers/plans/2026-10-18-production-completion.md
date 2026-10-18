@@ -265,8 +265,9 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 ## Task3: Media Completion (#25,29,104--105)
 
 **State:** IN PROGRESS; D372 durable media representation/cancel/reload repair is
-source-accepted61/61, including23 actual Chromium/WebKit cases without skips.
-Pre-send editor remains next, not shipped. D-365/#104 is DONE, not an outstanding
+released in webefcc/Stable28 with61/61 source checks, including23 actual
+Chromium/WebKit cases without skips. Pre-send editor is now in progress under
+[its bounded plan](2026-10-18-media-editor.md), not shipped. D-365/#104 is DONE, not an outstanding
 position repair.
 **Files:** Existing media upload/playback/album/cache/editor components and tests.
 **Interfaces:** Existing HD/original choice, durable upload identity, variant

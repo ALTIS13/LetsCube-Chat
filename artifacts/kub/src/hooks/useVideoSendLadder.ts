@@ -54,6 +54,7 @@ export interface VideoSendLadder {
 }
 
 interface LadderFacts {
+  key: number;
   /** What each picked file turned out to be, by its pick id. */
   videos: SelectedVideo[];
   /** `${id}|${rung}` for every pair this browser said it can encode. */
@@ -61,7 +62,7 @@ interface LadderFacts {
   ready: boolean;
 }
 
-const EMPTY: LadderFacts = { videos: [], encodable: new Set(), ready: false };
+const EMPTY: LadderFacts = { key: -1, videos: [], encodable: new Set(), ready: false };
 
 const pairKey = (videoId: string, rung: VideoSendHeight) => `${videoId}|${rung}`;
 
@@ -89,15 +90,25 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
   // The sheet recomputes its selection on every render, so the array identity
   // changes constantly while its contents do not. The effect keys on what the
   // selection *is*, and reads the picks themselves through a ref.
-  const key = picks.map((pick) => `${pick.id}:${pick.file.size}`).join("|");
+  const selectionRef = useRef({ key: 0, picks: [] as VideoSendPick[] });
+  if (selectionRef.current.picks.length !== picks.length || picks.some((pick, index) =>
+    selectionRef.current.picks[index]?.id !== pick.id || selectionRef.current.picks[index]?.file !== pick.file)) {
+    selectionRef.current = { key: selectionRef.current.key + 1, picks: picks.map(pick => ({ ...pick })) };
+  }
+  const key = selectionRef.current.key;
   const picksRef = useRef(picks);
   picksRef.current = picks;
-  const readRef = useRef(new Map<string, SelectedVideo>());
+  const readRef = useRef(new Map<string, { file: File; video: SelectedVideo }>());
   const abortRef = useRef<AbortController | null>(null);
+  const aliveRef = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
+    abortRef.current?.abort();
     const current = picksRef.current;
+    for (const [id, cached] of readRef.current) {
+      if (!current.some(pick => pick.id === id && pick.file === cached.file)) readRef.current.delete(id);
+    }
     if (!current.length) {
       setFacts(EMPTY);
       return () => {
@@ -109,14 +120,14 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
       const videos: SelectedVideo[] = [];
       for (const pick of current) {
         const cached = readRef.current.get(pick.id);
-        if (cached) {
-          videos.push(cached);
+        if (cached?.file === pick.file) {
+          videos.push(cached.video);
           continue;
         }
         const read = await readVideoSource(pick.file);
         if (cancelled) return;
         const video: SelectedVideo = { id: pick.id, sizeBytes: pick.file.size, source: read?.source ?? null };
-        readRef.current.set(pick.id, video);
+        readRef.current.set(pick.id, { file: pick.file, video });
         videos.push(video);
       }
 
@@ -145,7 +156,7 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
         }
       }
 
-      setFacts({ videos, encodable, ready: true });
+      setFacts({ key, videos, encodable, ready: true });
     })();
 
     return () => {
@@ -153,16 +164,22 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
     };
   }, [key]);
 
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; abortRef.current?.abort(); };
+  }, []);
+  const currentFacts = facts.key === key ? facts : EMPTY;
+
   const stops = useMemo(
-    () => encodableStops(facts.videos, (video, rung) => facts.encodable.has(pairKey(video.id, rung))),
-    [facts],
+    () => encodableStops(currentFacts.videos, (video, rung) => currentFacts.encodable.has(pairKey(video.id, rung))),
+    [currentFacts],
   );
 
   // The chosen stop survives a change of selection wherever it still exists, and
   // falls to the nearest one that does otherwise. Re-defaulting on every pick
   // would undo a choice a person had already made.
-  const stop = wanted === null ? defaultStop(facts.videos) : nearestStop(stops, wanted);
-  const summary = useMemo(() => stopSummary(facts.videos, stop), [facts.videos, stop]);
+  const stop = wanted === null ? defaultStop(currentFacts.videos) : nearestStop(stops, wanted);
+  const summary = useMemo(() => stopSummary(currentFacts.videos, stop), [currentFacts.videos, stop]);
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -170,40 +187,48 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
 
   const prepare = useCallback(
     async (files: readonly File[]): Promise<{ files: File[]; origins: Map<File, number> } | null> => {
-      const byFile = new Map<File, SelectedVideo>();
-      for (const pick of picksRef.current) {
-        const video = readRef.current.get(pick.id);
-        if (video) byFile.set(pick.file, video);
-      }
-      const support = await videoTranscodeSupport();
-      const plans = files.map((file) => {
-        const video = byFile.get(file);
-        if (!video?.source) return null;
-        const chosen = stopForVideo(video, stop);
-        if (chosen === SOURCE_STOP) return null;
-        const plan = planVideoSend(video.source, chosen, support, facts.encodable.has(pairKey(video.id, chosen)));
-        return plan.action === "transcode" ? { file, plan } : null;
-      });
-      const total = plans.filter(Boolean).length;
-      const origins = new Map<File, number>();
-      if (!total) return { files: [...files], origins };
-
+      if (!aliveRef.current) return null;
+      abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      setProgress({ value: 0, position: total > 1 ? `1 из ${total}` : null });
-      let done = 0;
-      const prepared = [...files];
+      const selectionKey = selectionRef.current.key;
+      const current = () => aliveRef.current && !controller.signal.aborted
+        && abortRef.current === controller && selectionRef.current.key === selectionKey;
       try {
+        const byFile = new Map<File, SelectedVideo>();
+        for (const pick of picksRef.current) {
+          const cached = readRef.current.get(pick.id);
+          if (cached?.file === pick.file) byFile.set(pick.file, cached.video);
+        }
+        const support = await videoTranscodeSupport();
+        if (!current()) return null;
+        const plans = files.map((file) => {
+          const video = byFile.get(file);
+          if (!video?.source) return null;
+          const chosen = stopForVideo(video, stop);
+          if (chosen === SOURCE_STOP) return null;
+          const plan = planVideoSend(video.source, chosen, support, currentFacts.encodable.has(pairKey(video.id, chosen)));
+          return plan.action === "transcode" ? { file, plan } : null;
+        });
+        const total = plans.filter(Boolean).length;
+        const origins = new Map<File, number>();
+        if (!total) return { files: [...files], origins };
+
+        setProgress({ value: 0, position: total > 1 ? `1 из ${total}` : null });
+        let done = 0;
+        const prepared = [...files];
         for (let index = 0; index < plans.length; index += 1) {
+          if (!current()) return null;
           const entry = plans[index];
           if (!entry) continue;
           setProgress({ value: done / total, position: total > 1 ? `${done + 1} из ${total}` : null });
           const encoded = await transcodeVideo(entry.file, entry.plan, {
             signal: controller.signal,
-            onProgress: (value) =>
-              setProgress({ value: (done + value) / total, position: total > 1 ? `${done + 1} из ${total}` : null }),
+            onProgress: (value) => {
+              if (current()) setProgress({ value: (done + value) / total, position: total > 1 ? `${done + 1} из ${total}` : null });
+            },
           });
-          if (controller.signal.aborted) return null;
+          if (!current()) return null;
           // A transcode that failed for any other reason is not a failed send:
           // the picked bytes go, which is the path a browser without an encoder
           // takes anyway.
@@ -213,22 +238,24 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
           }
           done += 1;
         }
+        return { files: prepared, origins };
       } finally {
-        abortRef.current = null;
-        setProgress(null);
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          if (aliveRef.current) setProgress(null);
+        }
       }
-      return { files: prepared, origins };
     },
-    [facts.encodable, stop],
+    [currentFacts.encodable, stop],
   );
 
   return {
-    ready: facts.ready,
+    ready: currentFacts.ready,
     stops,
     stop,
     setStop: setWanted,
     summary,
-    videos: facts.videos.length,
+    videos: currentFacts.videos.length,
     progress,
     cancel,
     prepare,

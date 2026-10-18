@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { useReloadGuard } from "@/hooks/useReloadGuard";
@@ -70,12 +71,61 @@ import { createMentionText, rebaseMentionText, trimMentionText, type MessageMent
 import { AttachTabs, attachPanelElementId, attachTabElementId } from "./AttachTabs";
 import { AttachVideoProgressRow, AttachVideoQualityRow } from "./AttachVideoQuality";
 import { attachPickKind, type AttachPick } from "./attachTypes";
+import { useAppStore } from "@/store/app.store";
+import { isCanvasPhotoCandidate } from "@/lib/photoEncoding";
+import type { PhotoEditResult } from "@/lib/photoEdit";
+import type { VideoEditResult } from "@/lib/videoEdit";
+import type { MediaQuality } from "@/lib/mediaQuality";
+
+type PhotoEditor = typeof import("./AttachPhotoEditor").default;
+type VideoEditor = typeof import("./AttachVideoEditor").default;
+type MediaEditResult = PhotoEditResult | VideoEditResult;
+type EditingMedia = { pick: AttachPick; version: number; selected: boolean; quality: MediaQuality };
 
 const PICKER_KINDS: readonly AttachPickerKind[] = ["camera", "library", "library-original", "file"];
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]):not([type="file"]), [tabindex]:not([tabindex="-1"])';
 
 /** The tallest the desktop panel is drawn, and never past the window. */
 const DESKTOP_CEILING = "min(33rem, calc(100dvh - 11rem))";
+
+function AttachEditorLoading({ failed, onCancel }: { failed: boolean; onCancel: () => void }) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+
+  useLayoutEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusInside = () => buttonRef.current?.focus({ preventScroll: true });
+    const focus = (event: FocusEvent) => { if (event.target !== buttonRef.current) focusInside(); };
+    const keys = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        cancelRef.current();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        focusInside();
+      }
+    };
+    document.addEventListener("focusin", focus, true);
+    document.addEventListener("keydown", keys, true);
+    focusInside();
+    return () => {
+      document.removeEventListener("focusin", focus, true);
+      document.removeEventListener("keydown", keys, true);
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, []);
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Редактор вложения" data-photo-editor-loading=""
+      className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
+      {failed ? <p role="alert">Не удалось открыть редактор. Файл не изменён.</p> : <KubIcon name="spinner" spin size={28} />}
+      <button ref={buttonRef} type="button" onClick={onCancel} className={cn("min-h-11 rounded px-4", FOCUS_RING)}>Отмена</button>
+    </div>
+  );
+}
 
 export interface AttachSheetProps {
   /** Files that open the sheet from outside it: pasted, dropped, or shot on a webcam. */
@@ -143,6 +193,29 @@ export default function AttachSheet({
   const [gallerySelected, setGallerySelected] = useState<string[]>([]);
   const [files, setFiles] = useState<AttachPick[]>([]);
   const [filesSelected, setFilesSelected] = useState<string[]>([]);
+  const [editingMedia, setEditingMedia] = useState<EditingMedia | null>(null);
+  const [PhotoEditorComponent, setPhotoEditorComponent] = useState<PhotoEditor | null>(null);
+  const [VideoEditorComponent, setVideoEditorComponent] = useState<VideoEditor | null>(null);
+  const [editorLoadFailed, setEditorLoadFailed] = useState(false);
+  const editorRef = useRef<EditingMedia | null>(null);
+  const editorFocusRef = useRef<string | null>(null);
+  const originalPicksRef = useRef(new Map<string, AttachPick>());
+  const galleryRef = useRef(gallery);
+  galleryRef.current = gallery;
+  const gallerySelectionRef = useRef(gallerySelected);
+  gallerySelectionRef.current = gallerySelected;
+  const ownerRef = useRef({ userId: useAppStore.getState().currentUser?.id ?? null,
+    epoch: useAppStore.getState().accountEpoch, chatId, topicId });
+  const contextRef = useRef({ chatId, topicId, onClose });
+  contextRef.current = { chatId, topicId, onClose };
+  const lifetimeRef = useRef({ active: true, version: 0 });
+  const scopeIsCurrent = useCallback(() => {
+    const owner = ownerRef.current;
+    const state = useAppStore.getState();
+    return lifetimeRef.current.active && owner.userId === (state.currentUser?.id ?? null)
+      && owner.epoch === state.accountEpoch && owner.chatId === contextRef.current.chatId
+      && owner.topicId === contextRef.current.topicId;
+  }, []);
   // Picked files are in this sheet and nowhere else, so a quiet restart waits
   // for them (`lib/reloadGuard.ts`).
   useReloadGuard(gallery.length + files.length > 0, "attach-sheet");
@@ -184,11 +257,51 @@ export default function AttachSheet({
   const cancelLadderRef = useRef<() => void>(() => {});
   const dragRef = useRef<{ pointerId: number; startY: number; lastY: number; lastT: number; velocity: number; height: number } | null>(null);
 
+  useLayoutEffect(() => {
+    lifetimeRef.current.active = true;
+    const retire = () => {
+      if (!lifetimeRef.current.active) return;
+      lifetimeRef.current.active = false;
+      lifetimeRef.current.version += 1;
+      editorRef.current = null;
+      setEditingMedia(null);
+      galleryRef.current = [];
+      setGallery([]);
+      setFiles([]);
+      setGallerySelected([]);
+      setFilesSelected([]);
+      setCaptionSnapshot(createMentionText(""));
+      originalPicksRef.current.clear();
+      for (const url of urlsRef.current) URL.revokeObjectURL(url);
+      urlsRef.current = [];
+      cancelLadderRef.current();
+      contextRef.current.onClose();
+    };
+    const unsubscribe = useAppStore.subscribe(() => { if (!scopeIsCurrent()) retire(); });
+    if (!scopeIsCurrent()) retire();
+    return () => {
+      unsubscribe();
+      lifetimeRef.current.active = false;
+      lifetimeRef.current.version += 1;
+      editorRef.current = null;
+    };
+  }, [scopeIsCurrent]);
+
+  useLayoutEffect(() => {
+    if (scopeIsCurrent()) return;
+    lifetimeRef.current.active = false;
+    lifetimeRef.current.version += 1;
+    editorRef.current = null;
+    setEditingMedia(null);
+    cancelLadderRef.current();
+    contextRef.current.onClose();
+  }, [chatId, topicId, scopeIsCurrent]);
+
   // ── what is picked ─────────────────────────────────────────────────────────
 
   const addPicks = useCallback(
     (list: File[], source: IncomingFilesSource, originals: boolean) => {
-      if (!list.length) return;
+      if (!list.length || !scopeIsCurrent()) return;
       const make = (file: File): AttachPick => {
         const kind = attachPickKind(file);
         const url = kind === "file" ? null : URL.createObjectURL(file);
@@ -215,7 +328,7 @@ export default function AttachSheet({
       setMenuOpen(false);
       if (refused) showAppAlert(`Можно выбрать не больше ${ATTACH_SHEET_MAX_SELECTION} файлов за раз.`, "Вложения");
     },
-    [filesSelected, gallerySelected],
+    [filesSelected, gallerySelected, scopeIsCurrent],
   );
 
   useEffect(() => {
@@ -229,6 +342,7 @@ export default function AttachSheet({
     () => () => {
       for (const url of urlsRef.current) URL.revokeObjectURL(url);
       urlsRef.current = [];
+      originalPicksRef.current.clear();
     },
     [],
   );
@@ -281,9 +395,11 @@ export default function AttachSheet({
   const activePicks = selectionScope === "file" ? files : selectionScope === "gallery" ? gallery : [];
   const activeSelected = selectionScope === "file" ? filesSelected : selectionScope === "gallery" ? gallerySelected : [];
   const chosen = selectedInOrder(activePicks, activeSelected);
+  const chosenRef = useRef(chosen);
+  chosenRef.current = chosen;
   const chosenFiles = chosen.map((pick) => pick.file);
   const offersOriginal = offersSendWithoutCompression(tab, chosenFiles);
-  const offersHd = offersHdPhotos(tab, chosenFiles);
+  const offersHd = offersHdPhotos(tab, chosen.filter(pick => !pick.preparedPhoto).map(pick => pick.file));
   const selecting = chosen.length > 0;
 
   // The ladder governs the gallery's videos only. A pick from «Файл» goes as it
@@ -294,6 +410,95 @@ export default function AttachSheet({
   const offersLadder = selectionScope === "gallery" && ladder.ready && ladder.stops.length > 1;
   encodingRef.current = encoding;
   cancelLadderRef.current = ladder.cancel;
+
+  const cancelMediaEditor = useCallback(() => {
+    const edit = editorRef.current;
+    editorRef.current = null;
+    editorFocusRef.current = edit?.pick.id ?? null;
+    setEditingMedia(null);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (editingMedia || !editorFocusRef.current || !scopeIsCurrent()) return;
+    sheetRef.current?.querySelector<HTMLButtonElement>(`[data-attach-edit="${editorFocusRef.current}"]`)?.focus({ preventScroll: true });
+    editorFocusRef.current = null;
+  }, [editingMedia, scopeIsCurrent]);
+
+  const editIsCurrent = (edit: EditingMedia) => scopeIsCurrent() && editorRef.current === edit
+    && lifetimeRef.current.version === edit.version
+    && galleryRef.current.some(pick => pick.id === edit.pick.id && pick.file === edit.pick.file)
+    && gallerySelectionRef.current.includes(edit.pick.id) === edit.selected;
+
+  const openMediaEditor = (id: string) => {
+    const pick = galleryRef.current.find(item => item.id === id);
+    if (!pick || !pick.url || (pick.kind !== "video" && !isCanvasPhotoCandidate(pick.file.type)) || encoding || !scopeIsCurrent()) return;
+    // A new edit intent retires an earlier Send, even before its encoder starts.
+    lifetimeRef.current.version += 1;
+    cancelLadderRef.current();
+    const edit: EditingMedia = { pick, version: lifetimeRef.current.version,
+      selected: gallerySelectionRef.current.includes(id), quality: pick.preparedPhoto?.quality ?? photoSendQuality(hd) };
+    editorRef.current = edit;
+    setEditingMedia(edit);
+    setMenuOpen(false);
+    setEditorLoadFailed(false);
+    if (pick.kind === "video") {
+      if (!VideoEditorComponent) void import("./AttachVideoEditor").then(module => {
+        if (editIsCurrent(edit)) setVideoEditorComponent(() => module.default);
+      }, () => {
+        if (editIsCurrent(edit)) setEditorLoadFailed(true);
+      });
+    } else if (!PhotoEditorComponent) void import("./AttachPhotoEditor").then(module => {
+      if (editIsCurrent(edit)) setPhotoEditorComponent(() => module.default);
+    }, () => {
+      if (editIsCurrent(edit)) setEditorLoadFailed(true);
+    });
+  };
+
+  const applyMediaEdit = (edit: EditingMedia, result: MediaEditResult): boolean => {
+    if (!editIsCurrent(edit)) return false;
+    if (!result.changed || result.file === edit.pick.file) { cancelMediaEditor(); return true; }
+    const validKind = edit.pick.kind === "video"
+      ? result.file.type === "video/mp4" && "duration" in result && Number.isFinite(result.duration) && result.duration > 0
+      : isCanvasPhotoCandidate(result.file.type);
+    if (!validKind || !result.file.size || !Number.isFinite(result.width)
+      || !Number.isFinite(result.height) || result.width < 1 || result.height < 1) return false;
+    let url: string;
+    try { url = URL.createObjectURL(result.file); }
+    catch { showAppAlert("Не удалось открыть результат. Изменения не отправлены.", "Вложение"); return false; }
+    if (!originalPicksRef.current.has(edit.pick.id)) originalPicksRef.current.set(edit.pick.id, edit.pick);
+    const replacement = { ...edit.pick, file: result.file, url, edited: true,
+      ...(edit.pick.kind === "image" ? { preparedPhoto: { width: result.width, height: result.height, quality: edit.quality } } : {}) };
+    urlsRef.current.push(url);
+    const originalUrl = originalPicksRef.current.get(edit.pick.id)?.url;
+    if (edit.pick.url && edit.pick.url !== originalUrl) {
+      URL.revokeObjectURL(edit.pick.url);
+      urlsRef.current = urlsRef.current.filter(value => value !== edit.pick.url);
+    }
+    galleryRef.current = galleryRef.current.map(pick => pick.id === edit.pick.id ? replacement : pick);
+    setGallery(current => scopeIsCurrent()
+      ? current.map(pick => pick.id === edit.pick.id && pick.file === edit.pick.file ? replacement : pick) : current);
+    cancelMediaEditor();
+    return true;
+  };
+
+  const restoreMedia = (edit: EditingMedia) => {
+    if (!editIsCurrent(edit)) return;
+    const original = originalPicksRef.current.get(edit.pick.id);
+    if (!original) return;
+    if (edit.pick.url && edit.pick.url !== original.url) {
+      URL.revokeObjectURL(edit.pick.url);
+      urlsRef.current = urlsRef.current.filter(url => url !== edit.pick.url);
+    }
+    galleryRef.current = galleryRef.current.map(pick => pick.id === edit.pick.id ? original : pick);
+    setGallery(current => scopeIsCurrent() ? current.map(pick => pick.id === edit.pick.id ? original : pick) : current);
+    originalPicksRef.current.delete(edit.pick.id);
+    cancelMediaEditor();
+  };
+
+  const toggleGalleryPick = (id: string) => {
+    if (editorRef.current?.pick.id === id) cancelMediaEditor();
+    setGallerySelected(current => toggleSelection(current, id));
+  };
 
   // What floats over the grid is measured rather than assumed: it is one
   // capsule for a photograph and two for a video, and a reserve that is
@@ -313,6 +518,8 @@ export default function AttachSheet({
   }, [selecting, offersLadder, encoding]);
 
   const requestClose = useCallback(() => {
+    if (!scopeIsCurrent()) return;
+    if (editorRef.current) { cancelMediaEditor(); return; }
     // While a video is being encoded, closing means «stop waiting» rather than
     // «throw the selection away»: the encoding stops and the sheet stays with
     // what was picked still in it. Nothing has been uploaded at this point.
@@ -326,10 +533,10 @@ export default function AttachSheet({
     }
     void requestAppConfirm({ title: "Отменить выбор?", confirmLabel: "Отменить выбор", cancelLabel: "Продолжить" }).then(
       (confirmed) => {
-        if (confirmed) onClose();
+        if (confirmed && scopeIsCurrent()) onClose();
       },
     );
-  }, [filesSelected.length, gallerySelected.length, onClose]);
+  }, [filesSelected.length, gallerySelected.length, onClose, scopeIsCurrent, cancelMediaEditor]);
 
   /**
    * The badge, and the sentence it makes true (D-290).
@@ -347,14 +554,16 @@ export default function AttachSheet({
     writePhotoResolution(next);
     showActionFeedback({
       kind: "info",
-      title: photoSendQualitySentence(next),
+      title: chosen.some(pick => pick.preparedPhoto) ? `Неизменённые фото: ${next ? "HD" : "SD"}` : photoSendQualitySentence(next),
       detail: PHOTO_SEND_ORIGINAL_HINT,
       key: PHOTO_SEND_QUALITY_FEEDBACK_KEY,
     });
   };
 
   const send = async (mode: AttachSendMode) => {
-    if (!chosen.length || encoding) return;
+    if (!chosen.length || encoding || editorRef.current || !scopeIsCurrent()) return;
+    const version = lifetimeRef.current.version;
+    const sendPicks = chosen;
     setMenuOpen(false);
     const plan = planAttachSend(chosenFiles, tab === "file" ? "original" : mode);
     if (plan.refused.length) {
@@ -373,10 +582,15 @@ export default function AttachSheet({
     const outgoingCaption = trimMentionText(captionSnapshot);
     const prepared = plan.compress ? await ladder.prepare(plan.send) : { files: plan.send, origins: undefined };
     // Cancelled: the selection stays where it was and nothing is sent.
-    if (!prepared) return;
+    if (!prepared || !scopeIsCurrent() || lifetimeRef.current.version !== version
+      || chosenRef.current.length !== sendPicks.length
+      || !sendPicks.every((pick, index) => chosenRef.current[index]?.id === pick.id && chosenRef.current[index]?.file === pick.file)) return;
+    const preparedPhotos = new Map(sendPicks.flatMap(pick => pick.preparedPhoto && prepared.files.includes(pick.file)
+      ? [[pick.file, pick.preparedPhoto] as const] : []));
     onSendMedia({
       files: prepared.files,
       originalSizes: prepared.origins,
+      preparedPhotos,
       compress: plan.compress,
       caption: outgoingCaption.content,
       mentionEntities: outgoingCaption.mentionEntities,
@@ -639,8 +853,9 @@ export default function AttachSheet({
               entries={galleryEntries}
               picks={gallery}
               selected={gallerySelected}
-              onToggle={(id) => setGallerySelected((current) => toggleSelection(current, id))}
+              onToggle={toggleGalleryPick}
               onMove={(id, direction) => setGallerySelected((current) => moveSelected(current, id, direction))}
+              onEdit={encoding ? undefined : openMediaEditor}
               reserveBottom={selecting ? floatingHeight + 24 : 0}
             />
           )}
@@ -668,11 +883,14 @@ export default function AttachSheet({
     </div>
   );
 
+  if (!scopeIsCurrent()) return null;
+
   return (
     <>
       <div
         aria-hidden="true"
         data-testid="attach-sheet-backdrop"
+        inert={editingMedia ? true : undefined}
         onClick={requestClose}
         className={cn("fixed inset-0 z-40", phone && "kub-message-scrim")}
       />
@@ -680,6 +898,8 @@ export default function AttachSheet({
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
+        aria-hidden={editingMedia ? true : undefined}
+        inert={editingMedia ? true : undefined}
         aria-labelledby={titleId}
         data-testid="attach-sheet"
         data-attach-shape={shape}
@@ -720,6 +940,28 @@ export default function AttachSheet({
           );
         })}
       </div>
+      {editingMedia && scopeIsCurrent() && createPortal(editingMedia.pick.kind === "video" ? (
+        VideoEditorComponent ? <VideoEditorComponent
+          key={`${editingMedia.pick.id}-${editingMedia.version}`}
+          file={editingMedia.pick.file}
+          url={editingMedia.pick.url!}
+          onApply={result => applyMediaEdit(editingMedia, result)}
+          onCancel={cancelMediaEditor}
+          onRestore={originalPicksRef.current.has(editingMedia.pick.id) ? () => restoreMedia(editingMedia) : undefined}
+        /> : <AttachEditorLoading failed={editorLoadFailed} onCancel={cancelMediaEditor} />
+      ) : PhotoEditorComponent ? (
+        <PhotoEditorComponent
+          key={`${editingMedia.pick.id}-${editingMedia.version}`}
+          file={editingMedia.pick.file}
+          url={editingMedia.pick.url!}
+          quality={editingMedia.quality}
+          onApply={result => applyMediaEdit(editingMedia, result)}
+          onCancel={cancelMediaEditor}
+          onRestore={originalPicksRef.current.has(editingMedia.pick.id) ? () => restoreMedia(editingMedia) : undefined}
+        />
+      ) : (
+        <AttachEditorLoading failed={editorLoadFailed} onCancel={cancelMediaEditor} />
+      ), document.body)}
     </>
   );
 }
