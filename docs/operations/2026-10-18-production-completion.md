@@ -44,18 +44,31 @@ host ports, production mounts or network egress; the driver uses an existing
 cached Node image with a clean environment, not the production worker command.
 
 The first attempt failed at Realtime startup. Adding the previously established
-bounded Erlang schedulers/IPv4 distribution allows service and tenant boot. The
-next actual SDK attempts refuse MOUNT readiness: all six sockets are open,
-HTTP reads/open RPCs return200, old clients load their initial own row, while
-current hooks receive no own marker and correctly remain unready. A separate
-clone observation shows five feed subscriptions, seven markers, caught-up
-wal2json/pgoutput slots and a streaming connection. These facts do not yet prove
-the causal RLS/CDC/client boundary or accept any override-policy case.
+bounded Erlang schedulers/IPv4 distribution allows service and tenant boot.
+Early SDK attempts refuse MOUNT readiness: all six sockets are open, HTTP open
+returns200, old clients load initial own rows but new clients receive no marker.
+Actual stored claims/live sessions/RLS visibility pass; a real product revival
+produces new markers and restores4/4. No raw PostgreSQL-change frame arrived
+before revival;13 arrive afterwards. The initial cold failure remains recorded.
 
-Next: inspect stored-claim/actual-RLS metadata and one bounded product revival
-discriminator. Preserve the first cold-open failure; never invent frames, consume
-WAL manually, downgrade protocol or enable Topic globally to obtain a green run.
-Every completed attempt has exact container/network cleanup confirmation.
+The decisive cause of the premature test refusal is its4.5s deadline: the actual
+product already allows10s handshake,1s delay and one further10s attempt. No
+production retry patch was warranted. A22s acceptance budget includes both actual
+attempts and1s scheduling margin; real-hook timeout/retry omissions are refused.
+
+Actual run995e35c45096 passes the core wire matrix using SDK2.105.1, ordinary
+JWTs and actual old/current web/Windows ports: baseline, muted-parent enabled-
+child, inverse, independent recipient, legacy account fence, own/foreign/cross-
+session read, retained history, terminal suppression, runtime-OFF rollback and
+same-document reconnect. All four current documents recover automatically,
+without calling the diagnostic revival.183 HTTP requests,25.267s driver time;
+exact container/network cleanup passes. No rows/frames/policy replies are faked.
+
+This is core wire acceptance, not full DDL rollback, held pre-CAS response,
+inherit reset, old Windows, token/session expiry or provider/physical OS proof.
+Next extend the finite matrix at those boundaries, reusing accepted rollback
+evidence only when its exact contracts match. Topic remains globally OFF.
+Never consume WAL manually or downgrade the protocol to make a run green.
 Private operators and metadata-only receipts: `.ops-private/topic-live-20261018/`.
 
 ## Parallel Queue Reconciliation
@@ -69,5 +82,7 @@ Private operators and metadata-only receipts: `.ops-private/topic-live-20261018/
   with a real ACL grant-option omission control, timing and cleanup.
 - A newer-only readonly intake finds9 new tester entries after the Oct15 tuple
   cursor:6 text,1 audio,2 images. Content analysis is in progress in ignored
-  private storage. Do not turn this count into9 confirmed defects, repeat old
-  media OCR or copy personal content into the repository.
+  private storage. Local offline semantic extraction encountered a grammar error
+  and then a timeout; this is not evidence of no feedback. Preserve all9 aliases
+  pending semantic admission; do not repeat accepted OCR/ASR or copy personal
+  content into the repository.

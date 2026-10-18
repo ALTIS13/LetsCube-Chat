@@ -6,10 +6,12 @@ Owner authorizes reviewed production rollout and safe migrations throughout.
 Current stage: Topic compatibility/consumer acceptance, runtime still OFF;
 accepted Stable24 remains the baseline. See the
 [execution record](operations/2026-10-18-production-completion.md):68 affected
-checks pass; actual isolated schema/tenant/QA seed boot passes, but SDK MOUNT
-readiness refuses absent markers. Next: stored-claim/RLS and bounded product
-revival discriminator, not a global enable. Newer-only Nikita intake has9 entries,
-analysis in progress. No production mutation or device/rental allocation.
+checks pass; actual isolated core policy/read/rollback/reconnect wire passes.
+All4 current hooks automatically recover cold CDC startup using the existing
+10s+1s retry contract; premature4.5s test deadline was corrected, not product code.
+Next: inherit/oldWindows/staleCAS, then pending-response/provider cases, not a
+global enable. Nikita's9 newer entries are retained; semantic extraction failed,
+bounded private normalization continues. No production mutation/device/rental.
 
 **Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with

@@ -4500,9 +4500,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     pass with synchronous layout retirement. Affected GREEN6/6 includes the
     cleanup-timing mutant and live control; historical61 are not replayed.
     Independent delta review accepts with no P1/P2; coordinator post-review
-    typecheck passes. Narrow main build/runtime checks remain pending.
-    Android candidate18 predates this fix; do not claim bundled Android parity
-    or explain D-349/natural OS delivery from these consumer tests.
+    typecheck passes. Both81b28cb8 and323c4988 are included in deployed web5af58c2b
+    and published Android24; Git/build/deployment are no longer pending.
+    D-356-specific authenticated held-response/action-lifetime cases remain:
+    ordinary Auth sameUID/SID1 ->SID2 without reload, then release the held old
+    bell read/access response; require no stale navigation/select/jump/alert and
+    a working new action. Invite retirement and replacement/manual-navigation
+    delayed jumps remain separate. Existing PWA/Android23 tap/logout acceptance
+    is reused, not relabelled as these specific runtime cases or D-349's cause.
     [Cause and acceptance boundary](operations/2026-10-11-notification-click-lifetime.md).
 
 104. `[x]` Pending media positions belong to the message/resource, **D-365**.
@@ -4510,7 +4515,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     pending inline seek through handoff and exact retirement are accepted.
     Actual90/90 plus native omission controls, adjacent59/59, typecheck/build,
     independent-review P2 fix pass and narrow59f1fe8b runtime/rollback/smoke pass.
-    Android Stable21 predates this source; no new native acceptance is inferred.
+    Android Stable24 includes this source; physical media-lifetime acceptance
+    remains distinct from its verified guest upgrade and bundled-asset parity.
     [Evidence](operations/2026-10-15-media-position-lifetime.md).
 
 105. `[~]` Voice/video recorder mode feedback, **D-366**. In-flow row measured
@@ -4519,7 +4525,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     WebKit final delta1/1 plus reused9/9, adjacent105/105, typecheck/build pass.
     Shared-web a07c5ae6 exact healthy image, old/new markers, JS+SW parity,
     retained rollback and anonymous smoke pass. Embedded/native packages and
-    physical acceptance remain separate; Android Stable22 unchanged.
+    physical acceptance remain separate; Android Stable24 now includes this
+    source, without a new physical recorder-mode acceptance claim.
     [Evidence](operations/2026-10-16-recorder-mode-feedback.md).
 
 ## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them

@@ -86,13 +86,18 @@ notification decision/read RPCs; current and pinned old client sources.
   without replacing the SDK, parser, read RPC or reconnect with a fake remount.
 - [x] Capture fresh schema-only PG17 and numeric Realtime migrations; start a
   bounded internal PG/PostgREST/Realtime clone with fresh QA-only credentials.
-  Actual schema/tenant/fresh registration seed boot passes; the SDK mount still
-  refuses readiness, so policy/read/rollback cases are NOT accepted yet.
+  Actual schema/tenant/fresh registration seed boot passes. Core wire995e35c45096
+  now passes policy/read/runtime-OFF/reconnect with automatic cold recovery;
+  full matrix/provider/OS acceptance remains distinct and unfinished.
 - [ ] Exercise ordinary JWTs/current+old hooks: parent-muted child-enabled,
   inverse, independent recipient positive, own/foreign/cross-session read,
   retained history, terminal suppression, rollback and same-document reconnect.
 - [ ] Repair only demonstrated defects, review, then run affected checks and
   actual provider/device canaries before a backup/CAS/readback global rollout.
+- [ ] For D-356/#95 hold a real bell read/access response across ordinary Auth
+  sameUID/SID1 ->SID2 without reload; release it and require no stale continuation
+  while a new action works. Cover invite retirement and replaced/manual jumps
+  separately. Its source/browser fixes are already in web/Android24.
 - [ ] Record final runtime state and cleanup; close only covered tracker parts.
 
 ## Task2: Nikita Intake and Synchronization (#2,52--53,79,83--87)
