@@ -25514,6 +25514,17 @@ No markup/style, schema, provider or permission changes. Android candidate18
 does not contain the fix. No natural FCM/card-click or D-349 explanation follows.
 [Evidence and boundary](operations/2026-10-11-notification-click-lifetime.md).
 
+**2026-10-18 actual release follow-up:** the source fix is in current web and
+Android24--26; candidate18 above is historical. Actual shared-web76749ab0ab0f
+holds a genuine access HTTP200 before consumer, then performs ordinary local
+UI logout/login: same document/UID, new SID, actual HTTP/Realtime identity.
+A new notice opens/jumps to its exact message; releasing the original reply
+finishes normally and all7 observed late-effect counters stay zero. Exact2
+message tombstones/scrubbed read notices and all3 fresh-SID cleanup pass.
+Held-read/settings/invite/manual-jump and native cases are still open; this does
+not establish physical FCM activation or close the entire defect family.
+[Current execution](operations/2026-10-18-production-completion.md).
+
 ## D-365 `[x]` Pending media position survives its message or is lost on handoff
 
 **Status:** P2 reproduced and repaired; shared-web59f1fe8b rollout accepted
@@ -25755,7 +25766,7 @@ signer/Firebase/parity, actual Realme in-place guest upgrade and public APK hash
 checks. Authenticated physical FIFO/new FCM/OEM matrix is not claimed.
 [Evidence and exact remaining scope](operations/2026-10-18-outbox-restore-and-topic-wire.md).
 
-## D-368 `[~]` Ordinary logout terminates sessions on other devices
+## D-368 `[x]` Ordinary logout terminates sessions on other devices
 
 Medium account/multi-device correctness, found2026-10-18 while preparing device
 QA. Both ordinary `useSignOut` and `useUser.signOut` invoked Auth without options.
@@ -25773,6 +25784,12 @@ Actual candidate callback + installed SDK + production Auth: two fresh owned QA
 SIDs, logoutA204 removes onlyA; B survives and actually refreshes with the same
 SID. All6 older SIDs remain; both fresh SIDs are then retired and independently
 absent in DB. No global logout is dispatched, no SQL mutation or device claim.
-Candidate is not yet deployed or embedded in Stable25. Android26 metadata is
-prepared; rendered web/current-device acceptance and release remain.
+Released source14686afd, sole-healthy web buildb23d4adce4f05bb0 with exact
+public/container parity. Actual rendered menu/confirmation logout returns to
+the public home in the same document; current SID is absent, the other SID
+actually refreshes and all6 prior SIDs survive. Exact fresh-session cleanup
+passes. Two additional browser callback controls bring affected coverage to97.
+Android0.1.25/build26 is Stable after original signer/Firebase/assets verification,
+actual Realme25 ->26 guest/data-retaining upgrade and full public APK hash;
+25 rollback remains. Authenticated native UI/logout/OEM acceptance stays separate.
 [Current execution](operations/2026-10-18-production-completion.md).

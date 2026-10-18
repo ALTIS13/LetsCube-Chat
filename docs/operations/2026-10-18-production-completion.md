@@ -335,7 +335,7 @@ repair; shell0.2.14 is unchanged. No production SQL mutation, A063 or paid renta
 Next: Topic activation isolated rehearsal/device canary, D356 held new-SID
 actions and D342 package-only restore; the full completion plan is still active.
 
-## D-368 Ordinary Logout Scope (Candidate)
+## D-368 Ordinary Logout Scope (Released)
 
 Preparing multi-device QA exposed an unrelated actual user-visible defect:
 ordinary `useSignOut` and `useUser.signOut` call the installed auth-js2.105.1
@@ -364,3 +364,75 @@ absent, target unchanged. This is actual Auth/SDK/callback proof, not rendered
 web or native-device acceptance. No global logout, SQL mutation, new profile,
 push registration or device operation is made. Native25 remains immutable;
 Android0.1.25/build26 is reserved for this repair. Deployment/upgrade follow.
+
+### Actual Rendered Exit and Stable26
+
+The preceding candidate paragraph is historical. Source14686afd is now the sole
+healthy web image, buildb23d4adce4f05bb0, with exact public/container HTML/JS/SW
+parity. New local-scope markers occur twice; the old bundle has none. Actual
+rendered Menu -> Logout -> confirmation in isolated390 Chromium returns to the
+public home in the same document. Auth204/current SID absence, second SID's real
+refresh, all6 older SIDs preserved and exact fresh-session cleanup pass. Captures
+are off; no personal data or global logout is dispatched.
+
+Two preliminary canaries refused harness assumptions: public home presents a
+login LINK, not a LoginForm BUTTON; guest release manifests require a narrow
+unauthenticated GET allowance. Their exact fresh sessions are retired. Corrected
+v3 passes; no product patch or blind replay is inferred from those refusals.
+Two browser callback controls bring affected coverage to97, with typecheck.
+
+Android0.1.25/build26 embeds14686afd. Genuine Vite1m21s and Gradle1m8s exercise
+the corrected minute-scale observer. Native build2216b11d909dbe7b, original sole
+APK-v2/AAB signer, all4 Firebase values, QA=false/logging=none/no remote URL,
+web/config/DEX parity and known-secret scan pass. APK7,755,719B, SHA256
+`7198c1206b49c6e2575b0e1ca8ee247925eb4cfbac7274986ff2acecf78e5bae`;
+AAB7,387,471B, SHA256
+`65348aec59d2edc88ca7f7c6e959652bdbb588b8c769838cd1987827569f88b0`.
+Realme25 ->26 retains UID/data/first-install, opens the guest UI, native fatal0;
+no clear/uninstall or credential attempt is used. Locked publication/CAS,
+Stable25 rollback and independent whole public APK hash pass at14:31:02Z,
+mandatory=false. Native authenticated logout/Topic/OEM cases remain separate;
+unchanged ordinary FCM acceptance from23 is reused. Windows shell0.2.14 stays.
+
+### Topic Activation Rehearsal and Sealed Recovery Delta
+
+Fourth isolated rehearsal c8901ef3d64a passes in72.496s, including real operator
+COMMIT with deliberately discarded ACK, separate ON inspect with zero replay,
+ordinary preference CAS, fresh ON archive and compatible OFF. Canonical rollback
+positive, actual raising guards and corrupt-archive refusal pass. All12 complete
+table snapshots retain their exact post-ON state through OFF, including legitimate
+preference/fence/terminal revisions and unread history. Clone cleanup passes.
+Earlier three refusals are retained as instrument/fixture corrections, not
+product defects. Three already accepted archive negatives were reused, not run
+again. No fifth clone is needed for this boundary. Production Topic stays OFF;
+physical Web/FCM recipients and final backup/CAS/readback are still outstanding.
+
+D342 V3 closed tools are actually staged and independently verified,35 files
+plus manifest. Host Python/Docker/cached PG17 exist, but host Node is absent.
+Local V4-r2 preparation separates RO cached Node/parser phases from host Python
+restore and exact owned PG cleanup. A nonowner, nondependent retained schema
+grant-option target is bound across phases; no target must refuse before PG.
+Its32 local controls are not actual standalone restoration. Seal/R6/V3 bytes
+remain intact; no new dump, production SQL or rental is made for this preparation.
+V4-r2 staging and independent readback then pass:38 declared files plus manifest,
+1,646,600B,0700/0600/nlink1, no extras. First run2b0a986f241e Node preflight
+refuses before PG; exact CID cleanup/absence passes. This is retained as a
+specific unresolved instrument/runtime boundary, not a recovery PASS or a reason
+to silently rerun. Production data/services and the sealed payload stay intact.
+
+### D356 Actual Held Access Across UI Reauthentication
+
+Actual76749ab0ab0f passes in29.734s on deployed14686afd. Fresh SID1 was initially
+restored from ordinary API Auth into an isolated browser (not UI login proof).
+The real Bell action's genuine52-byte access HTTP200 was held after server
+completion and before its consumer. Ordinary Menu/Logout/confirmation, public-
+home login link and real LoginForm then produce sameUID/newSID2 in the SAME
+document, without injected Auth events, store/epoch mutation or reload.
+SID1 is absent, SID2 is live and observed in actual HTTP and SDK Realtime token.
+A second newly produced message/notice routes and jumps to its exact target.
+Releasing the old unchanged reply produces requestfinished, not an abort, and
+all7 navigation/selection/jump/alert/refresh/access/old-SID deltas stay zero.
+Two exact owner-created messages are deleted normally and tombstoned, their
+notices scrubbed/read; all3 fresh SIDs are locally logged out and independently
+absent, browser closed. Topic stays OFF. This covers held access only, not held
+read/settings, invite retirement, manual/replaced jump or native-device cases.

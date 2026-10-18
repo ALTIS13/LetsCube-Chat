@@ -43,7 +43,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK25 is immutable; use the next version/build for new code.
+  parity. Published APK26 is immutable; use the next version/build for new code.
 
 ## Review Focus
 
@@ -73,6 +73,10 @@ this document coordinates their remaining deliverables, not a replacement design
   previous24 rollback retained. Signed-in native recovery remains separate.
 - [x] Topic runtime remains OFF. Ordinary production feed-v2 admission/read is
   accepted, but does not substitute for override compatibility or provider proof.
+- [x] D-368 local ordinary logout released at14686afd/webb23d4adce4f05bb0 and
+  Android0.1.25/build26. Actual rendered local exit/other-SID refresh,97 affected
+  checks, original signer/Firebase/assets, Realme25 ->26 guest/data retention
+  and public APK bytes pass;25 rollback retained. Native Auth UI stays separate.
 
 Evidence: [notifications release](../../operations/2026-10-18-cursor-return-notifications.md)
 and [FIFO/Topic continuation](../../operations/2026-10-18-outbox-restore-and-topic-wire.md).
@@ -118,10 +122,21 @@ notification decision/read RPCs; current and pinned old client sources.
   No standalone refreshSession gate was required by the Topic plan.
 - [ ] Repair only demonstrated defects, review, then run affected checks and
   actual provider/device canaries before a backup/CAS/readback global rollout.
+- [x] Rehearse the actual activation operator on isolated PG: c8901ef3d64a passes
+  canonical rollback positive, raising guards, COMMIT with deliberately lost ACK,
+  separate ON inspect/no replay, ordinary CAS and compatible OFF. All12 tables
+  retain their exact post-ON state through OFF; clone cleanup passes. No fifth
+  repetition is required; this is not production/provider/device acceptance.
 - [ ] For D-356/#95 hold a real bell read/access response across ordinary Auth
   sameUID/SID1 ->SID2 without reload; release it and require no stale continuation
   while a new action works. Cover invite retirement and replaced/manual jumps
   separately. Its source/browser fixes are already in web/Android24.
+- [x] Actual held-access76749ab0ab0f: genuine HTTP200 held before consumer;
+  ordinary UI local logout/login gives sameUID/newSID in the same document.
+  New-SID HTTP/Realtime token and exact second notice route/jump pass. Old reply
+  completes unchanged; all7 observable late counters remain zero. Two owned
+  messages tombstoned/notices scrubbed/read and all3 fresh SIDs absent. Held
+  read/settings/invite/manual-jump/native cases are not inferred from this.
 - [ ] Record final runtime state and cleanup; close only covered tracker parts.
 
 ## Task2: Nikita Intake and Synchronization (#2,52--53,79,83--87)
@@ -129,8 +144,8 @@ notification decision/read RPCs; current and pinned old client sources.
 **State:** IN PROGRESS; shared-web warm/offline baseline and reproduced redundant
 recovery/sanitizer read repair are accepted and released in web/Android25.
 Remaining native/intake boundaries are not closed by these cases.
-New D-368 ordinary global logout is reproduced and repaired locally; actual
-two-session Auth/refresh and cleanup pass. Shared/native publication follows.
+D-368 ordinary global logout is repaired and released on web/Android26; actual
+rendered exit, two-session Auth/refresh and cleanup pass. Native Auth UI remains.
 **Files:** Existing intake reports, chat cache/reconnect/outbox modules and their
 focused tests; `docs/PRODUCTION_PRIORITY_TRACKER.md` and defect registry.
 **Interfaces:** Account-owned warm history, stable client-message identity,
@@ -153,11 +168,11 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   bytes pass. This is not signed-in Android recovery acceptance.
 - [ ] Close microphone84, read-state85, task-reload86, sound83 and emoji79 through
   their own changed-input cases; do not infer device acceptance from source.
-- [ ] Release D-368 local ordinary logout:3 actual callback/SDK REDs before the
-  two-call repair;95 affected checks/typecheck and actual owned two-session Auth
-  survival/refresh pass, all6 prior SIDs preserved. Verify rendered web exit,
-  next immutable Android26 upgrade/public bytes, leaving security-wide flows
-  and current-install browser preview retirement intact.
+- [x] Release D-368 local ordinary logout:3 actual callback/SDK REDs before the
+  two-call repair;97 affected checks/typecheck and actual owned two-session Auth
+  survival/refresh pass, all6 prior SIDs preserved. Actual rendered web exit,
+  immutable Android26 upgrade/public bytes pass. Security-wide flows and current-
+  install browser preview retirement remain intact; native Auth UI is separate.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
   boundary and publish independently accepted slices.
 
@@ -195,6 +210,12 @@ an already initialized clone whose prerequisites come from production.
   `a6db6568a77ed02f0b5a2cbb68081dbee1ab4b6054372cbc89633acc16b50115`.
   This payload-only seal still lacks the closed tool/calibration manifest and
   standalone restore entrypoint; it is not D342 recovery acceptance.
+- [x] Stage and independently verify V3 closed tools:35 files plus manifest,
+  SHA c663b9da434658e41f6d560cdac1b0cd056c676914803617a35a1df73f46d9ca.
+  Host has no Node. V4-r2 separates cached RO Node/parser from host Python/PG;
+  32 local controls pass. V4-r2 staging/readback39 files also passes; first Node
+  preflight refuses and exact CID is cleaned. No PG restore ran; diagnosis and
+  actual standalone restoration remain open.
 - [ ] Complete the isolated backup-alone rehearsal without touching production
   data/services: a clean same-image PG17 target consumes only the retained sealed
   package; reuse accepted comparators. Omit one concrete ACL grant-option in the

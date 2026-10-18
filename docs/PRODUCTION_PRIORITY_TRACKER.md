@@ -2,13 +2,24 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
-**Current candidate,2026-10-18:** D-368 ordinary logout wrongly uses the SDK's
+**Latest release,2026-10-18:** D-368 ordinary logout previously used the SDK's
 global default, terminating other devices. Two ordinary calls now specify local
 scope; security-wide password recovery is unchanged. Three actual callback/SDK
-REDs,95 affected checks/typecheck, independent review and actual two-session
+REDs,97 affected checks/typecheck, independent review and actual two-session
 Auth/refresh/cleanup pass, all6 prior SIDs retained. Additional browser-order/
-failure controls cover both callbacks. Android26 metadata is prepared, not
-published; Stable25 below remains immutable. Next: rendered web/native release.
+failure controls cover both callbacks. Actual rendered menu/confirmation logout
+and another SID's real refresh pass in the same document, with exact cleanup.
+Web14686afd/buildb23d4adce4f05bb0 has sole-healthy public/container parity.
+Android0.1.25/build26 is Stable, mandatory=false: original signer/Firebase/assets,
+Realme25 ->26 guest/data-retaining upgrade and full public APK bytes/SHA pass;
+25 rollback retained. Native authenticated UI/logout remains a separate case.
+Topic isolated activation c8901ef3d64a now passes actual retained-data COMMIT,
+lost-ACK inspection and compatible OFF; production Topic remains OFF. D342 V3
+tools and V4-r2 tools are staged. First Node preflight refuses with exact CID
+cleanup/no PG restore; split-phase recovery remains unaccepted.
+Next: bounded physical Topic canary, remaining D356 actions and D342 restore.
+Actual D356 held-access76749ab0ab0f now passes genuine same-document UI Auth,
+new-SID route/jump, zero late effects and exact cleanup; other actions stay open.
 [Current execution](operations/2026-10-18-production-completion.md).
 
 **Latest continuation, 2026-10-18:** reviewed chat/task recovery fixes0bdffb80 /

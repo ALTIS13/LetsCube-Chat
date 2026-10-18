@@ -3,28 +3,39 @@
 **Active plan,2026-10-18:** Codex owns the
 [production completion plan](superpowers/plans/2026-10-18-production-completion.md).
 Owner authorizes reviewed production rollout and safe migrations throughout.
-Stage: chat/task recovery released on web and Android Stable0.1.24/build25;
+Stage: chat/task recovery and local ordinary logout released on web and Android
+Stable0.1.25/build26;
 Topic runtime still OFF. Canonical branch/worktree below, coordinator integrates.
 See [execution evidence](operations/2026-10-18-production-completion.md): reviewed
 Task0bdffb80/cachea3cfd1f2 pass223 affected checks/typecheck/build. Actual deployed
 offline recovery retains15 rows/0px anchor, with2 history reads instead of3;
 actual task rejoins cause one automatic parent read/latest title, drafts intact.
-All fresh QA SIDs and synthetic tasks are retired. Web image6f41cccc is sole
-healthy with public/container parity, product build33dfcab91705590b. Android25
-original signer/Firebase/assets pass, actual Realme24 ->25 preserves UID/data/
+All fresh QA SIDs and synthetic tasks are retired. Web image14686afd is sole
+healthy with public/container parity, product buildb23d4adce4f05bb0. Android26
+original signer/Firebase/assets pass, actual Realme25 ->26 preserves UID/data/
 first install and opens guest UI, fatal0. Stable public bytes/SHA verified,
-mandatory=false, previous24 rollback retained. Unchanged FCM proof from23 reused;
+mandatory=false, previous25 rollback retained. Unchanged FCM proof from23 reused;
 no signed-in Android recovery or Topic device acceptance is claimed.
-Next: bounded physical Topic canary after isolated activation rehearsal; parallel
-D356 same-UID/new-SID actions and D342 sealed-package-only restore entrypoint.
+Next: bounded physical Topic canary after accepted isolated activation rehearsal; parallel
+D356's remaining actions and D342 sealed-package-only restore entrypoint.
+Actual D356 held-access76749ab0ab0f passes same-document UI reauthentication,
+new-SID notice/jump and zero stale effects after the original reply completes;
+exact two-message/three-session cleanup passes. Other D356 cases remain open.
 Accepted core/held/fence/Edge/legacy cases are not to be replayed. Nikita's9
 entries remain semantic-PENDING, not confirmed by ungrounded paraphrases.
 No production SQL mutation, A063 or rental; no live coordinator exec is held.
-D-368 ordinary logout currently uses the SDK's global default. Candidate changes
-only two ordinary calls to local scope;3 actual callback/SDK REDs,95 affected
-checks/typecheck and real two-session Auth/refresh/cleanup pass. All6 prior SIDs
-remain. Android26 metadata is prepared; source/rendered/native release pending,
-not included in Stable25. Security-wide password recovery remains unchanged.
+D-368 is released: only two ordinary calls change from the SDK global default to
+local scope. Three actual callback/SDK REDs,97 affected checks, typecheck and
+real two-session Auth/refresh pass. Actual rendered menu/confirmation logout
+returns to the public home in the same document; the other SID refreshes and all6
+prior SIDs remain. Exact fresh-session cleanup passes. Native authenticated UI
+logout remains a separate matrix case; security-wide recovery is unchanged.
+Topic activation rehearsal c8901ef3d64a passes real COMMIT/lost-ACK/readback/OFF
+with all12 tables retained and exact clone cleanup; production remains OFF.
+D342 V3 tools are staged/verified, but host Node is absent. Reviewed V4-r2
+split-phase tools are also staged/verified. Its first Node preflight refuses;
+exact CID is absent after cleanup, no PG restore ran. Diagnosis is pending,
+not standalone restore acceptance or a new dump.
 
 **Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with
