@@ -70,9 +70,9 @@ export type BottomNavDestination =
 /**
  * Every destination the capsule can offer, in screen order.
  *
- * «Задачи» is last because it is the one that can be absent, and a row whose
- * items move when a right changes is harder to aim at than a row that grows at
- * its end.
+ * «Задачи» is the optional last destination. With justify-around, adding it
+ * still moves every hitbox; BottomNav waits for account-owned access before
+ * making this row interactive.
  */
 export const BOTTOM_NAV_DESTINATIONS: readonly BottomNavDestination[] = [
   { id: "chats", label: "Чаты", icon: "chatBubble", route: false, gated: false },

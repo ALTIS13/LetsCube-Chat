@@ -1,16 +1,35 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
-import { KubIcon } from "@/components/kub";
+import { KubIcon, KubStableSkeleton } from "@/components/kub";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { bottomNavDestinations, type BottomNavDestination } from "@/lib/bottomNavDestinations";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
-export function BottomNav({ onSelect }: { onSelect?: (entry: BottomNavDestination) => void } = {}) {
+type BottomNavProps = { onSelect?: (entry: BottomNavDestination) => void };
+
+export function BottomNav(props: BottomNavProps = {}) {
+  const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
+
+  // Access hooks have local state; never reuse it for another account lifetime.
+  return <AccountBottomNav key={`${userId ?? "guest"}:${accountEpoch}`} {...props} />;
+}
+
+function AccountBottomNav({ onSelect }: BottomNavProps) {
   const [location, setLocation] = useLocation();
-  const { canAccessTasks } = useTaskAccessGate();
+  const { canAccessTasks, checking, locationIds } = useTaskAccessGate();
+  const accessKey = `${canAccessTasks}:${locationIds.join(",")}`;
+  const [settledAccess, setSettledAccess] = useState<string | null>(null);
+  // Routing can enable location checks one commit before their effect starts.
+  // A changed result must settle through effects before exposing its hitboxes.
+  useEffect(() => {
+    setSettledAccess(checking ? null : accessKey);
+  }, [checking, accessKey]);
+  const loading = checking || settledAccess !== accessKey;
   const { mobileSection, setMobileSection } = useAppStore();
   const isOnTasksRoute = location.startsWith("/tasks");
   const nativeAndroid = isNativeAndroid();
@@ -39,6 +58,7 @@ export function BottomNav({ onSelect }: { onSelect?: (entry: BottomNavDestinatio
   return (
     <nav
       aria-label="Навигация"
+      aria-busy={loading}
       // A capsule that floats over the list, and sits in a reserved slot on
       // the profile tab. Telegram's, measured: about 53dp tall and clear by
       // about 40dp, fully rounded, with the content visible past its edges.
@@ -68,7 +88,11 @@ export function BottomNav({ onSelect }: { onSelect?: (entry: BottomNavDestinatio
       // the inset included, so the capsule takes the inset back out of it.
       style={{ height: "calc(var(--kub-bottom-nav) - var(--kub-safe-bottom))" }}
     >
-      {tabs.map((entry) => {
+      {loading ? (
+        <div role="status" aria-label="Загрузка навигации" className="w-full px-4">
+          <KubStableSkeleton width="100%" height="32px" rounded="full" />
+        </div>
+      ) : tabs.map((entry) => {
         const { id, label, icon } = entry;
         const isActive = entry.route ? isOnTasksRoute : mobileSection === entry.id;
         return (

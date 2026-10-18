@@ -2,32 +2,43 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
-**Next reviewed slice:** D369 candidate2dad8198 limits transient post-login
-check-failure cleanup to the newly opened session. Actual callback/SDK RED,
-4 new+7 adjacent checks/typecheck and genuine20.63s build pass. Active-ban and
-security-wide behavior are unchanged. Publication follows; Stable26 immutable.
+**Current source candidate, 2026-10-18:** D-370 `[~]` records the actual installed
+iPhone 17/iOS 26.3.1 LOCATION_ADMIN navbar reflow on public `8ce5e18c`: three active
+tabs become four after permission hydration, and `justify-around` shifts every
+hitbox, allowing the old Profile point to select another destination. The narrow
+BottomNav candidate uses existing loading UI plus UID/epoch-owned settled access;
+role/access hooks and accepted Profile/settings behavior stay unchanged. Actual-
+hook RED -> 9/9 includes four literal omission controls; coordinator Chromium/
+WebKit E2E 4/4 and synthetic 390/1440 pixels in both themes pass, as do WebKit
+desktop-opacity 2/2 and dark finite-animation 1/1. Source review is clean. This is
+not a published or physically verified fix: production and native27 remain open.
+[Defect and evidence](INTERFACE_DEFECT_REGISTER.md#d-370--mobile-navigation-hitboxes-move-while-account-permissions-hydrate).
 
-**Latest release,2026-10-18:** D-368 ordinary logout previously used the SDK's
-global default, terminating other devices. Two ordinary calls now specify local
-scope; security-wide password recovery is unchanged. Three actual callback/SDK
-REDs,97 affected checks/typecheck, independent review and actual two-session
-Auth/refresh/cleanup pass, all6 prior SIDs retained. Additional browser-order/
-failure controls cover both callbacks. Actual rendered menu/confirmation logout
-and another SID's real refresh pass in the same document, with exact cleanup.
-Web14686afd/buildb23d4adce4f05bb0 has sole-healthy public/container parity.
-Android0.1.25/build26 is Stable, mandatory=false: original signer/Firebase/assets,
-Realme25 ->26 guest/data-retaining upgrade and full public APK bytes/SHA pass;
-25 rollback retained. Native authenticated UI/logout remains a separate case.
-Topic isolated activation c8901ef3d64a now passes actual retained-data COMMIT,
-lost-ACK inspection and compatible OFF; production Topic remains OFF. D342 V3
-tools and V4-r2 tools are staged. First Node preflight refuses with exact CID
-cleanup/no PG restore; split-phase recovery remains unaccepted.
-Next: bounded physical Topic canary, remaining D356 actions and D342 restore.
+**Latest accepted checkpoint,2026-10-18:** D369 source `2dad8198` is deployed through
+web image `8ce5e18c`, production build prefix `9b2`: public/container parity and local-
+scope marker2 ->3 pass. Actual callback/SDK503 RED,4 new+7 adjacent checks and
+typecheck support the narrow transient-error cleanup; active-ban/security-wide
+behavior is unchanged. Stable0.1.25/build26 remains immutable and lacks D369.
+Its original signer/Firebase/assets, Realme25 ->26 data-retaining upgrade and
+public APK bytes remain accepted, mandatory=false;25 rollback retained.
+Actual Native26 receipt `0185bbd86af1` now closes ordinary UI login/exact FCM
+binding/local logout plus peer retention/refresh and exact cleanup. No post-
+logout guest frame, transient-login failure, Topic/OEM or recovery claim follows.
+
+D342 sealed-only package-entrypoint case `c2d954b5ecab` passes actual PG17 restore:
+173 tables/124,112 rows, catalog/ACL/settings/roles/default ACL/sequences match;
+same-copy grant-option negative/exact ROLLBACK, DDL768 constraints and independent
+artifact/custody/exact PG+Node cleanup pass. Restore360.972s, verify7.308s.
+No live source DB or new dump; only this retained-snapshot subcase is closed.
+Item82/D-342 remains open for off-host custody/current RPO and wider guarantees.
+Topic isolated activation c8901ef3d64a remains accepted; production Topic is OFF.
+Next: bounded physical Topic canary, remaining D356 actions, the native D369
+release delta and external recovery follow-up. Do not replay accepted cases.
 Actual D356 held-access76749ab0ab0f now passes genuine same-document UI Auth,
 new-SID route/jump, zero late effects and exact cleanup; other actions stay open.
 [Current execution](operations/2026-10-18-production-completion.md).
 
-**Latest continuation, 2026-10-18:** reviewed chat/task recovery fixes0bdffb80 /
+**Earlier continuation, 2026-10-18:** reviewed chat/task recovery fixes0bdffb80 /
 a3cfd1f2 are live; tool/test follow-up6f41cccc is the sole healthy web image,
 build33dfcab91705590b with public/container parity. Actual shared-web offline
 recovery retains15 rows/0px anchor and reduces full history reads3 ->2. Actual
@@ -606,7 +617,7 @@ while the hint was offered **and the page was visible**, not wall clock since it
 ## Current Execution Order
 
 Current as of 2026-10-18; the dated detail under queue items is history, not a
-competing version or permission gate. Web notification text and Android24
+competing version or permission gate. Web notification text and Android26
 are released after physical checks. Finish distinct Topic acceptance next;
 its runtime remains OFF. D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
@@ -632,10 +643,12 @@ rollback and device/provider acceptance gates remain mandatory.
    Topic runtime is still OFF, not implicitly accepted by the Web release.
 4. `[~]` Media25,29,104: positional-intent D-365/104 is released; finish remaining
    albums/HD/original/download/cache cases and the pre-send photo/video editor.
-5. `[~]` Faithful recovery82/D-342: isolated restore must preserve actual ACLs and
-   settings; retain verified before-backup/rehearsal/rollback as a prerequisite
-   for applying database work in the next stage. Old permission-only holds do
-   not override the owner's later standing authority; real technical gates do.
+5. `[~]` Faithful recovery82/D-342: sealed-only entrypoint/rehearsal `c2d954b5ecab`
+   now preserves full catalog/effective ACL/settings/data/sequences, with same-
+   copy grant-option negative, exact rollback, DDL and cleanup. Retain that proof;
+   finish off-host custody/current RPO and wider recovery guarantees separately.
+   Database work still needs its own verified before-backup/rehearsal/rollback;
+   old permission-only holds do not override later standing authority.
 6. `[~]` Trusted media writer/forward/avatar authority78: source/isolated checks
    are not actual durable Storage/provider/runtime acceptance or an applied SQL
    migration. Finish those boundaries before promotion.
@@ -647,8 +660,10 @@ rollback and device/provider acceptance gates remain mandatory.
    containers, search motion, typography, controls and keyboards across shells.
 10. `[~]` Product completion17,19-20,27,36-38: public downloads/changelog,
     profiles/contacts/shared-media depth, scoped roles, tasks/staff and support.
-11. `[~]` Platform acceptance7,9,28: Android Stable0.1.23/build24 is published;
-    original signer/Firebase/assets and actual Realme23 ->24 guest upgrade pass.
+11. `[~]` Platform acceptance7,9,28: Android Stable0.1.25/build26 is published;
+    original signer/Firebase/assets and actual Realme25 ->26 guest upgrade pass.
+    Actual0185 ordinary UI login/binding/local logout and peer refresh pass;
+    immutable26 lacks later D369 and that native error-path case stays open.
     Same-session upgrade/readable FCM/none/tap/logout acceptance from23 is reused.
     Broader OEM/long-session
     checks stay open; iPhone installed PWA modes/tap are separately accepted.
@@ -4254,8 +4269,23 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     [Candidate evidence and remaining gate](operations/2026-10-04-group-vocabulary.md).
     [Owner decision and boundaries](operations/2026-10-04-tester-feedback.md).
 
-82. `[ ]` Verify faithful database recovery, including extension-member ACLs
-    and database settings. **D-342**, measured during the D-338 isolated restore,
+82. `[~]` Verify faithful database recovery, including extension-member ACLs
+    and database settings. **Current2026-10-18:** close ONLY the sealed-only
+    tool/entrypoint/rehearsal subcase `c2d954b5ecab`. Retained payload39 files and
+    V4-r3 tools38+manifest `51fb0150` restore without current production-derived
+    prerequisites:173 tables/124,112 rows,31 roles,27 default ACL entries,
+    GraphQL/net rights/settings/two-index supplements and10 sequences match.
+    Same-copy positive/literal grant-option loss/exact ROLLBACK and independent
+    DDL768-constraint/artifact/custody/exact PG+Node absence pass. Restore360.972s,
+    RO Node verify7.308s, exit0/OOM=false. The unchanged comparator's effective
+    schema-ACL/disjoint-default-order contract passes; literal unfiltered AST
+    equality is not claimed. No new allowlist/source fallback is introduced.
+    Off-host durable custody, current backup cadence/RPO and wider recovery
+    guarantees remain open; cached pinned runtimes are explicit dependencies.
+    [Actual sealed-only proof and remaining limits](operations/2026-10-18-production-completion.md#d342-sealed-only-package-restore-1537z).
+    **Historical diagnosis and prerequisite work below:** preserved evidence,
+    not current runtime status or renewed permission holds. **D-342** was
+    measured during the D-338 isolated restore,
     not an active production outage. Full roles/custom dump restore omitted
     database-level `app.settings.jwt_secret`/`app.settings.jwt_exp` settings and custom USAGE/grant-option rights
     on graphql/graphql_public schemas. Other deltas are explicit-default versus

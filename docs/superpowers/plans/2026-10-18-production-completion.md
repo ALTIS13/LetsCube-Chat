@@ -76,7 +76,12 @@ this document coordinates their remaining deliverables, not a replacement design
 - [x] D-368 local ordinary logout released at14686afd/webb23d4adce4f05bb0 and
   Android0.1.25/build26. Actual rendered local exit/other-SID refresh,97 affected
   checks, original signer/Firebase/assets, Realme25 ->26 guest/data retention
-  and public APK bytes pass;25 rollback retained. Native Auth UI stays separate.
+  and public APK bytes pass;25 rollback retained. Actual Native26 ordinary UI
+  login/binding/logout and peer refresh `0185bbd86af1` pass; other native cases stay
+  separate, including the unclaimed post-logout guest frame.
+- [x] D369 shared-web repair is deployed at `8ce5e18c`/build prefix `9b2` with
+  public/container parity and local-scope marker2 ->3. Immutable26 lacks this
+  later repair; the next native release/error-path case remains open.
 
 Evidence: [notifications release](../../operations/2026-10-18-cursor-return-notifications.md)
 and [FIFO/Topic continuation](../../operations/2026-10-18-outbox-restore-and-topic-wire.md).
@@ -145,7 +150,9 @@ notification decision/read RPCs; current and pinned old client sources.
 recovery/sanitizer read repair are accepted and released in web/Android25.
 Remaining native/intake boundaries are not closed by these cases.
 D-368 ordinary global logout is repaired and released on web/Android26; actual
-rendered exit, two-session Auth/refresh and cleanup pass. Native Auth UI remains.
+rendered web exit and actual Native26 ordinary UI login/binding/local logout,
+peer retention/refresh and cleanup pass. Native transient-error/recovery cases
+remain separate; D369 is deployed on web but absent from immutable26.
 **Files:** Existing intake reports, chat cache/reconnect/outbox modules and their
 focused tests; `docs/PRODUCTION_PRIORITY_TRACKER.md` and defect registry.
 **Interfaces:** Account-owned warm history, stable client-message identity,
@@ -172,11 +179,17 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   two-call repair;97 affected checks/typecheck and actual owned two-session Auth
   survival/refresh pass, all6 prior SIDs preserved. Actual rendered web exit,
   immutable Android26 upgrade/public bytes pass. Security-wide flows and current-
-  install browser preview retirement remain intact; native Auth UI is separate.
-- [ ] Publish D369 transient post-login check cleanup: actual callback/SDK503
-  reproduces global logout/peer failure; candidate2dad8198 changes only bansErr
-  to local. Four new literal checks plus seven adjacent/typecheck pass; preserve
-  active-ban/security-wide semantics and immutable26, release next native batch.
+  install browser preview retirement remain intact. Actual Native26 ordinary UI
+  login/binding/logout `0185bbd86af1` removes its new SID/binding; a peer survives
+  and refreshes, all older SIDs and package identity remain, exact cleanup passes.
+  No post-logout guest frame or Auth-failure injection is claimed.
+- [x] Publish D369 transient post-login check cleanup: actual callback/SDK503
+  reproduces global logout/peer failure; source2dad8198 changes only bansErr
+  to local. Four new literal checks plus seven adjacent/typecheck pass; actual
+  deployed `8ce5e18c`/build prefix `9b2` has public/container parity and marker2 ->3.
+- [ ] Carry D369 into the next native release and accept its affected boundary;
+  preserve active-ban/security-wide semantics and immutable26. Native26's
+  normal-success/logout receipt does not cover the transient error path.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
   boundary and publish independently accepted slices.
 
@@ -197,8 +210,9 @@ metadata and positional intent; preserve original bytes and explicit downloads.
 
 ## Task4: Faithful Recovery (#82/D-342)
 
-**State:** IN PROGRESS; retained payload sealed. Package-only entrypoint/tool
-closure remains; migration-specific rehearsals are already accepted.
+**State:** IN PROGRESS overall; sealed-only package tool/entrypoint/restore
+subboundary is ACCEPTED at `c2d954b5ecab`. Off-host custody/current RPO and wider
+recovery guarantees remain separate; migration-specific rehearsals are reused.
 **Files:** Existing recovery operators, coverage reports and backup contracts.
 **Interfaces:** Backup-alone restoration of roles/ACL/settings/schema/data, not
 an already initialized clone whose prerequisites come from production.
@@ -212,19 +226,35 @@ an already initialized clone whose prerequisites come from production.
   database/new dump:39 files/27,151,442B, all hashes match, original files intact.
   Independent JSON/byte/hash readback passes; manifest
   `a6db6568a77ed02f0b5a2cbb68081dbee1ab4b6054372cbc89633acc16b50115`.
-  This payload-only seal still lacks the closed tool/calibration manifest and
-  standalone restore entrypoint; it is not D342 recovery acceptance.
+  Payload-only closure was not recovery acceptance; the closed tool/entrypoint
+  and actual sealed-only restore are now accepted below.
 - [x] Stage and independently verify V3 closed tools:35 files plus manifest,
   SHA c663b9da434658e41f6d560cdac1b0cd056c676914803617a35a1df73f46d9ca.
   Host has no Node. V4-r2 separates cached RO Node/parser from host Python/PG;
-  32 local controls pass. V4-r2 staging/readback39 files also passes; first Node
-  preflight refuses and exact CID is cleaned. No PG restore ran; diagnosis and
-  actual standalone restoration remain open.
-- [ ] Complete the isolated backup-alone rehearsal without touching production
-  data/services: a clean same-image PG17 target consumes only the retained sealed
-  package; reuse accepted comparators. Omit one concrete ACL grant-option in the
-  restore consumer and require the independent ACL check to refuse it.
-- [ ] Record verified recovery time, exact cleanup and remaining external limits.
+  32 local controls pass. V4-r2 refusals/512MiB OOM proof are retained. V4-r3
+  manifest `51fb0150144e42d0406fd260d77105c63438b45366b865d55ff0e8e469cbbbcf`
+  stages/readbacks all39 files. Node2GiB/fresh host4GiB guard,7 focused controls
+  and canonical clean-exit preflight/custody pass; parser/comparators unchanged.
+- [x] Complete the isolated sealed-only rehearsal `c2d954b5ecab`: fresh cached PG17
+  consumes only retained package/tool bytes, including GraphQL/net ACL/settings/
+  two-index supplements. Full catalog/data/settings/roles/default ACL/sequences
+  match;173 tables/124,112 rows. On the same copy the full comparator accepts the
+  positive, refuses one concrete schema grant-option loss, verifies that exact
+  bit delta and the complete post-ROLLBACK catalog. RLS remains intact.
+- [x] Record actual restore360.972s and RO Node DDL verify7.308s:768 constraints
+  and schema structure pass the unchanged accepted comparator. Literal
+  unfiltered AST equality is NOT claimed (`unfilteredAstEqual=false`). Clean
+  Node exit0/OOM=false, State before cleanup and independent artifact/custody/
+  exact PG+Node CID absence pass. Initial invoker filename refusal is proven
+  NOT_DISPATCHED; hyphen-only dispatch-v2 controls3/3 preserve it, same cohort,
+  no duplicate preflight. No live source DB/new dump/old R6 wrapper is used.
+- [ ] Close only the remaining external recovery boundaries: off-host durable
+  custody, current backup cadence/RPO and wider recovery guarantees. The accepted
+  retained-snapshot case does not close all of item82/D-342 or Task4. Cached
+  pinned PG17/Node and host Python/Docker remain explicit runtime dependencies,
+  not a new air-gap image-export requirement.
+
+Evidence: [actual package-only recovery and limits](../../operations/2026-10-18-production-completion.md#d342-sealed-only-package-restore-1537z).
 
 ## Task5: Trusted Media Authority (#78/D-336--339)
 
@@ -273,12 +303,17 @@ participant lifecycle and group-call state; no duplicate room/call on reconnect.
 
 ## Task8: Interface and Motion (#18,30--31,34,93)
 
-**State:** QUEUED; preserve current glass and accepted focus/reduced-motion fixes.
+**State:** IN PROGRESS; measured D-370 navigation candidate is reviewed, not yet
+published. Preserve current glass and accepted focus/reduced-motion fixes.
 **Files:** Existing navigation, container sizing, search, typography and settings
 components; targeted visual/performance fixtures.
 **Interfaces:** Stable dimensions, actual container width, keyboard/safe-area
 ownership, readable defaults/scale and reduced-motion preference.
 
+- [x] Reproduce actual installed-PWA access-hydration hitbox movement; repair only
+  account-owned readiness. Nine focused checks/four omissions, Chromium/WebKit
+  four cases and synthetic1440/390 pixels in both themes pass. Source review is
+  clean; release/physical post-fix acceptance remain separate.
 - [ ] Measure one uncovered native search expand/collapse or compact-container
   defect, including frame/layout evidence before changing animation.
 - [ ] Verify exact changed elements at1440/390 in both themes and enlarged text;
@@ -321,7 +356,8 @@ privacy, task invalidation, profile history and existing support assignment.
 
 ## Task10: Platform Delta Matrix (#7,9,28)
 
-**State:** IN PROGRESS; Android25 delta released, broader device matrix remains.
+**State:** IN PROGRESS; Android26 is released and its ordinary UI/logout/binding
+subcase is accepted; broader device matrix and native D369 delta remain.
 **Files:** Platform QA/release checklists, existing native adapters and manifests.
 **Interfaces:** Shared client parity, native activation/download/keyboard, stable
 signer/package identity and verified in-place upgrade with retained user data.
@@ -332,19 +368,30 @@ signer/package identity and verified in-place upgrade with retained user data.
   rented iPhone; do not claim native iOS/macOS release from web evidence.
 - [ ] Finish Windows killed-process WNS and available Win10/11/offline/long-session
   cases while retaining owner-accepted unsigned EXE distribution.
-- [x] For this changed embedded client build immutable25, verify
+- [x] For the prior embedded-client delta, build immutable25 and verify
   signer/Firebase/assets, actual upgrade/canary, catalog CAS and public byte hash.
   Realme24 ->25 is guest/data-preserving startup proof; broader signed-in and
   physical Topic cases below remain open. Retain24 as rollback.
+- [x] Accept Native26 ordinary UI login/exact active FCM binding/local logout:
+  actual `0185bbd86af1` retains/refreshes the peer, retires only the new SID/binding,
+  retains all older sessions and package identity; exact cleanup passes. This
+  does not prove a post-logout guest frame, transient-login failure handling,
+  chat/task recovery, Topic/provider/OEM or long-session behavior.
 
 ## Task11: Monitoring and Capacity (#6)
 
-**State:** QUEUED after recovery coverage; old permission-only hold is superseded.
+**State:** IN PROGRESS; backup metadata inventory and monitoring source proposal
+are recorded. No new monitor/alert is installed; old permission-only hold is
+superseded.
 **Files:** Existing monitoring, error handling, backup/restore and capacity reports.
 **Interfaces:** Secret-free actionable alerts, verified backup age/recovery,
 measured resource limits and no speculative platform rewrite.
 
-- [ ] Inventory actual error/uptime/backup-alert gaps and existing reuse options.
+- [x] Inventory actual daily/offsite backup metadata and alert configuration;
+  retain strict-host-key remote-custody refusal rather than bypassing trust.
+  [Source-only monitoring contract](../../operations/2026-10-18-backup-monitoring.md)
+  is prepared and tested, not installed or delivery-tested.
+- [ ] Finish the separate application-error/uptime alert inventory.
 - [ ] Implement and prove a controlled alert plus recovery/retirement, with
   explicit redaction and no duplicate noisy notifications.
 - [ ] Change capacity/storage only for measured limits; document rollback.

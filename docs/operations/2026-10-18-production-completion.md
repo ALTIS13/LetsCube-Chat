@@ -1,5 +1,11 @@
 # Production Completion Continuation
 
+This report is chronological. Latest accepted deltas:
+[D369 web deployment](#d369-web-deployment-1519z),
+[Native26 ordinary UI logout/binding](#native26-ordinary-ui-logout-and-binding-1533z),
+and [D342 sealed-only restore](#d342-sealed-only-package-restore-1537z).
+Older candidate/refusal paragraphs below retain their original evidence boundary.
+
 ## Scope And Baseline
 
 The owner authorized execution of the complete agreed backlog, reviewed rollout
@@ -8,9 +14,10 @@ and safe migrations on2026-10-18. The
 12 streams and links accepted evidence. It does not restart completed design,
 introduce another approval round or waive backup/privacy/rollback requirements.
 
-Production remains the accepted web source5af58c2b and Android Stable24. Windows
-shell0.2.14 is unchanged and intentionally unsigned. No A063, paid device,
-production SQL mutation or provider change belongs to this continuation yet.
+At the start of this continuation the baseline was web source5af58c2b and
+Android Stable24; later releases are recorded below. Windows shell0.2.14 is
+unchanged and intentionally unsigned. A063 stays excluded. The cases below do
+not imply a production SQL mutation or a new provider rollout.
 
 ## Actual Hook Controls
 
@@ -270,11 +277,13 @@ include literal LF/JSON roundtrip and malformed/readback rejection. Review caugh
 a UID mismatch in the coordinator wrapper before execution; it runs as the same
 owned SSH user, not sudo. No database access or restore occurred.
 
-This is payload closure, NOT standalone recovery or current RPO/off-host custody.
-The remaining D342 boundary is a closed tool/calibration/evidence manifest and
-package-only restore entrypoint, then source-unavailable restore plus independent
+At this checkpoint it was payload closure, NOT standalone recovery or current
+RPO/off-host custody. The next D342 boundary was a closed tool/calibration/evidence
+manifest and package-only restore entrypoint, then source-unavailable restore plus independent
 ACL grant-option omission control. A cached exact PG17 image may be an external
 runtime dependency; an unrequested air-gap image export is not a prerequisite.
+That package-entrypoint case is now accepted [below](#d342-sealed-only-package-restore-1537z);
+current RPO/off-host custody remains separate.
 
 ## Chat/Task Recovery Release (13:39Z)
 
@@ -391,8 +400,9 @@ AAB7,387,471B, SHA256
 Realme25 ->26 retains UID/data/first-install, opens the guest UI, native fatal0;
 no clear/uninstall or credential attempt is used. Locked publication/CAS,
 Stable25 rollback and independent whole public APK hash pass at14:31:02Z,
-mandatory=false. Native authenticated logout/Topic/OEM cases remain separate;
-unchanged ordinary FCM acceptance from23 is reused. Windows shell0.2.14 stays.
+mandatory=false. At publication native authenticated logout/Topic/OEM cases
+remained separate; the later ordinary UI/logout subcase is accepted below.
+Unchanged ordinary FCM acceptance from23 is reused. Windows shell0.2.14 stays.
 
 ### Topic Activation Rehearsal and Sealed Recovery Delta
 
@@ -416,9 +426,10 @@ Its32 local controls are not actual standalone restoration. Seal/R6/V3 bytes
 remain intact; no new dump, production SQL or rental is made for this preparation.
 V4-r2 staging and independent readback then pass:38 declared files plus manifest,
 1,646,600B,0700/0600/nlink1, no extras. First run2b0a986f241e Node preflight
-refuses before PG; exact CID cleanup/absence passes. This is retained as a
-specific unresolved instrument/runtime boundary, not a recovery PASS or a reason
-to silently rerun. Production data/services and the sealed payload stay intact.
+refuses before PG; exact CID cleanup/absence passes. That R2 refusal is retained,
+not rewritten as recovery PASS or silently rerun. Its runtime cause and the new
+R3 package-only acceptance are recorded below. Production data/services and the
+sealed payload stay intact.
 
 ### D356 Actual Held Access Across UI Reauthentication
 
@@ -437,7 +448,7 @@ notices scrubbed/read; all3 fresh SIDs are locally logged out and independently
 absent, browser closed. Topic stays OFF. This covers held access only, not held
 read/settings, invite retirement, manual/replaced jump or native-device cases.
 
-### D369 Transient Post-Login Cleanup (Candidate)
+### D369 Transient Post-Login Cleanup (Source Stage; Released Below)
 
 The installed LoginForm's post-Auth ban read can temporarily fail. Its cleanup
 used SDK global scope, terminating modeled peer sessions rather than only the
@@ -450,8 +461,171 @@ New4 +adjacent7 checks and typecheck pass; independent coordinator new4 run
 passes14.392s, typecheck passes. No JSX/style, SQL, credential or permission
 change. The two owned paths were initially edited in D:main; preserved there,
 reviewed/committed, then canonical feature fast-forwarded without stash/reset or
-copying foreign edits. Publication follows; native26 stays immutable.
+copying foreign edits. Publication is recorded below; native26 stays immutable.
 Genuine Vite7.3.2 build finishes20.63s, local builde9921413ca9965c7; existing
 sourcemap/chunk warnings do not become a failure or a new fix claim. Actual
 before marker has2 local logout calls and the verified old JS hash. Production
 build/config-derived IDs must be read after deployment, not copied from local.
+
+## D369 Web Deployment (15:19Z)
+
+Source `2dad8198` is deployed through image
+`8ce5e18c6c75e622b5c3680d2b8fb9ce45862144`, production build prefix `9b2`.
+Public/container parity and the changed local-scope marker pass:2 calls before,
+3 after. Served JS SHA256 changes from
+`64d58ff1c37df2bb28e528993a3bc538b45eb7e2e88a1aefcdb9d54a32673613`
+to `71134b30cd8d5706922736560aeb45d01afe0a0274b8d68bc8677b354c8b8fa5`.
+Private metadata: `message-reconcile-20261018/transient-login-{before,after}-deploy.json`.
+This closes the shared-web publication subcase, not an injected production 503
+or native transient-failure canary. Active-ban/security-wide behavior is unchanged.
+Stable 0.1.25/build26 embeds `14686afd`, lacks D369 and remains immutable; include
+the repair in a later independently verified native release.
+
+## Native26 Ordinary UI Logout and Binding (15:33Z)
+
+Actual receipt `0185bbd86af1` is
+`PASS_NATIVE26_UI_BINDING_LOCAL_LOGOUT_AND_PEER_REFRESH`. Installed26 uses the
+ordinary UI login and creates one fresh own client SID plus the exact active
+Android FCM binding, with app version/package identity matched. Ordinary UI
+logout is submitted; the new SID is absent and its binding is retired. The
+independent peer SID survives and actually refreshes. All older sessions are
+retained; exact peer local logout204/absence and cleanup pass.
+
+Private evidence: `topic-live-20261018/native26-live-0185bbd86af1-receipt.json`.
+Captures/raw output and Auth-failure injection are off. This closes ONLY the
+Native26 ordinary UI login/binding/local-logout and peer-survival subcase.
+The receipt explicitly does not claim the post-logout guest frame. Installed26
+still has the old transient-login cleanup: no D369 error-path, native chat/task
+recovery, Topic delivery, OEM or long-session acceptance follows from this case.
+
+## D342 Sealed-Only Package Restore (15:37Z)
+
+The closed package-entrypoint subboundary is now actually accepted on
+cohort `c2d954b5ecab`, not only source/staging. The existing 39-file sealed payload
+manifest remains
+`a6db6568a77ed02f0b5a2cbb68081dbee1ab4b6054372cbc89633acc16b50115`.
+Immutable V4-r3 tools contain 38 files plus manifest, SHA256
+`51fb0150144e42d0406fd260d77105c63438b45366b865d55ff0e8e469cbbbcf`;
+stage and independent all39-file/hash/mode/no-extra readback pass. Parser,
+comparators, selector, restore SQL and payload bytes are unchanged.
+
+R2's canonical CLI returned PASS but Docker recorded OOMKilled before cleanup
+at512MiB. R3 changes only Node memory/swap to exactly2GiB, requires fresh host
+MemAvailable >=4GiB before allocation, and retains State/timing/cgroup metadata
+before cleanup. Its one canonical preflight exits0/OOM=false with independent
+custody/exact CID absence. The first tail invoker then refuses a metadata filename
+containing `_`, before `run_restore`: no restore-intent or PG metadata exists.
+Literal grammar/order controls prove zero stage-file opens and engine calls. A separate
+dispatch-v2 intent fixes observer filenames to hyphens, preserves that refusal
+and reuses the same verified preflight/output. It is the FIRST engine execution,
+not a replay or another preflight allocation.
+
+Host Python restores only this sealed package into a fresh network-none cached
+PG17 runtime. Durable GraphQL/net ACL/settings/two-index supplements, roles,
+memberships and default ACL come from retained package bytes, never a current
+production catalog/config or an old R6 live wrapper. Actual full catalog/data/
+settings/sequences/control hashes match:173 tables/124,112 rows,31 roles/23
+memberships,27 default ACL entries,646 functions,485 indexes,244 policies,
+138 triggers,768 constraints and10 sequences. Restore RTO is360.972s.
+
+On that SAME restored copy, the full catalog comparator first accepts the
+positive, refuses one concrete nonowner schema grant-option loss, verifies that
+only that bit changed, and matches the exact post-ROLLBACK catalog. RLS/policies
+are not disabled or relaxed. State/phase/failure metadata is retained before
+canonical PG cleanup; independent readback confirms artifacts and exact PG CID
+absence. Restored schema is1,900,000B, constraints witness121,296B; only hashes/
+counts, not SQL/data/archive contents, are published.
+
+One RO/network-none cached Node24 verify consumes the fresh artifacts with the
+same R3 pins, no Docker socket or host-Python capability. It takes7.308s, exits0,
+OOM=false, timeout=false; cgroup peak720,834,560B and fresh host headroom
+5,098,272KiB >=4,194,304KiB. The unchanged DDL comparator accepts all768 constraint
+ASTs and schema structure. `unfilteredAstEqual=false` is retained honestly: the
+accepted contract compares effective catalog-covered schema ACL and disjoint
+default-ACL order, not literal unfiltered AST equality. No new allowlist or
+comparator relaxation was introduced. Independent readback binds preflight,
+runtime/artifacts and verify custody and confirms both exact PG/Node CIDs absent.
+
+Private metadata under `sealed-recovery-20261018/`:
+`r3-dispatch2-zero-dispatch-proof.json`,
+`r3-actual-dispatch2-read-restore.json`,
+`r3-actual-dispatch2-read-verify.json`. R2 OOM/refusal, seal, V3 and prior tool
+receipts remain intact. No live source DB, new dump, production service/data
+change or host tuning was used. Cached pinned PG17/Node and host Python/Docker
+remain explicit external runtime dependencies, not an air-gap image-export gate.
+
+Close ONLY the sealed-snapshot tool/entrypoint/source-unavailable restore,
+negative/rollback/DDL/custody subcase. Item82/D-342 and Task4 remain open for
+off-host durable custody, current backup cadence/RPO and wider recovery guarantees;
+this retained snapshot does not establish current production RPO or whole-product readiness.
+
+## Physical Topic Preparation and a Navigation Finding (16:21Z)
+
+One rented physical iPhone17 Pro Max/iOS26.3.1 was allocated, the PWA installed
+through Safari/Home Screen, and ordinary owned QA login/push permission/explicit
+message-preview enrollment used. Read-only metadata confirms the new SID and
+its current protocol1/message grant; no credentials, endpoints or grant secrets
+are exported. Fixed UI labels/geometry only are retained; no production pixels,
+conversation dumps or personal media are captured.
+
+The first coordinator cohort147a refuses Realme foreground before native Auth:
+the device had locked while cloud setup was underway. Native Auth/group/message
+effects are zero; the iPhone's fresh SID is normally logged out and absent.
+The changed-input6402 cohort wakes the same Realme and actually completes native
+UI Auth/binding, then three ordinary API sessions and a private three-QA-member
+group with one text topic. Its normal cleanup removes exactly that group and
+the three API SIDs, then normally logs the native UI out. Native old-session
+retention/binding retirement and final independent session checks pass. The
+original native guard is unchanged; no PIN attempt, QA APK or data clear occurs.
+The private PIN loader refuses before input; ordinary wake/dismiss has already
+made the keyguard absent, which is distinct from a successful PIN-loader claim.
+
+No message case/CAS/Topic activation is dispatched: `caseStarted=false`,
+`messages=0`. The distinct provider/inverse/OS-tap boundary therefore stays OPEN
+and production Topic stays OFF; this preparation is not delivery acceptance.
+The second PWA SID is normally logged out and absent; account preview choice is
+returned to its original semantic default `none`, both new grants are retired,
+and MobileNext release returns OK. Subsequent exact RLS cleanup `bc12ae9604f8`
+deactivates only the two rental-created subscriptions in one acknowledged PATCH;
+protocol retirement and independent metadata checks pass. Its fresh API SID is
+normally logged out/absent, all older SIDs remain, cleanup is complete. No other
+installation is deactivated. No cloud device or live Auth controller remains.
+
+Actual iPhone root accessibility geometry also exposes a product defect before
+any source patch: the Profile button moves from x315/w65 to x236/w65 at y862
+after permission hydration; Chats moves x59 ->44. A tap at the former Profile
+position can open the newly inserted neighboring destination. The rendered
+targets were already interactive. The unchanged source's `justify-around` row
+adds the Tasks destination after its access answer, moving every existing item.
+The bounded follow-up owns the navigation/access-ready boundary; it must not
+weaken task authorization or permanently reserve an unauthorized destination.
+Local fixtures and the next native release will accept that repair separately.
+
+Private metadata: `topic-live-20261018/physical-live-{147a9339983c,64022cd2e496}.ledger.private.jsonl`,
+`native26/native26-64022cd2e496-receipt.json`, both cohort PWA-state metadata and
+the released cloud lease. No new production SQL flag/DDL change or native
+publication was made by this physical preparation.
+
+## Navigation Access Hydration Candidate
+
+The measured iPhone hitbox shift is repaired in `BottomNav`: access hooks belong
+to one UID/account epoch, and the capsule exposes no interactive destinations
+until routing and location access have settled. The pending state uses the
+existing stable skeleton, not an unauthorized placeholder destination. Chat-list
+interaction remains available; task authorization and final destination behavior
+are unchanged. Fresh review found no P1/P2 issue.
+
+The actual React/access-hook regression is RED before the repair and9/9 GREEN
+after it, including four literal omission controls. Four Chromium/WebKit mobile
+cases cover both themes with held access, zero premature hitboxes, the final
+four destinations, accurate hit testing and Profile activation. Synthetic-only
+pixels were inspected at390 and1440 in both themes. Desktop capture waits for
+ancestor opacity and finite animations to settle; two WebKit opacity cases and
+one changed-input final-animation case pass. An early unfinished modal animation
+was a capture-timing problem, not a separate product defect.
+
+The genuine web build completes in23.69s with `sw.js build 7b215869b104a9b4`.
+The owned fake-backend Vite server is stopped after inspection. Android version
+0.1.26/build27 is reserved to include both this repair and D369; the already
+published26 is untouched. This is candidate evidence, not production/native
+acceptance. Topic remains OFF and no production SQL change is needed here.

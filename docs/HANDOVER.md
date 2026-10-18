@@ -1,47 +1,27 @@
 # LETSCUBE — handover
 
-**Active plan,2026-10-18:** Codex owns the
-[production completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Owner authorizes reviewed production rollout and safe migrations throughout.
-Stage: chat/task recovery and local ordinary logout released on web and Android
-Stable0.1.25/build26;
-Topic runtime still OFF. Canonical branch/worktree below, coordinator integrates.
-See [execution evidence](operations/2026-10-18-production-completion.md): reviewed
-Task0bdffb80/cachea3cfd1f2 pass223 affected checks/typecheck/build. Actual deployed
-offline recovery retains15 rows/0px anchor, with2 history reads instead of3;
-actual task rejoins cause one automatic parent read/latest title, drafts intact.
-All fresh QA SIDs and synthetic tasks are retired. Web image14686afd is sole
-healthy with public/container parity, product buildb23d4adce4f05bb0. Android26
-original signer/Firebase/assets pass, actual Realme25 ->26 preserves UID/data/
-first install and opens guest UI, fatal0. Stable public bytes/SHA verified,
-mandatory=false, previous25 rollback retained. Unchanged FCM proof from23 reused;
-no signed-in Android recovery or Topic device acceptance is claimed.
-Next: bounded physical Topic canary after accepted isolated activation rehearsal; parallel
-D356's remaining actions and D342 sealed-package-only restore entrypoint.
-Actual D356 held-access76749ab0ab0f passes same-document UI reauthentication,
-new-SID notice/jump and zero stale effects after the original reply completes;
-exact two-message/three-session cleanup passes. Other D356 cases remain open.
-Accepted core/held/fence/Edge/legacy cases are not to be replayed. Nikita's9
-entries remain semantic-PENDING, not confirmed by ungrounded paraphrases.
-No production SQL mutation, A063 or rental; no live coordinator exec is held.
-D-368 is released: only two ordinary calls change from the SDK global default to
-local scope. Three actual callback/SDK REDs,97 affected checks, typecheck and
-real two-session Auth/refresh pass. Actual rendered menu/confirmation logout
-returns to the public home in the same document; the other SID refreshes and all6
-prior SIDs remain. Exact fresh-session cleanup passes. Native authenticated UI
-logout remains a separate matrix case; security-wide recovery is unchanged.
-Topic activation rehearsal c8901ef3d64a passes real COMMIT/lost-ACK/readback/OFF
-with all12 tables retained and exact clone cleanup; production remains OFF.
-D342 V3 tools are staged/verified, but host Node is absent. Reviewed V4-r2
-split-phase tools are also staged/verified. Its first Node preflight refuses;
-exact CID is absent after cleanup, no PG restore ran. Diagnosis is pending,
-not standalone restore acceptance or a new dump.
-D369 follow-up candidate2dad8198 changes only transient post-login bans-read
-cleanup to local scope; active-ban behavior is unchanged. Actual callback/SDK
-503 RED,4 new+7 adjacent checks/typecheck and genuine20.63s web build pass.
-Web publication follows; Android26 stays immutable and lacks this extra repair.
+**Current State, 2026-10-18:** Owner: Codex coordinator, canonical branch
+`codex/topic-alerts-20261016`; follows the approved
+[completion plan](superpowers/plans/2026-10-18-production-completion.md).
+Stage: D369 web `8ce5e18c`/build prefix `9b2` deployed; Stable 0.1.25/build26 ordinary
+UI login/binding/local logout and peer refresh accepted; D342 sealed-only package
+entrypoint/restore accepted. Navigation hydration repair is reviewed and passes
+focused hook/browser/pixel checks; Android0.1.26/build27 is reserved, not released.
+Source/evidence and chronology:
+[execution report](operations/2026-10-18-production-completion.md).
+Blockers/limits:26 lacks D369; Topic is OFF pending physical/provider acceptance; D356's
+other actions, Nikita semantics and off-host/current-RPO recovery remain open.
+Next: release the reviewed navigation/D369 native batch, then bounded Topic
+canary, remaining D356 cases, intake and external recovery follow-up.
+No clone/rental is held; do not replay accepted cases.
 
-**Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
+## Historical Release Checkpoints
+
+The dated records below preserve operational history, not current status or new
+execution authority. Latest sources, evidence, blockers and next action are only
+in the short record above and its linked report.
+
+**Historical resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with
 [the current continuation](operations/2026-10-18-outbox-restore-and-topic-wire.md).
 Actual production SDK/feed-v2 open marker, newly produced message admission and
@@ -82,7 +62,7 @@ fast-forwarded cleanly; preserve ignored private secrets and operator evidence.
 The [Cursor handoff](CURSOR_HANDOVER.md) and resumes below are historical
 checkpoints, not instructions to repeat accepted work or replay expired cohorts.
 
-**Current resume,2026-10-17 12:46Z:** resource checkpoint after owner reports1%
+**Historical resume,2026-10-17 12:46Z:** resource checkpoint after owner reports1%
 usage remaining. Stable NOT published; production unchanged. ProductC6/Android23,
 R6 recovery3b4692b2 and whole7 ROLLBACKfd5baacf remain accepted. Actual330 e49
 backup47150b3c/preflight/appendf53793ab/fresh readback pass (128 sessions, all old124
@@ -228,7 +208,7 @@ excluded. No SQL/native publication in this slice.
 [Cause, evidence and boundaries](operations/2026-10-16-recorder-mode-feedback.md).
 [Next fullstack plan](superpowers/plans/2026-10-16-topic-notification-overrides.md).
 
-**Current resume, 2026-10-16:** coordinator; Android0.1.21/build22 is published
+**Historical resume, 2026-10-16:** coordinator; Android0.1.21/build22 is published
 Stable,mandatory=false; product main/web75096aa3 is healthy with public/container
 JS+SW parity and rollback retained. Actual isolated Realme confirms ordinary
 Auth/Settings/encrypted choice, readable real FCM, generic none choice, original
@@ -240,7 +220,7 @@ and remaining D-335 OEM/lock/physical-tap matrix; do not replay accepted source,
 build or FCM checks. Preserve foreign sidebar/search work and private version
 overlay; A063 excluded. [Release proof and limits](operations/2026-10-16-android-stable22.md).
 
-**Current resume, 2026-10-15 20:42 UTC:** coordinator; shared-web D-365 is
+**Historical resume, 2026-10-15 20:42 UTC:** coordinator; shared-web D-365 is
 accepted at main/runtime59f1fe8b: one cancellable message/resource-owned pending
 position for detach and explicit seek, including pending inline handoff. Final
 90/90, adjacent59/59, native mutation controls, typecheck/build4e6fd0ace2bbe363
@@ -258,7 +238,7 @@ are history, not competing instructions.
 [Actual position repair and rollout](operations/2026-10-15-media-position-lifetime.md).
 [Intake boundaries](operations/2026-10-15-intake-followup.md).
 
-**Current resume, 2026-10-15:** coordinator; D-362 finite PostgREST body ownership
+**Historical resume, 2026-10-15:** coordinator; D-362 finite PostgREST body ownership
 and D-360 authoritative playback retirement are in the narrow web candidate.
 Transport/SDK48/48, real-loopback Chromium/WebKit13/13 and final player63/63 pass;
 unchanged affected hook26/28 evidence is reused. The first player candidate was
@@ -270,7 +250,7 @@ Next: finish candidate review/publication acceptance, then measured item87
 warm-chat/recovery work; the tester's VPN/latency cause remains unverified.
 [Candidate scope and evidence](operations/2026-10-15-network-body-and-playback.md).
 
-## Historical Checkpoints
+### Earlier Release Checkpoints
 
 **Earlier candidate,2026-10-15:** coordinator; tester-priority chat synchronization
 and media-cache release. The selected read-only Nikita intake returned19 new
@@ -286,9 +266,9 @@ player retirement. No SQL, native-preview promotion or new APK release is includ
 Preserve the private Android version overlay and other owners' sidebar/search work.
 [Intake, implementation and acceptance boundaries](operations/2026-10-15-tester-feedback.md).
 
-## Earlier Checkpoints
+### Earlier Checkpoints
 
-**Current resume,2026-10-11:** coordinator, main-based search-focus repair.
+**Historical resume,2026-10-11:** coordinator, main-based search-focus repair.
 The actual phone search race is reproduced in Chromium/WebKit; pending focus
 can reopen a closed field. Reviewed fix preserves committed visibility and exact
 callback ownership. Unit18/18/four mutants, actual fictional browser8/8,
@@ -299,7 +279,7 @@ the unfinished native-preview branch; its Realme ARM refusal remains open,
 all exact-owned QA packages removed, protocol0/rich guards unchanged.
 [Cause, retained failures and limits](operations/2026-10-11-sidebar-search-focus.md).
 
-**Current continuation,2026-10-10 Enter priority:** coordinator; narrow main-based
+**Historical continuation,2026-10-10 Enter priority:** coordinator; narrow main-based
 `6d8f2a55`, Android0.1.16/build17. Message/caption IME hints follow the existing
 phone-newline guard. Focused111/111, fictional browser28 cases, typecheck, signed
 Firebase APK verifier and35-asset parity pass. Realme upgrade without clear,
@@ -313,7 +293,7 @@ native-preview user-choice Task2 rendered acceptance, then Task3. Feature commit
 this release; no physical iOS/production-send/natural-FCM claim.
 [Evidence and limits](operations/2026-10-10-composer-enter-parity.md).
 
-**Current continuation,2026-10-10:** coordinator; narrow main-based publication
+**Historical continuation,2026-10-10:** coordinator; narrow main-based publication
 of D-355. Session deletion now retires exact UID+SID push endpoints before the
 FK clears SID, and registration refuses deleted-SID JWTs. SQL15/15 incl mutants
 and rollback drift, actual PG17 rollback and six ordered concurrent cases pass.
@@ -358,7 +338,7 @@ native package identity/store actions and other unresolved acceptance gates are
 not approved merely by this delegation. Refresh the authorized tester intake,
 deduplicate against the queue, and continue the nearest feasible product slice.
 
-**Current continuation, 2026-10-07:** coordinator; branch
+**Historical continuation, 2026-10-07:** coordinator; branch
 `codex/bot-inline-media-20261002`. Web/main `36f313dc` and nonmandatory Android
 Stable0.1.13/build14 accepted at16:58 Moscow. D-351/D-353 exact read-card ownership
 and bounded queued-read reconciliation pass source/mutant review. Four ordinary
@@ -497,7 +477,7 @@ Read in this order:
 6. **`docs/INTERFACE_DEFECT_REGISTER.md`** — every defect, through D-346, with its
    measurement. Search it before filing anything.
 
-**Current PG17 package-difference checkpoint, 2026-10-05 (Codex).** Owner: this
+**Historical PG17 package-difference checkpoint, 2026-10-05 (Codex).** Owner: this
 chat, branch `codex/bot-inline-media-20261002`, base `00fff8f8`. Public signed NAR
 has1290 objects; the selected installed package has1291. All1214 regular-file
 digests/lengths/executable bits and all other reference objects match. Only an
@@ -1041,7 +1021,7 @@ Windows keyring); the account allows one device at a time, and some iPhone 14
 Pro Max units have no control agent. `docs/operations/ios-pwa-viewport-validation.md`
 has the method.
 
-**Current checkpoint, 2026-09-27:** ordinary-member contacts, text-channel
+**Historical checkpoint, 2026-09-27:** ordinary-member contacts, text-channel
 scope, voice-room creation and account-switch safeguards passed local QA
 (181 browser passes, 50 explicit skips, full unit/server suites). The additive
 contact migration is applied after backup and RLS checks; web source commit
@@ -1172,7 +1152,7 @@ whole deployment** — no bot has registered a command yet.
 
 ## 4. Where to start
 
-**Current checkpoint, 2026-09-30 (Claude):** the owner answered the three
+**Historical checkpoint, 2026-09-30 (Claude):** the owner answered the three
 proposals — «Разрешения выдаю на все нужные действия», and where a question
 remains, settle it from Telegram and Discord and build it. Everything below is
 on `main` and deployed; the database changes are recorded one by one in
@@ -1339,7 +1319,7 @@ written up with SQL, risk and rollback in
 full fixture regression and its triage are recorded below under
 «Re-measured 2026-09-28».
 
-**Current bot checkpoint, 2026-09-26 (Codex):** `d846d4c7` is deployed and
+**Historical bot checkpoint, 2026-09-26 (Codex):** `d846d4c7` is deployed and
 healthy on both web and Bot Gateway. A group administrator can give a bot full
 access to future group messages; a later restriction purges queued message
 updates and rechecks polling/webhook delivery. `sendPhoto` accepts bounded
@@ -1412,7 +1392,7 @@ holds its old environment until a Codex restart; the direct API works. See the
 [runbook](operations/web-asset-retention.md) and
 [tracker](PRODUCTION_PRIORITY_TRACKER.md) for the activation boundary.
 
-**Current backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
+**Historical backend checkpoint, 2026-09-26 (Codex):** native FCM/WNS OS push
 payloads no longer carry sender, preview, avatar or task content across a
 rebindable device token. Exact-message routing and chat tags remain. Reviewed
 modules are mounted on the healthy Edge runtime; native packages were not cut
@@ -1436,7 +1416,7 @@ passed. A direct unauthorised Edge POST returned 401, but no provider delivery
 or authenticated media-account switch was exercised. See the
 [production tracker](PRODUCTION_PRIORITY_TRACKER.md) for hashes and rollback.
 
-**Current shared-web checkpoint, 2026-09-26 (Codex):** the attachment sheet
+**Historical shared-web checkpoint, 2026-09-26 (Codex):** the attachment sheet
 shows a compact 2-10 item album preview in the selected send order, while the
 original selection grid retains reorder/deselect controls. The desktop height
 regression found during QA is fixed. All 36 attachment-sheet tests pass across
@@ -1445,7 +1425,7 @@ in 390px WebKit. Typecheck and production build pass. Album-level external
 notification aggregation, private media cache and authenticated device QA are
 still separate work; do not infer them from this UI proof.
 
-**Current shared-web checkpoint, 2026-09-25 (Codex):** photo HD is the default
+**Historical shared-web checkpoint, 2026-09-25 (Codex):** photo HD is the default
 on a new device; an explicit SD choice remains. A 2-10 visual selection now
 carries album metadata and renders as a grouped mosaic with independent message
 actions. The hidden-message gate in shared media/links now fails closed. Focused
@@ -1456,7 +1436,7 @@ album-level notifications, private media cache and physical
 Android QA. Do not cut an Android APK without separate owner instruction.
 [QA and remaining limits](operations/2026-09-25-media-album-hd-qa.md).
 
-**Current checkpoint, 2026-09-25 (Codex):** Android 0.1.11/build 12 is signed
+**Historical checkpoint, 2026-09-25 (Codex):** Android 0.1.11/build 12 is signed
 and published in Stable with gallery save, deferred large-photo originals and
 mobile Profile navigation. The public APK matches the local signed artifact and
 the previous Stable manifest has a byte-identical server backup. Web source

@@ -25547,7 +25547,35 @@ audio restart is inferred and D-360 stays accepted. Android Stable21 predates
 this repair; installed-platform acceptance is not claimed from the source.
 [Cause, review and verification](operations/2026-10-15-media-position-lifetime.md).
 
-## D-342 `[ ]` Full-dump restore omits extension schema rights and database settings
+## D-342 `[~]` Full-dump restore omits extension schema rights and database settings
+
+**Accepted subboundary,2026-10-18:** sealed-only package tool/entrypoint/restore
+case `c2d954b5ecab` is closed. The retained39-file payload plus immutable V4-r3
+tools `51fb0150` restore into a fresh network-none cached PG17 with no live source
+DB/catalog/config prerequisite, new dump or old R6 wrapper. Full catalog/data/
+settings/roles/default ACL/sequences match:173 tables/124,112 rows,31 roles,
+27 default ACL entries,485 indexes and10 sequences, including the packaged
+GraphQL/net ACL/settings/two-index supplements. On the SAME restored copy a
+positive passes, one concrete schema grant-option loss is refused, only that bit
+changes and the exact post-ROLLBACK catalog matches. RLS is never disabled.
+
+Restore360.972s plus RO Node DDL verify7.308s pass. All768 constraint ASTs and
+schema structure are accepted by the unchanged comparator; its effective
+catalog-covered schema-ACL/disjoint-default-order contract does not claim literal
+unfiltered AST equality (`unfilteredAstEqual=false`). Node exit0/OOM=false,
+State before cleanup, artifact/custody hashes and independent exact PG/Node CID
+absence pass. The old filename refusal is proven NOT_DISPATCHED and retained;
+hyphen-only invoker controls3/3 precede the FIRST engine dispatch on that same
+verified preflight cohort, without a second preflight allocation.
+
+**Still open:** off-host durable custody, current backup cadence/RPO and wider
+recovery guarantees. This closes only the retained-snapshot package-entrypoint
+case, not all of D-342/item82. Cached pinned PG17/Node and host Python/Docker are
+explicit runtime dependencies; no new air-gap export or literal-AST gate is added.
+[Actual evidence and limits](operations/2026-10-18-production-completion.md#d342-sealed-only-package-restore-1537z).
+
+**Historical diagnosis and prerequisite work below:** retained for provenance;
+its dated refusals/permission holds are not the current package-entrypoint state.
 
 **Severity:** high recovery-equivalence risk, not a current production outage;
 tracker item 82. Measured on a fresh network-isolated PG17.6 copy, 2026-10-04,
@@ -25791,7 +25819,13 @@ actually refreshes and all6 prior SIDs survive. Exact fresh-session cleanup
 passes. Two additional browser callback controls bring affected coverage to97.
 Android0.1.25/build26 is Stable after original signer/Firebase/assets verification,
 actual Realme25 ->26 guest/data-retaining upgrade and full public APK hash;
-25 rollback remains. Authenticated native UI/logout/OEM acceptance stays separate.
+25 rollback remains. Actual Native26 receipt `0185bbd86af1` now also passes ordinary
+UI login/one fresh own SID/exact active Android FCM binding, ordinary UI local
+logout/new SID absence/binding retirement, and independent peer retention/actual
+refresh. All older SIDs/package identity and exact peer cleanup pass. This closes
+that ordinary native UI/logout subcase only: post-logout guest frame, D369's
+transient login failure, Topic/provider/OEM, chat/task recovery and long-session
+cases are not inferred. Captures/raw output and Auth-failure injection stayed off.
 [Current execution](operations/2026-10-18-production-completion.md).
 
 ## D-369 `[~]` A temporary login check failure terminates other devices
@@ -25803,12 +25837,51 @@ ending other devices. Actual selected handleLogin plus installed SDK reproduces
 one RED/three controls: global HTTP scope and modeled peer refresh failure.
 This is a fictional HTTP leaf, not an injected production fault.
 
-Candidate2dad8198 changes ONLY the bansErr cleanup to explicit local scope.
+Source `2dad8198` changes ONLY the bansErr cleanup to explicit local scope.
 Normal success still routes without logout; error still clears the new local
 session and shows the existing error without routing. Active-ban/security-wide
 behavior is byte-identical and separately characterized, not silently changed.
 Four new literal behavioral/omission checks and seven adjacent checks pass;
-coordinator independently verifies the new4 and typecheck. Genuine web build
-e9921413ca9965c7 completes20.63s; publication and embedded Android follow.
-Stable26 is immutable and does not contain this
-additional repair. No live Auth failure, UI/design or database change is claimed.
+coordinator independently verifies the new4 and typecheck. Genuine local web
+build `e9921413ca9965c7` completes20.63s. Actual web image `8ce5e18c`/build prefix `9b2`
+is now deployed with public/container parity and local-scope marker2 ->3; served
+JS SHA71134b30cd8d5706922736560aeb45d01afe0a0274b8d68bc8677b354c8b8fa5.
+Only the shared-web publication subcase is closed. Stable26 remains immutable
+and lacks this later repair; the next native release/error-path acceptance is
+open. Native26 ordinary UI/binding/logout0185 is normal-success-only, not a D369
+failure test. No live Auth fault injection, UI/design or database change is claimed.
+
+## D-370 `[~]` Mobile navigation hitboxes move while account permissions hydrate
+
+Medium navigation correctness; source candidate, found 2026-10-18 on the actual
+rented installed iPhone 17/iOS 26.3.1, public web `8ce5e18c`, LOCATION_ADMIN after
+ordinary login. Initial Chats rect `[59,862,45,48]` and Profile
+`[315,862,65,48]` become `[44,862,45,48]` and `[236,862,65,48]` after access settles
+about 4s later. Tapping the former Profile point `(348,886)` opens the wrong
+global-search/task flow; exact known root-back recovers. This is our own role-
+hydration reflow, not a reference-client defect.
+
+Surface: `artifacts/kub/src/components/layout/BottomNav.tsx:24` and `:83`;
+`artifacts/kub/src/lib/bottomNavDestinations.ts`. BottomNav ignored `checking`,
+offering three interactive destinations before Tasks access resolved. Adding
+Tasks to `justify-around` moves every hitbox even though Tasks is last; the old
+list-order-only test and comment did not establish stable geometry.
+
+The candidate keeps the existing navbar frame with `KubStableSkeleton` until
+account-owned access settles, without hiding the application. A UID/epoch-keyed
+boundary prevents reuse of prior-account hook state; a settled-result guard
+also closes the actual routing-to-location-check one-commit gap. Role/access
+hooks remain unchanged, with no timer, hardcoded admin or retained stale rights.
+Profile/settings callback and normal section/task routing remain covered.
+
+Actual-component/unchanged-hook local Chromium RED exposed three pending buttons
+where zero interactive destinations were required. The focused
+`tests/unit/bottom-nav-access-hydration.test.mjs` now passes 9/9, including four
+literal omission controls: loading, settled readiness, account owner and epoch.
+Typecheck/diff-check pass. Coordinator accepts synthetic rendered pixels at 390
+and 1440 in both themes; `tests/e2e/bottom-nav-access-readiness.spec.ts` passes 4/4
+on Chromium/WebKit, with two additional WebKit desktop-opacity checks and one
+dark finite-animation check passing. These use the local fake backend, QA0,
+not actual Auth. Source review is clean. Production publication, native27
+release and physical verification of the repair remain open; the actual
+iPhone observation above is the defect reproduction, not post-fix acceptance.
