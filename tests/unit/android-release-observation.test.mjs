@@ -59,3 +59,23 @@ test('release runner supports an absolute executable path containing spaces', {s
     assert.equal(runReleaseCommand(process.execPath,[fixture],process.env,dir),'executable-path-control');
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
+
+test('release observation preserves Vite minute durations without forwarding adjacent output', () => {
+  const dir=mkdtempSync(join(tmpdir(),'letscube-release-vite-duration-'));
+  const fixture=join(dir,'child.cjs');
+  const output=[];
+  const previous=console.log;
+  try {
+    writeFileSync(fixture,`console.log('\\x1b[32m✓ built in 1m 7s\\x1b[0m');
+console.log('✔ built in 2m');
+console.log('built in 876ms');
+console.log('built in 59.99s');
+console.log('built in 1m 60s');
+console.log('built in 1m private-test-fixture-no-forward');
+console.log('prefix built in 1m 7s');
+console.log('built in 1h');`);
+    console.log=(value)=>output.push(value);
+    runReleaseCommand(nodeCommand,[fixture],process.env,dir);
+    assert.deepEqual(output,['built in 1m 7s','built in 2m','built in 876ms','built in 59.99s']);
+  } finally {console.log=previous;rmSync(dir,{recursive:true,force:true});}
+});
