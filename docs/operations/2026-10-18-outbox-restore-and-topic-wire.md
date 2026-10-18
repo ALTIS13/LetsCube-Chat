@@ -49,6 +49,11 @@ first failed the stale-discard case and then passed after this repair.
   external requests, screenshots, traces or personal content. The changed
   runner passes both FIFO cases; the shipped-source control still exposes the
   old failure. This is browser/storage proof, not physical-device network proof.
+- A separate owned ordinary-HTTP canary uses the current runner against the real
+  message endpoint: older restored entry precedes the new send, exactly two
+  distinct server rows exist and the acknowledged queue is empty. The QA session
+  is retired. Private receipt `outbox-http.json` records only acceptance metadata;
+  this does not add a physical-device/FCM claim or repeat the accepted build.
 - The adjacent mounted outbox fixture had an obsolete incidental sound import
   boundary. Stubbing its existing sound port restores its intended isolation
   without replacing the runner, store, account lifecycle or send behavior.

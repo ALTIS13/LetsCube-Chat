@@ -575,6 +575,11 @@ continue this order, with independent bounded work in parallel. Auth,
 anti-abuse, RLS, support/email and basic operator security baselines are accepted;
 maintain their affected regressions, do not rebuild them without a new finding.
 
+Execute the [production completion plan](superpowers/plans/2026-10-18-production-completion.md).
+The owner authorizes reviewed rollout and necessary safe migrations throughout;
+old permission-only holds do not require another approval. Real backup, privacy,
+rollback and device/provider acceptance gates remain mandatory.
+
 1. `[~]` Finish Nikita's recorded intake and reproduce current reports: opening/
    switching delay and VPN behavior87, mic84, read notifications85, task reload86,
    audio83 and exact emoji79. Five images/one video remain semantically open.
@@ -587,7 +592,7 @@ maintain their affected regressions, do not rebuild them without a new finding.
    accepted and enabled; fresh Android23 useful FCM/none/tap/logout is accepted.
    Complete persisted child overrides and the broader account/device matrix.
    Topic runtime is still OFF, not implicitly accepted by the Web release.
-4. `[~]` Media25,29,104: finish current positional-intent release, then remaining
+4. `[~]` Media25,29,104: positional-intent D-365/104 is released; finish remaining
    albums/HD/original/download/cache cases and the pre-send photo/video editor.
 5. `[~]` Faithful recovery82/D-342: isolated restore must preserve actual ACLs and
    settings; retain verified before-backup/rehearsal/rollback as a prerequisite
@@ -4446,8 +4451,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     with loading, unmounting the checklist draft; a transient read error is
     mislabelled unavailable/deleted with no Retry. Fictional hook state controls
     confirm the transitions, not rendered draft loss or the unidentified tester
-    reports86/87. Narrow initial/refresh/error/owner separation and mounted
-    actual modal/checklist regression are in progress. No deploy yet.
+    reports86/87. Narrow initial/refresh/error/owner separation and mounted actual
+    modal/checklist regression are accepted; source/browser fix4765bcad is included
+    in shipped web5af58c2b and Android24. Authenticated runtime draft preservation,
+    transient error/Retry and terminal retirement remain open. Next: leave owned
+    task checklist/comment drafts unsaved on Android24, update through a second
+    QA client, and verify real Realtime refresh without reload/unmount or draft
+    loss. This does not establish the cause of unidentified reports86/87.
 
 93. `[ ]` Search expand/collapse motion and input responsiveness. Owner intake,
     2026-10-09: testers report lag when search opens and closes. OPEN / PARTIAL;

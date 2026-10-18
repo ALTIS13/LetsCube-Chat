@@ -1,5 +1,16 @@
 # LETSCUBE — handover
 
+**Active plan,2026-10-18:** Codex owns the
+[production completion plan](superpowers/plans/2026-10-18-production-completion.md).
+Owner authorizes reviewed production rollout and safe migrations throughout.
+Current stage: Topic compatibility/consumer acceptance, runtime still OFF;
+accepted Stable24 remains the baseline. See the
+[execution record](operations/2026-10-18-production-completion.md):68 affected
+checks pass; actual isolated schema/tenant/QA seed boot passes, but SDK MOUNT
+readiness refuses absent markers. Next: stored-claim/RLS and bounded product
+revival discriminator, not a global enable. Newer-only Nikita intake has9 entries,
+analysis in progress. No production mutation or device/rental allocation.
+
 **Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with
 [the current continuation](operations/2026-10-18-outbox-restore-and-topic-wire.md).

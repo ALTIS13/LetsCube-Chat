@@ -24,12 +24,14 @@ const OLD=Object.freeze({
   'lib/notificationEvents.ts':'b26f7504cba9daa9df241428d139cee64000d4d0806e47df6caf91ecef40c69d',
 });
 const CURRENT=[...Object.keys(OLD),'lib/notificationFeedV2.ts','lib/realtimeRevival.ts','lib/messageAlertDecisions.ts'];
+export const REALTIME_HOOK_CONTROL_API=Object.freeze({v:1,methods:Object.freeze([
+  'messageRows','markRead','reconnect','setVisibility','connectionRevived'])});
 const sha=v=>createHash('sha256').update(v).digest('hex');
 const stable=v=>JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
 const need=x=>{if(!x)throw Error('RT_CLIENT_SOURCE_REFUSED');};
 const normalize=s=>s.replaceAll('\r\n','\n');
 function freeze(v){for(const x of Object.values(v))if(x&&typeof x==='object')freeze(x);return Object.freeze(v);}
-function pins(bundle){return {legacyRevision:LEGACY,old:Object.fromEntries(Object.entries(bundle.old).map(([k,v])=>[k,sha(v)])),
+function pins(bundle){return {legacyRevision:LEGACY,executorApi:REALTIME_HOOK_CONTROL_API,old:Object.fromEntries(Object.entries(bundle.old).map(([k,v])=>[k,sha(v)])),
   current:Object.fromEntries(Object.entries(bundle.current).map(([k,v])=>[k,sha(v)]))};}
 
 export function validateRealtimeClientSources(input){
@@ -65,15 +67,22 @@ export function realtimeClientFeedParsers(input){
 function events(){
   const listeners=new Map();
   return {addEventListener(k,fn){if(!listeners.has(k))listeners.set(k,new Set());listeners.get(k).add(fn);},
-    removeEventListener(k,fn){listeners.get(k)?.delete(fn);}};
+    removeEventListener(k,fn){listeners.get(k)?.delete(fn);},
+    dispatchEvent(event){for(const fn of [...(listeners.get(event.type)??[])])fn(event);return true;}};
 }
 
 // Adapted from notification-feed-v2-hook's actual-TS scheduler. No policy/rows,
 // Phoenix frames or SDK replies are synthesized here. Each mount is a document.
 export async function mountRealtimeClientHook({generation,desktop,sources,client,actor}){
   sources=validateRealtimeClientSources(sources);need(['old','current'].includes(generation)&&typeof desktop==='boolean');
-  const texts=sources[generation],modules=new Map(),slots=[],effects=new Map(),cleanups=new Map(),timers=new Set();
+  const uuid=/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+  need(actor&&uuid.test(actor.uid)&&uuid.test(actor.sid));actor=Object.freeze({uid:actor.uid,sid:actor.sid});
+  const modules=new Map(),slots=[],effects=new Map(),cleanups=new Map(),timers=new Set();
   let cursor=0,dirty=false,queued=false,closed=false,failed=false,view,frames=0,sounds=0,cards=0,removals=0,barrier=null;
+  // Legacy callers retain the failure latch; explicit recovery also needs a healthy new feed.
+  let subscriptionGeneration=0,openCount=0,transportFailed=false,recoveryFailureBaseline=null,unexpectedChannelFailures=0;
+  const channelFailures={CHANNEL_ERROR:0,TIMED_OUT:0,CLOSED:0};
+  const expectedDisconnectChannels=new Set();
   const statuses=new Map(),eventIds=new Set();
   const state={currentUser:{id:actor.uid},authSessionIdentity:{userId:actor.uid,sessionId:actor.sid},accountEpoch:1,
     mutedChatIds:[],selectedChatId:null,selectedTopicId:null};
@@ -102,17 +111,20 @@ export async function mountRealtimeClientHook({generation,desktop,sources,client
   const bridge={async isMainForeground(){return false;},async notify(){cards++;return true;},async removeNotification(){removals++;return true;}};
   const app=Object.assign(select=>select(state),{getState:()=>state});
   const sdk={from:client.from.bind(client),
-    async rpc(name,args){const result=await client.rpc(name,args);
-      if(!closed&&name==='notification_feed_open_v2'&&result.error===null&&typeof result.data?.barrier_event_id==='string')barrier=result.data.barrier_event_id;
+    async rpc(name,args){const epoch=subscriptionGeneration,result=await client.rpc(name,args);
+      if(!closed&&epoch===subscriptionGeneration&&statuses.size>0&&name==='notification_feed_open_v2'
+        &&result.error===null&&typeof result.data?.barrier_event_id==='string'){barrier=result.data.barrier_event_id;openCount++;}
       return result;},
-    channel(name){const channel=client.channel(name),on=channel.on.bind(channel),subscribe=channel.subscribe.bind(channel);statuses.set(channel,'PENDING');
+    channel(name){const channel=client.channel(name),on=channel.on.bind(channel),subscribe=channel.subscribe.bind(channel);
+      subscriptionGeneration++;barrier=null;eventIds.clear();statuses.set(channel,'PENDING');
       channel.on=(kind,filter,callback)=>on(kind,filter,payload=>{if(!closed){frames++;if(frames>256){failed=true;return;}
-        if(filter.table==='notification_feed_events_v2'&&typeof payload.new?.event_id==='string')eventIds.add(payload.new.event_id);}
+        if(statuses.has(channel)&&filter.table==='notification_feed_events_v2'&&typeof payload.new?.event_id==='string')eventIds.add(payload.new.event_id);}
         try{callback(payload);}catch{failed=true;}});
-      channel.subscribe=callback=>subscribe((status,...args)=>{statuses.set(channel,status);
-        if(!closed&&['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status))failed=true;
+      channel.subscribe=callback=>subscribe((status,...args)=>{const active=statuses.has(channel);if(active)statuses.set(channel,status);
+        if(!closed&&Object.hasOwn(channelFailures,status)){channelFailures[status]++;
+          if(active&&!(status==='CLOSED'&&expectedDisconnectChannels.has(channel))){transportFailed=true;unexpectedChannelFailures++;}}
         try{callback?.(status,...args);}catch{failed=true;}});return channel;},
-    removeChannel:client.removeChannel.bind(client),
+    removeChannel(channel){statuses.delete(channel);return client.removeChannel(channel);},
   };
   const ports={react,'@/store/app.store':{useAppStore:app},'@/lib/supabase/client':{createClient:()=>sdk},
     '@/lib/errors':{mapPgError:()=> 'RT_CLIENT_HOOK_RPC_REFUSED'},'@/hooks/useAudioSettings':{getAudioSettings:()=>({notificationSoundEnabled:true})},
@@ -120,11 +132,13 @@ export async function mountRealtimeClientHook({generation,desktop,sources,client
     '@/lib/dev/instrumentation':{bumpFetch(){},registerChannel(){},unregisterChannel(){}},'@/lib/chatEvents':{dispatchChatsRefresh(){}},
     '@/lib/platform/desktop':{isDesktopApp:()=>desktop,getDesktopBridge:()=>desktop?bridge:null},
     '@/lib/platform/capabilities':{isNativeAndroid:()=>false},'@/lib/platform/nativePush':{async closeNativeChatNotification(){throw Error('RT_CLIENT_NATIVE_UNEXPECTED');}}};
-  const globals={window,document,navigator:{onLine:true},performance,URL,AbortController,setTimeout:timer,clearTimeout:clear,
+  const navigator={onLine:true};
+  const globals={window,document,navigator,performance,URL,AbortController,setTimeout:timer,clearTimeout:clear,
     console:{warn(){},error(){},log(){}},queueMicrotask};
-  function load(name){
-    if(modules.has(name))return modules.get(name).exports;need(Object.hasOwn(texts,name));
-    const module={exports:{}};modules.set(name,module);
+  function load(name,group=generation){
+    const key=group+':'+name,texts=sources[group];
+    if(modules.has(key))return modules.get(key).exports;need(Object.hasOwn(texts,name));
+    const module={exports:{}};modules.set(key,module);
     const compiled=ts.transpileModule(texts[name],{reportDiagnostics:true,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
       transformers:{before:[context=>tree=>{const visit=node=>ts.isPropertyAccessExpression(node)&&node.getText(tree)==='import.meta.env.DEV'
         ?context.factory.createFalse():ts.visitEachChild(node,visit,context);return ts.visitNode(tree,visit);}]}});
@@ -133,26 +147,58 @@ export async function mountRealtimeClientHook({generation,desktop,sources,client
       if(Object.hasOwn(ports,key))return ports[key];
       let resolved=key.startsWith('@/')?key.slice(2):key.startsWith('.')?path.posix.normalize(path.posix.join(path.posix.dirname(name),key)):'';
       if(!resolved.endsWith('.ts'))resolved+='.ts';const port='@/'+resolved.slice(0,-3);
-      if(Object.hasOwn(ports,port))return ports[port];need(Object.hasOwn(texts,resolved));return load(resolved);
+      if(Object.hasOwn(ports,port))return ports[port];need(Object.hasOwn(texts,resolved));return load(resolved,group);
     };
     try{vm.runInNewContext(compiled.outputText,{module,exports:module.exports,require,Object,JSON,Promise,Map,Set,Date,...globals},
       {filename:name,timeout:1000});}catch{throw Error('RT_CLIENT_HOOK_COMPILE_REFUSED');}return module.exports;
   }
   const hook=load('hooks/useNotifications.ts').useNotifications;
+  const revivedEvent=load('lib/realtimeRevival.ts','current').CONNECTION_REVIVED_EVENT;
   function pump(){for(let n=0;n<100;n++){
     if(closed)return;if(n===99)throw Error('RT_CLIENT_HOOK_SCHEDULER_REFUSED');
     if(dirty||view===undefined){cursor=0;dirty=false;view=hook();}
     if(effects.size){const work=[...effects];effects.clear();for(const [i] of work)cleanups.get(i)?.();for(const [i,fn] of work)cleanups.set(i,fn());}
     if(!dirty&&!effects.size)return;
   }}
+  const controlNeed=value=>{if(!value)throw Error('RT_CLIENT_HOOK_CONTROL_REFUSED');};
+  function controlCurrent(){controlNeed(!closed&&!failed&&state.currentUser?.id===actor.uid
+    &&state.authSessionIdentity?.userId===actor.uid&&state.authSessionIdentity?.sessionId===actor.sid&&state.accountEpoch===1);}
+  function feedReady(){return !closed&&!failed&&statuses.size>0&&[...statuses.values()].every(s=>s==='SUBSCRIBED')
+    &&[...statuses.keys()].every(c=>c.state==='joined')&&client.realtime?.isConnected()===true&&!view?.loading&&!view?.error
+    &&(generation==='old'||barrier!==null&&eventIds.has(barrier));}
+  const recoveryPermitted=()=>recoveryFailureBaseline===unexpectedChannelFailures;
+  async function drain(){for(let i=0;i<12;i++)await Promise.resolve();if(!closed)pump();}
   dirty=true;pump();
   return {
-    async drain(){for(let i=0;i<12;i++)await Promise.resolve();if(!closed)pump();},
-    snapshot(){return {closed,failed,sounds,cards,removals,frames,rows:view?.items.length??0,error:Boolean(view?.error),
-      ready:!closed&&!failed&&statuses.size>0&&[...statuses.values()].every(s=>s==='SUBSCRIBED')
-        &&[...statuses.keys()].every(c=>c.state==='joined')&&client.realtime?.isConnected()===true&&!view?.loading&&!view?.error
-        &&(generation==='old'||barrier!==null&&eventIds.has(barrier))};},
+    drain,
+    snapshot(){const ready=feedReady();return {closed,failed:failed||transportFailed&&!(recoveryPermitted()&&ready),
+      sounds,cards,removals,frames,rows:view?.items.length??0,error:Boolean(view?.error),
+      ready:ready&&(!transportFailed||recoveryPermitted()),controlApi:REALTIME_HOOK_CONTROL_API.v,
+      activeChannels:statuses.size,barrierEventId:barrier,openCount,unexpectedChannelFailures,
+      channelFailures:Object.freeze({...channelFailures})};},
     hasMessage(messageId){return Boolean(view?.items.some(row=>row.kind==='message'&&row.user_id===actor.uid&&row.payload?.message_id===messageId));},
+    messageRows(messageId){controlNeed(typeof messageId==='string'&&uuid.test(messageId));
+      return Object.freeze([...(closed?[]:view?.items??[])].filter(row=>row.kind==='message'&&row.user_id===actor.uid&&row.payload?.message_id===messageId)
+        .map(row=>Object.freeze({id:row.id,user_id:row.user_id,message_id:row.payload.message_id,
+          read_at:row.read_at,alert_suppressed_at:row.alert_suppressed_at,feed_revision:row.feed_revision})));},
+    async markRead(target){controlCurrent();controlNeed(target&&Object.keys(target).sort().join(',')==='messageId,notificationId');
+      const {notificationId,messageId}=target;
+      controlNeed(typeof notificationId==='string'&&uuid.test(notificationId)&&typeof messageId==='string'&&uuid.test(messageId)
+        &&feedReady()&&(!transportFailed||recoveryPermitted())&&view.items.some(row=>row.id===notificationId&&row.user_id===actor.uid
+          &&row.kind==='message'&&row.payload?.message_id===messageId));
+      // Completion is not an applied/read ACK; the driver must inspect fresh messageRows.
+      await view.markRead(notificationId);controlCurrent();await drain();},
+    async setVisibility(value){controlCurrent();controlNeed(value==='hidden'||value==='visible');
+      document.visibilityState=value;document.hidden=value==='hidden';
+      document.dispatchEvent({type:'visibilitychange'});await drain();},
+    async connectionRevived(){controlCurrent();recoveryFailureBaseline=unexpectedChannelFailures;
+      window.dispatchEvent({type:revivedEvent});await drain();},
+    async reconnect(){controlCurrent();controlNeed(typeof client.realtime?.disconnect==='function'&&typeof client.realtime?.connect==='function');
+      recoveryFailureBaseline=unexpectedChannelFailures;
+      for(const channel of statuses.keys())expectedDisconnectChannels.add(channel);
+      navigator.onLine=false;window.dispatchEvent({type:'offline'});
+      try{await client.realtime.disconnect();controlCurrent();}finally{expectedDisconnectChannels.clear();}
+      client.realtime.connect();navigator.onLine=true;window.dispatchEvent({type:'online'});await drain();},
     close(){if(closed)return;closed=true;for(const cleanup of cleanups.values()){try{cleanup?.();}catch{failed=true;}}
       cleanups.clear();for(const id of timers)clearTimeout(id);timers.clear();},
   };

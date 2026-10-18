@@ -42,7 +42,7 @@ test('IPC bundle builder pins the reviewed baseline-compatible phase export buil
 
 test('combined Node22 code reuses the current baseline-compatible phase bundle and includes frozen IPC source pins',async()=>{
   const b=await bundle();assert.equal(b.sha256,sha(b.code));assert.equal(b.target,'node22');
-  assert.equal(b.baselineBundleSha256,'2e926dc30a4a0fcfa472b8915a85347a27e8143e6778107305f519cc445b12eb');
+  assert.equal(b.baselineBundleSha256,'3da370109bfd82aadb2439264b84a910b13fc5c4baa4da7f66496e771c48c434');
   assert.deepEqual(b.externalPackages,[]);assert.equal(b.credentialsEmbedded,false);assert.equal(b.sourceSnapshot,'embedded-public-only');
   assert.equal(b.sourcePins.ipc,'16698aef9a465727859204974ba6e514738517cf7556bc2bf52dccc54e27887d');
   assert.equal(b.sourcePins.ipcTest,'6b6697687caee026f9217835283530ecbba014f71c0271bbbfa3a0367a40d28d');
