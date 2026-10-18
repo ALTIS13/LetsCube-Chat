@@ -43,7 +43,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK28 and rollback27 are immutable; use the next version/build
+  parity. Published APK30 and rollback29 are immutable; use the next version/build
   for new code.
 
 ## Review Focus
@@ -287,6 +287,9 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   states, no raw privacy-edit fallback. Source/UI/bytes/native upgrade/public
   release checks pass; successful Realme/iPhone encoding is not inferred.
 - [ ] Accept actual send/retry/view/save behavior on affected shells and release.
+- [ ] Design/implement D376's bounded PCM fallback only after the accepted Web
+  Audio feasibility, with decoded-memory/track provenance/cancellation and exact
+  both-track trim/alignment checks; no global decoder mutation or raw fallback.
 
 ## Task4: Faithful Recovery (#82/D-342)
 
@@ -374,7 +377,7 @@ call-control modules and their current rollout/checklists.
 **Interfaces:** Actual background/killed activation, permissions, identity,
 participant lifecycle and group-call state; no duplicate room/call on reconnect.
 
-- [ ] Reconcile current Android24 with disabled call-delivery rollout and accepted
+- [ ] Reconcile current Android30 with disabled call-delivery rollout and accepted
   A/B/C/D2/E/F/G stages; execute only missing lifecycle/device cases.
 - [ ] Finish group voice/background/participant paths and readable microphone-to-
   video status with real failure regressions and responsive visual inspection.
@@ -406,9 +409,10 @@ ownership, readable defaults/scale and reduced-motion preference.
   D370; unexercised device/fault/OEM cases remain separate QA coverage.
 - [ ] Measure one uncovered native search expand/collapse or compact-container
   defect, including frame/layout evidence before changing animation.
-- [ ] Complete/release reproduced D375 search-list continuity: actual shared
+- [x] Complete/release reproduced D375 search-list continuity: actual shared
   Sidebar unmounts the list for quick results and loses its scroll on Escape.
-  This is separate from still-unproven physical general animation lag.
+  Source18/WebKit/final typecheck/review/pixels and actual web/Stable30 release
+  checks pass at a02be032. This is separate from physical general animation lag.
   [Bounded repair](../../operations/2026-10-19-search-continuity.md).
 - [ ] Verify exact changed elements at1440/390 in both themes and enlarged text;
   keep controls reachable, lines aligned and navigation logically persistent.
@@ -450,7 +454,7 @@ privacy, task invalidation, profile history and existing support assignment.
 
 ## Task10: Platform Delta Matrix (#7,9,28)
 
-**State:** IN PROGRESS; Android27 is released with actual guest upgrade/public
+**State:** IN PROGRESS; Android30 is released with actual guest upgrade/public
 bytes. Native26 ordinary UI/logout/binding evidence is retained; Native27 normal
 UI cleanup and installed-PWA final-nav/background/Profile subcase are accepted.
 D369/D370 are FIXED/RELEASED; unexercised physical503/held-early-phone/OEM cases

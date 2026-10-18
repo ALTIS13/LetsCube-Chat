@@ -159,6 +159,22 @@ path remains explicit and never substitutes the original. D376 tracks this
 bounded compatibility failure. Exact mapping/server/browser cleanup and HOME
 handback pass; no personal data or installed app changes in these diagnostics.
 
+One subsequent complete-input Web Audio feasibility case on the same owned source
+class succeeds on that Realme browser:396.9ms decode, mono48kHz,144,384 frames /
+3.008s. Independent input hashes match; all three220/440/880Hz windows have the
+expected dominant tone. PCM payload577,536B is not process peak memory. Suspended
+AudioContext decode works without playback, graph connection, resume or microphone.
+Awaited context close, inert completion page/HOME and exact reverse/server/browser
+cleanup pass. No product helper/source was changed and D376 is NOT fixed by this.
+
+Grounded next candidate: bounded Web Audio PCM bridge with exact selected frames/
+timestamps and both-track reencoding, after native failure fully settles. Require
+pre-allocation decoded-byte/copy/output budgets, trustworthy single-primary-track
+provenance, cancellation/late-result disposal, and exact trim/alignment tests.
+decodeAudioData has no AbortSignal; stale completion cannot apply and cleanup
+must settle. Do not mutate a global decoder registry across concurrent jobs,
+upload discarded source, drop audio or claim unbounded-file/native acceptance.
+
 ## Remaining Media Workflows
 
 Read-only reconciliation of existing reports/source does not establish a new

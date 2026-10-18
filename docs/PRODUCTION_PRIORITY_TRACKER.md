@@ -1,8 +1,19 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-18.
+Status: active production-hardening tracker, updated 2026-10-19.
 
-**Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** pre-send
+**Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** D375 search
+continuity is FIXED/RELEASED at `a02be032` on sole-healthy web/build
+`a7d03335f07b562b` and Android Stable0.1.29/build30. Main-list DOM/scroll, hidden
+accessibility, account/menu and pending-touch retirement pass18 affected checks,
+additional WebKit cases, final typecheck and scoped review; exact pixels viewed.
+Old/new search markers and HTML/SW/JS/all6 editor asset public-container hashes
+pass. Original signer/Firebase/assets, Realme29 ->30 guest/data retention and
+full public APK7,791,213B/SHA `87d1c82f...c378b4a9` pass at21:30:24Z;
+mandatory=false, rollback29 retained. #93 wider physical performance and D376 AAC
+compatibility remain open; no SQL change. [Release](operations/2026-10-19-search-continuity.md#release).
+
+**Previous accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** pre-send
 photo/video editor source `323d7cfc` is released on web/PWA/Windows renderer
 build `c99fbb6c515e4180` and Android Stable0.1.28/build29. Sole healthy image and
 all6 editor graph assets match public/container bytes. Original native signer,
@@ -650,15 +661,16 @@ while the hint was offered **and the page was visible**, not wall clock since it
 
 ## Current Execution Order
 
-Current as of 2026-10-18; the dated detail under queue items is history, not a
-competing version or permission gate. Web notification text is accepted; Android27
+Current as of 2026-10-19; the dated detail under queue items is history, not a
+competing version or permission gate. Web notification text is accepted; Android30
 is released with guest upgrade/public bytes verified, not all signed-in paths.
 Topic enforcement is ON after physical b875, compatible retained-disable rollback
 and fresh verified backup/CAS/readback; raw incomplete instrumentation remains
 documented, not promoted to a whole-client-matrix claim. Exact owned cleanup is
 complete. D371--D373 durability/readability safeguards are released on verified
 web/Android28; pre-send photo/video editing is now released on web/Android29.
-Next is measured search motion and the remaining media workflow map. The warm-photo candidate
+D375's measured continuity repair is released on web/Android30. Next is the
+physical receive/save workflow and bounded D376 PCM-bridge design. The warm-photo candidate
 under #2/#87 is completed GREEN_NO_SOURCE_PATCH, not whole-report closure.
 D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
@@ -4626,7 +4638,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     loss. This does not establish the cause of unidentified reports86/87.
     [Actual web acceptance](operations/2026-10-18-production-completion.md).
 
-93. `[ ]` Search expand/collapse motion and input responsiveness. Owner intake,
+93. `[~]` Search expand/collapse motion and input responsiveness. Owner intake,
     2026-10-09: testers report lag when search opens and closes. OPEN / PARTIAL;
     do not equate browser evidence with physical native performance. Preserve
     query/results, chat position, navigation and existing motion tokens.
@@ -4645,8 +4657,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     focused quick results unmount the main list, Escape remounts it/resetting
     scroll to0 and rendering32 rows again. No long tasks in this fixture; this
     does not certify physical animation performance. Bounded persistent-list/
-    inaccessible-overlay repair is in progress, preserving accepted focus and
-    reduced-motion behavior. [Current repair](operations/2026-10-19-search-continuity.md).
+    inaccessible-overlay repair and pending-touch cancellation are released at
+    a02be032 on verified web/Stable30, preserving accepted focus/reduced-motion
+    behavior. Wider physical performance remains open, not a new known defect.
+    [Current repair](operations/2026-10-19-search-continuity.md).
 
 94. `[x]` Logout must retire session-bound native push endpoints, **D-355**.
     Genuine ordinary Realme Auth/binding/logout exposed an active owned orphan.

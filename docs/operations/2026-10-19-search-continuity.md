@@ -39,10 +39,10 @@ Owner: coordinator; branch codex/search-continuity-20261019, source parent700130
 (docs-only after released323d7cfc). Three component files and the focused test
 are frozen. Final frontend typecheck and independent changed-scope review pass;
 no remaining P1/P2 after the pending-touch repair.
-Candidate Android0.1.29/build30 is reserved, not built/published; literal native
-metadata/signing/Firebase fail-closed checks pass13/13. Prior Stable29 is immutable.
-Next: build/release with actual artifact/image/content/rollback
-checks. No SQL change. Physical general-jank acceptance remains separate.
+Product sourcea02be032 is RELEASED on shared web and Android Stable0.1.29/build30;
+literal native metadata/signing/Firebase fail-closed checks pass13/13. Prior
+Stable29 remains the retained rollback. No SQL change. Physical general-jank
+acceptance and remaining media receive/save work stay separate.
 
 ## Repair And Evidence
 
@@ -106,3 +106,39 @@ Two additional WebKit pending-touch cases pass in4.998s on that final source.
 Earlier WebKit near-top0/60 cases2/2 and in-chat precedence1/1 apply to unchanged
 Sidebar/observer code; they are reused, not described as a single five-case run.
 This remains controlled browser evidence, not physical native performance.
+
+## Release
+
+Source `a02be03207237a14c875a35a682fac791537d39d` is committed and released.
+Outgoing range700130a7/a02be032 was read separately before main push; own-tree
+alias resolution passes3 files/71 imports. Only13 owned paths are staged;
+feature push precedes main. D: main fast-forwards cleanly, preserving ignored
+private material. Native release/build tooling and original signer stay pinned.
+
+At21:30:08Z actual sole healthy web image is
+`l64kyyu1sysev2izzjjbizhe:a02be03207237a14c875a35a682fac791537d39d`, build
+`a7d03335f07b562b`. Old323d main bundle has retained-list/interaction markers0/0;
+new has1/1, with unchanged notification-protocol positive control. HTML/SW/main
+JS and all6 pre-send editor graph assets match public/container SHA and bytes.
+New main JS SHA256:
+`7666ca68ca722c674b7f041cf8019471c9a6f972d6651395121c5591831d1f95`.
+Rolling replicas retire naturally; no forced stop or unrelated deploy.
+
+Android Stable **0.1.29/build30**, same product source, mandatory=false;
+Stable29 manifest/artifact rollback retained under guarded catalog publication.
+Actual build: SW2f9bbf5f157b4b19, Vite16.04s, BUILD SUCCESSFUL19s. APK7,791,213B:
+`87d1c82fb55f5de46b97823a2d33d8dd5c75253de1233e5fa282b503c378b4a9`.
+AAB7,423,938B:
+`1aa6214ef2724a21cd9c5a91cd9bfdb0f5c97530a659fa19f9c056cca4938ef2`.
+Original signer, Firebase4 values, QA flags false, web/config/DEX/APK-AAB parity
+and bounded known-secret scan pass. Actual Realme29 ->30 at21:26:58Z retains
+UID/data/firstInstall, foreground guest/fatal0; no clear/uninstall. Public catalog
+and full APK bytes/SHA match at21:30:24Z. This is guest-upgrade/embedded-source
+acceptance, not a physical signed-in search-lag measurement or new FCM matrix.
+
+[Public Android APK](https://api.letscube.ru/releases/files/android/0.1.29/letscube-0.1.29.apk).
+Windows remote renderer and shared iPhone PWA receive this source. Windows shell
+is0.2.14/owner-accepted unsigned; no native Apple build is asserted. D375 is fixed/
+released; item93 remains partial for wider physical performance. D376 browser AAC
+and current physical media receive/save remain tracked; do not reclassify them
+as closed by the search slice. No SQL/Auth/group/rental changes in this release.

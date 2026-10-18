@@ -3,34 +3,27 @@
 **Current State, 2026-10-19:** Owner: Codex coordinator, canonical branch
 `codex/search-continuity-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Stage: Topic overrides are globally ON after the physical b875 cohort, accepted
-retained-disable rollback contract and fresh verified backup/guarded CAS; separate
-readback at18:55:56Z preserves schema/catalog/RLS. Source/evidence and exact limits:
-[execution report](operations/2026-10-18-production-completion.md#topic-production-enforcement).
-Stage: pre-send photo/video editor source `323d7cfc` is RELEASED on sole-healthy
-web/build `c99fbb6c515e4180` and Android Stable0.1.28/build29. Own-tree imports,
-all6 editor graph assets/public-container hashes, original native signer/Firebase/
-assets, Realme28 ->29 UID/data/firstInstall/guest/fatal0 and full public APK hash
-pass; mandatory=false, rollback28 retained. D374 is fixed/released within
-the [recorded boundaries](operations/2026-10-18-media-editor.md#release).
-Realme browser photo passes; valid-byte video inspection passes but execution
-hits a native decoder error. No raw fallback or successful native trim is claimed.
-Next: D375 search-list continuity source/review are accepted (18 actual mounted/
-omission checks, affected WebKit cases, final TSC, exact pixels). Android0.1.29/
-build30 is reserved, not built/published. Commit/import audit, immutable native
-build/Realme update and reviewed web/Stable release are next; no test replay.
-[Current repair](operations/2026-10-19-search-continuity.md).
-Task3 remaining receive/open/native-save/hash workflow is mapped, not executed.
-Decoder-origin/from-zero probes identify the Realme browser AAC execution limit
-D376; exact cause remains unknown, explicit failure is retained. All their local
-ports/browsers are cleaned up; no QA Auth/group/controller/rental is held.
-Native Apple release ownership is separate; Windows remote renderer is updated,
-shell0.2.14 unchanged. No SQL change or rented device is needed for this release.
-Use the measured MIT cropper/installed Mediabunny boundary; no hand-rolled crop
-interaction or unedited-original fallback after a failed privacy edit. Nikita's
-nine entries map to #2/#87 plus provisional #52; warm-photo return is GREEN/no
-patch, not whole-intake closure. D356's other actions and the remaining completion
-streams stay open; reuse accepted evidence and preserve platform/recovery limits.
+Stage: product `a02be032` is RELEASED on sole-healthy web/build
+`a7d03335f07b562b` and Android Stable0.1.29/build30. D375 search continuity and
+pending-touch retirement pass18 checks, affected WebKit cases, final TSC/review
+and exact pixels. Public/container boot/editor assets and changed search markers
+pass. Original signer/Firebase/assets, Realme29 ->30 guest/UID/data/firstInstall
+and full public APK hash pass at21:30:24Z; mandatory=false, rollback29 retained.
+[Release](operations/2026-10-19-search-continuity.md#release).
+Prior pre-send editors/D374 are also released; no raw original fallback after a
+failed edit. Topic enforcement remains ON at its accepted18:55:56Z checkpoint;
+no SQL change in these releases. Windows remote renderer/shared iPhone PWA are
+updated; Windows shell0.2.14 unchanged, native Apple release ownership separate.
+Next: Task3 physical receive/open/native-save/hash, whose existing pieces and
+safe boundaries are mapped; D376 bounded AAC compatibility bridge design.
+Realme browser WebCodecs AAC fails from zero and trim-start, while one complete-
+input Web Audio decode actually returns correct PCM/three tones. This is a
+feasibility result, NOT an implemented safe fallback or Capacitor trim proof.
+[Media scope and limits](operations/2026-10-18-media-editor.md#remaining-media-workflows).
+All owned browsers/contexts/port mappings are cleaned up, phone HOME; no QA
+Auth/group/controller/rental held. D356 remaining actions, Nikita intake and the
+other completion streams stay open. Reuse accepted evidence; do not replay old
+cohorts or rebuild native artifacts for documentation-only commits.
 
 ## Historical Release Checkpoints
 

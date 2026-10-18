@@ -26031,7 +26031,7 @@ Stable0.1.28/build29 with exact embedded assets and data-retaining guest upgrade
 No authenticated send or successful native video trim is inferred from that
 upgrade. [Release and limits](operations/2026-10-18-media-editor.md#release).
 
-## D-375 `[~]` Focusing search discards the chat list and loses its position
+## D-375 `[x]` Focusing search discards the chat list and loses its position
 
 **Severity:** medium. Actual mounted Sidebar at323d7cfc, synthetic unread data,
 both390/1440 and themes. Empty-field focus shows QuickSwitchList; Escape remounts
@@ -26045,7 +26045,9 @@ search content and account/menu retirement. Source repair passes18/18 actual
 mounted/omission checks and affected WebKit cases; the review-discovered pending
 touch timer is cancelled on inactive/unmount, including a fast return before
 its deadline. Final typecheck and scoped review pass, no remaining P1/P2.
-Reviewed shared/native release pending.
+Released at `a02be032` on verified shared web and Android Stable0.1.29/build30;
+actual guest upgrade/public bytes/rollback pass. Physical general-jank coverage
+is distinct from this repaired DOM/lifetime defect.
 [Cause, design and current stage](operations/2026-10-19-search-continuity.md).
 
 ## D-376 `[ ]` Realme browser reports AAC support but fails actual video trimming
@@ -26060,6 +26062,12 @@ from0 versus trim-start decoding both fail, so a seek-only cause is not supporte
 Config hashes match support/configure; the exact codec/bitstream cause and a
 source fix remain unproven. Explicit error preserves draft/range and returns
 before Apply; no original fallback, audio dropping or forced decoder flags.
-This is not Capacitor WebView or all-Android failure evidence. Next: bounded
-upstream/API review before a real compatibility repair, not repeated probes.
+This is not Capacitor WebView or all-Android failure evidence. Bounded upstream/
+installed-source review finds no built-in decoder fallback; next is the scoped
+PCM-bridge design below, not another repetition of the failed native probe.
 [Evidence and limits](operations/2026-10-18-media-editor.md#realme-aac-execution-limit).
+
+Subsequent one-shot Web Audio complete-input decode returns correct mono48k /
+3.008s PCM and all3 expected tones on the same browser. This establishes a
+bounded PCM-bridge candidate, not successful trimming, safe arbitrary-file
+memory bounds or a shipped fallback. Context/port/server/browser cleanup pass.
