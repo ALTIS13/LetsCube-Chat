@@ -43,6 +43,8 @@ interface ChatListProps {
   chats: ChatWithLastMessage[];
   selectedChatId: string | null;
   onChatSelect: (id: string) => void;
+  /** A retained list behind search keeps rows, not transient interactions. */
+  active?: boolean;
   /**
    * Told when the list has scrolled far enough that the phone's search row
    * should tuck away, and when it has come back. Optional: the public
@@ -73,7 +75,7 @@ const DESKTOP_MENU_WIDTH = 272;
 const INVITE_PERMISSION_KEYS = ["chats.invite", "chats.invite_any", "system.manage"] as const;
 const DESKTOP_MENU_HEIGHT_ESTIMATE = 388;
 
-export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateChange }: ChatListProps) {
+export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateChange, active = true }: ChatListProps) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const accountEpoch = useAppStore((s) => s.accountEpoch);
@@ -99,7 +101,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   /** Whether the open menu has stepped into the groups a person can be invited to. */
   const [inviteChoiceOpen, setInviteChoiceOpen] = useState(false);
   // Read while a menu is open, and from the cache after the first time.
-  const invitePermissions = usePermissionAccess(INVITE_PERMISSION_KEYS, { enabled: openMenu !== null });
+  const invitePermissions = usePermissionAccess(INVITE_PERMISSION_KEYS, { enabled: active && openMenu !== null });
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
 
@@ -108,6 +110,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const tuckedRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const lastScrollTopRef = useRef(0);
+  const clippedChromeDeltaRef = useRef(0);
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const chrome = scroller?.closest(".kub-chat-list-column")?.querySelector("[data-kub-list-chrome]");
@@ -120,7 +123,11 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
       previousY = y;
       if (window.matchMedia("(min-width: 768px)").matches || delta === 0) return;
 
-      scroller.scrollTop += delta;
+      // At the top, shrinking chrome can request a negative scrollTop. Carry
+      // only that clipped part so restoring the chrome does not invent scroll.
+      const targetTop = scroller.scrollTop + delta + clippedChromeDeltaRef.current;
+      scroller.scrollTop = targetTop;
+      clippedChromeDeltaRef.current = Math.min(0, targetTop);
       lastScrollTopRef.current = scroller.scrollTop;
     });
     observer.observe(chrome);
@@ -129,6 +136,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   const handleListScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       const top = event.currentTarget.scrollTop;
+      if (top !== lastScrollTopRef.current) clippedChromeDeltaRef.current = 0;
       const scrollingDown = top > lastScrollTopRef.current;
       lastScrollTopRef.current = top;
       const next = tuckedRef.current ? top > 48 : scrollingDown && top > 96;
@@ -148,7 +156,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
   }, []);
 
   useEffect(() => {
-    if (!openMenu) return;
+    if (!active || !openMenu) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -156,7 +164,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openMenu]);
+  }, [active, openMenu]);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -337,6 +345,12 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     setDraggedPinnedChatId(null);
     setDragOverPinnedChatId(null);
   }, []);
+
+  useEffect(() => {
+    if (active) return;
+    closeMenu();
+    handlePinnedDragEnd();
+  }, [active, closeMenu, handlePinnedDragEnd]);
 
   const clearChatLocally = useCallback((chatId: string) => {
     const clearedAt = new Date().toISOString();
@@ -876,6 +890,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
             onClick={onChatSelect}
             onContextMenuOpen={openDesktopMenu}
             onLongPressOpen={openMobileSheet}
+            interactionActive={active}
             isReorderable={orderedPinnedChatIds.length > 1 && orderedPinnedChatIds.includes(chat.id)}
             isDragging={draggedPinnedChatId === chat.id}
             isDragOver={dragOverPinnedChatId === chat.id}
@@ -889,7 +904,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         ))}
       </div>
 
-      {openMenu?.mode === "menu" && openChat && (
+      {active && openMenu?.mode === "menu" && openChat && (
         <ChatDesktopContextMenu
           chat={openChat}
           actions={openActions}
@@ -904,7 +919,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
         />
       )}
 
-      {openMenu?.mode === "sheet" && openChat && (
+      {active && openMenu?.mode === "sheet" && openChat && (
         <ChatMobileActionSheet
           chat={openChat}
           actions={openActions}

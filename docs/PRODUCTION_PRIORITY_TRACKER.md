@@ -4641,6 +4641,13 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     [Motion evidence](operations/2026-10-09-sidebar-search-motion.md).
     [Focus lifecycle evidence](operations/2026-10-11-sidebar-search-focus.md).
 
+    **2026-10-19:** independent actual mounted audit reproduces D375: empty
+    focused quick results unmount the main list, Escape remounts it/resetting
+    scroll to0 and rendering32 rows again. No long tasks in this fixture; this
+    does not certify physical animation performance. Bounded persistent-list/
+    inaccessible-overlay repair is in progress, preserving accepted focus and
+    reduced-motion behavior. [Current repair](operations/2026-10-19-search-continuity.md).
+
 94. `[x]` Logout must retire session-bound native push endpoints, **D-355**.
     Genuine ordinary Realme Auth/binding/logout exposed an active owned orphan.
     FK SET NULL lacked retirement; legacy registration accepted deleted-SID JWT.

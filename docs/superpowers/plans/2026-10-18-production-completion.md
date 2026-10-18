@@ -274,8 +274,12 @@ position repair.
 **Interfaces:** Existing HD/original choice, durable upload identity, variant
 metadata and positional intent; preserve original bytes and explicit downloads.
 
-- [ ] Map accepted albums, HD/original, auto-small/manual-large download/cache and
-  recorder feedback evidence; reproduce only uncovered user workflows.
+- [x] Map accepted albums, HD/original, auto-small/manual-large download/cache and
+  recorder feedback evidence without replaying accepted cases.
+  [Remaining workflow map](../../operations/2026-10-18-media-editor.md#remaining-media-workflows).
+- [ ] Execute the uncovered current physical large-original receive/open/native
+  save/reopen/hash workflow with owned Auth/media and exact cleanup; patch only
+  an observed failure, not an assumed missing auto-download implementation.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
 - [x] Implement/release the pre-send photo/video editor as a separate slice:
@@ -402,6 +406,10 @@ ownership, readable defaults/scale and reduced-motion preference.
   D370; unexercised device/fault/OEM cases remain separate QA coverage.
 - [ ] Measure one uncovered native search expand/collapse or compact-container
   defect, including frame/layout evidence before changing animation.
+- [ ] Complete/release reproduced D375 search-list continuity: actual shared
+  Sidebar unmounts the list for quick results and loses its scroll on Escape.
+  This is separate from still-unproven physical general animation lag.
+  [Bounded repair](../../operations/2026-10-19-search-continuity.md).
 - [ ] Verify exact changed elements at1440/390 in both themes and enlarged text;
   keep controls reachable, lines aligned and navigation logically persistent.
 - [ ] Use available Mobbin/Figma/Rive only for a specific missing reference or

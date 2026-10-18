@@ -92,6 +92,7 @@ export function Sidebar() {
   const [sideMenuOpen, setSideMenuOpen] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
 
   // Who has somebody talking in them, read once for the whole list (slice 3).
   // Shared with VoicePresenceRuntime during a call: leaving this sidebar does
@@ -180,6 +181,7 @@ export function Sidebar() {
   const tasksInWork = useTasksInWork(canAccessTasks && !isPhone);
   const chatSearchOpen =
     !isPhone && chatSearch !== null && chatSearch.chatId === selectedChatId;
+  const listReplaced = hasSearchQuery || quickSections.length > 0 || chatSearchOpen;
 
   // Settings. From `md` it is a surface over the application (D-285). On a
   // phone the menu still opens a sheet, while the Profile tab occupies this
@@ -334,19 +336,19 @@ export function Sidebar() {
 
           {isPhone && !hasSearchQuery && !chatSearchOpen && <PwaPushNudge />}
 
-          {hasSearchQuery ? (
-            <SidebarSearchResults query={searchQuery} />
-          ) : quickSections.length > 0 ? (
-            <QuickSwitchList
-              sections={quickSections}
-              chatsById={chatsById}
-              activeChatId={quickOrder[Math.min(quickActive, quickOrder.length - 1)] ?? null}
-              mutedChatIds={mutedChatIdSet}
-              onOpen={openQuick}
-            />
-          ) : chatSearchOpen && chatSearch ? (
-            <ChatSearchPanel chatId={chatSearch.chatId} />
-          ) : loading ? (
+          <div className="relative min-h-0 flex-1">
+            {/* Keep the scroller and rows through search. Visibility
+                retains geometry for ChatList's chrome ResizeObserver; display:none
+                would feed it a false top delta. Fixed menus are descendants too.
+                Only an account retirement creates a fresh list lifetime. */}
+            <div
+              key={`${userId}:${accountEpoch}`}
+              data-sidebar-main-list=""
+              className={`absolute inset-0 flex min-h-0 flex-col${listReplaced ? " invisible pointer-events-none" : ""}`}
+              inert={listReplaced ? true : undefined}
+              aria-hidden={listReplaced ? true : undefined}
+            >
+          {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
             </div>
@@ -381,6 +383,7 @@ export function Sidebar() {
                 </div>
               )}
               <ChatList
+                active={!listReplaced}
                 chats={listed}
                 // With a section open no conversation is on screen, so no row
                 // claims to be the one being read — Discord marks the Friends
@@ -391,6 +394,25 @@ export function Sidebar() {
               />
             </div>
           )}
+            </div>
+            {listReplaced && (
+              <div className="absolute inset-0 flex min-h-0 flex-col">
+                {hasSearchQuery ? (
+                  <SidebarSearchResults query={searchQuery} />
+                ) : quickSections.length > 0 ? (
+                  <QuickSwitchList
+                    sections={quickSections}
+                    chatsById={chatsById}
+                    activeChatId={quickOrder[Math.min(quickActive, quickOrder.length - 1)] ?? null}
+                    mutedChatIds={mutedChatIdSet}
+                    onOpen={openQuick}
+                  />
+                ) : chatSearchOpen && chatSearch ? (
+                  <ChatSearchPanel chatId={chatSearch.chatId} />
+                ) : null}
+              </div>
+            )}
+          </div>
 
           </>}
 

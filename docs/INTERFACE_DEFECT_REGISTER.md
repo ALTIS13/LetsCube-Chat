@@ -26030,3 +26030,36 @@ mounted flow27/27 pass. Released at `323d7cfc` on verified shared web and Androi
 Stable0.1.28/build29 with exact embedded assets and data-retaining guest upgrade.
 No authenticated send or successful native video trim is inferred from that
 upgrade. [Release and limits](operations/2026-10-18-media-editor.md#release).
+
+## D-375 `[~]` Focusing search discards the chat list and loses its position
+
+**Severity:** medium. Actual mounted Sidebar at323d7cfc, synthetic unread data,
+both390/1440 and themes. Empty-field focus shows QuickSwitchList; Escape remounts
+ChatList and resets scroll132/160 ->0. Mount1 ->2/unmount1 and32 repeated row
+renders establish the failure; a no-quick-section control preserves the scroller.
+
+**Cause:** mutually exclusive Sidebar body branches destroy list ownership.
+This is not a repeated focus-rAF defect or proof of general physical frame lag.
+Preserve one inaccessible inactive list layer and its geometry, with separate
+search content and account/menu retirement. Source repair passes18/18 actual
+mounted/omission checks and affected WebKit cases; the review-discovered pending
+touch timer is cancelled on inactive/unmount, including a fast return before
+its deadline. Final typecheck and scoped review pass, no remaining P1/P2.
+Reviewed shared/native release pending.
+[Cause, design and current stage](operations/2026-10-19-search-continuity.md).
+
+## D-376 `[ ]` Realme browser reports AAC support but fails actual video trimming
+
+**Severity:** medium; bounded browser/codec compatibility. Actual owned AVC/AAC
+fixture decodes on desktop; independently matched bytes on Realme/Yandex
+Chromium144/Android15 pass inspection but fail actual trim. An origin-tagged
+follow-up proves init valid/both tracks, AVC first-frame success, then AAC
+mp4a.40.2 mono48k execute error before any audio output. Separate same-input
+from0 versus trim-start decoding both fail, so a seek-only cause is not supported.
+
+Config hashes match support/configure; the exact codec/bitstream cause and a
+source fix remain unproven. Explicit error preserves draft/range and returns
+before Apply; no original fallback, audio dropping or forced decoder flags.
+This is not Capacitor WebView or all-Android failure evidence. Next: bounded
+upstream/API review before a real compatibility repair, not repeated probes.
+[Evidence and limits](operations/2026-10-18-media-editor.md#realme-aac-execution-limit).

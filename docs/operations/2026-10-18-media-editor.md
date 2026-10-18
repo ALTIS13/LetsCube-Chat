@@ -141,3 +141,45 @@ iPhone trim or native Apple release. No SQL change, new backend deployment,
 Auth/group mutation or rental is part of this slice. Topic enforcement stays ON.
 Task3's wider send/retry/view/save journeys stay open. Next bounded work: measured
 search motion, remaining media workflow map and the assigned decoder diagnostic.
+
+## Realme AAC Execution Limit
+
+The finite origin-tagged follow-up identifies AudioDecoder AAC during execute,
+not AVC initialization: the video init probe emits a frame, init returns valid
+with both tracks, then AAC mp4a.40.2 mono48k produces zero outputs and native
+EncodingError. Selected config/description hashes match support probing. A
+second discriminating page decodes that same owned input from0 and from the
+1.088s packet selected for trim1.1s: both conditions fail with the same config,
+41 decode calls/zero outputs. A seek-only/preroll theory is therefore disproved.
+
+This is Yandex Chromium144/Android15 engine evidence, not the installed Capacitor
+WebView or all Android. Precise native codec/bitstream cause remains unknown;
+there is no proven flag, warm-up or audio-dropping fix. The source/UI failure
+path remains explicit and never substitutes the original. D376 tracks this
+bounded compatibility failure. Exact mapping/server/browser cleanup and HOME
+handback pass; no personal data or installed app changes in these diagnostics.
+
+## Remaining Media Workflows
+
+Read-only reconciliation of existing reports/source does not establish a new
+failure or require repeating accepted suites. Completion Task3 remains open.
+
+| Workflow | Accepted evidence to reuse | Remaining boundary |
+| --- | --- | --- |
+| Albums and HD/original | [Album/HD QA](2026-09-25-media-album-hd-qa.md), final editor flow27: grouping/order/caption and exact edited bytes; explicit original path is separate from HD re-encoding. | Current authenticated mixed edited-album send/retry/receive/view/save. No new atomic-batch rewrite is justified. |
+| Auto-small/manual-large | mediaInlineLoad and album/viewer request controls: preview auto-loads; no-preview known original up to1MiB auto-loads, larger waits for tap. | Physical receive/open/save byte behavior; not a universal every-media download setting. |
+| Warm photo/cache | [Warm-photo case](2026-10-18-production-completion.md#warm-photo-return-candidate): calibrated HTTP reuse, immediate decoded photo and retired-owner late-response refusal. | Cache pressure, expiry and managed cross-platform byte-cache semantics; app-shell precache is not a private media cache. |
+| Native save | [Media export QA](2026-09-25-android-media-export-qa.md): actual Android14 AVD MediaStore bytes/path/published state and failed-item cleanup. | Current physical authenticated large-original receive -> explicit open -> MediaStore save -> reopen/hash. Browser anchor handoff is not an OS-file proof. |
+| Position/recorder | D365 is fixed/released; D366 has accepted shared-web dock geometry and later embedded asset parity. | A physical recorder-mode case, not a reason to replay positional repair. |
+
+Next highest-value media case: one owned synthetic photo larger than1MiB,
+received by ordinary Android29-or-newer Auth. Record the preview the normal
+producer actually creates; never force its absence through SQL or fake reads.
+Separate allowed preview traffic from original transfer. Require no eager
+original GET where that policy applies, explicit open, native save, and exact
+expected rendition bytes after reopening. An unavailable native request/file
+observer is a coverage gap, not a passing byte claim. Use scoped ordinary cleanup
+and retain private IDs only. This is a
+prepared next workflow, not an executed PASS, reported defect or whole-platform
+release gate. No photo retention/deletion policy or speculative storage rewrite
+is introduced by this map.

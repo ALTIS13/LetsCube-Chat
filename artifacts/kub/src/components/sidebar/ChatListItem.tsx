@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, type DragEvent } from "react";
+import { memo, useCallback, useLayoutEffect, useRef, type DragEvent } from "react";
 import type { ChatWithLastMessage } from "@/types/database";
 import { formatTime } from "@/lib/format";
 import { BotTag } from "@/components/bots/BotTag";
@@ -58,6 +58,8 @@ interface ChatListItemProps {
   onClick: (chatId: string) => void;
   onContextMenuOpen?: (chatId: string, position: { x: number; y: number }) => void;
   onLongPressOpen?: (chatId: string) => void;
+  /** Retire pending touch interactions while the retained list is hidden. */
+  interactionActive?: boolean;
   isReorderable?: boolean;
   isDragging?: boolean;
   isDragOver?: boolean;
@@ -79,6 +81,7 @@ export const ChatListItem = memo(function ChatListItem({
   onClick,
   onContextMenuOpen,
   onLongPressOpen,
+  interactionActive = true,
   isReorderable = false,
   isDragging = false,
   isDragOver = false,
@@ -131,13 +134,21 @@ export const ChatListItem = memo(function ChatListItem({
   const otherPresence = presentKind(chat.other_user?.presence_status);
   const dotRing = isSelected ? "color-mix(in srgb, var(--kub-cyan) 18%, var(--kub-surface))" : "var(--kub-surface)";
 
-  const clearLongPressTimer = () => {
+  const clearLongPressTimer = useCallback(() => {
     touchStartRef.current = null;
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-  };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!interactionActive) {
+      clearLongPressTimer();
+      suppressClickRef.current = false;
+    }
+    return clearLongPressTimer;
+  }, [interactionActive, clearLongPressTimer]);
 
   const getMessagePreview = () => {
     if (!lastMsg) return chat.cleared_at ? "История очищена" : "Сообщений пока нет";
@@ -179,11 +190,12 @@ export const ChatListItem = memo(function ChatListItem({
         // row itself starts it, and the click it would have eaten is the one
         // that opens the chat.
         suppressClickRef.current = false;
-        if (event.pointerType !== "touch" || !onLongPressOpen) return;
+        if (!interactionActive || event.pointerType !== "touch" || !onLongPressOpen) return;
         lastTouchAtRef.current = Date.now();
         clearLongPressTimer();
         touchStartRef.current = { x: event.clientX, y: event.clientY };
         longPressTimerRef.current = window.setTimeout(() => {
+          longPressTimerRef.current = null;
           suppressClickRef.current = true;
           onLongPressOpen(chat.id);
         }, 520);

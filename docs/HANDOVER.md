@@ -1,20 +1,12 @@
 # LETSCUBE — handover
 
 **Current State, 2026-10-19:** Owner: Codex coordinator, canonical branch
-`codex/media-editor-20261018`; follows the approved
+`codex/search-continuity-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
 Stage: Topic overrides are globally ON after the physical b875 cohort, accepted
 retained-disable rollback contract and fresh verified backup/guarded CAS; separate
 readback at18:55:56Z preserves schema/catalog/RLS. Source/evidence and exact limits:
 [execution report](operations/2026-10-18-production-completion.md#topic-production-enforcement).
-Product source `efcc9da0` is released: initial web/build `6a66afb9a57ceb59`
-has sole-healthy image/public-container/changed-marker parity; Android Stable0.1.27/build28
-with original signer/Firebase/assets and full public APK hash. Realme27 ->28
-retains UID/data/firstInstall; mandatory=false, rollback27 retained. D371--D373
-are fixed/released within the recorded browser/guest-native coverage; no forced
-native disk failure or all-platform claim. No QA group/Auth/controller/rental held.
-Later documentation-only web images may be newer; they do not change that native
-product pin. Verify their actual image/content rather than replaying native builds.
 Stage: pre-send photo/video editor source `323d7cfc` is RELEASED on sole-healthy
 web/build `c99fbb6c515e4180` and Android Stable0.1.28/build29. Own-tree imports,
 all6 editor graph assets/public-container hashes, original native signer/Firebase/
@@ -23,8 +15,15 @@ pass; mandatory=false, rollback28 retained. D374 is fixed/released within
 the [recorded boundaries](operations/2026-10-18-media-editor.md#release).
 Realme browser photo passes; valid-byte video inspection passes but execution
 hits a native decoder error. No raw fallback or successful native trim is claimed.
-Next: Task8 search-motion cause/measurement and Task3 remaining workflow map;
-one private decoder-origin diagnostic is assigned, not a repeat of accepted tests.
+Next: D375 search-list continuity source/review are accepted (18 actual mounted/
+omission checks, affected WebKit cases, final TSC, exact pixels). Android0.1.29/
+build30 is reserved, not built/published. Commit/import audit, immutable native
+build/Realme update and reviewed web/Stable release are next; no test replay.
+[Current repair](operations/2026-10-19-search-continuity.md).
+Task3 remaining receive/open/native-save/hash workflow is mapped, not executed.
+Decoder-origin/from-zero probes identify the Realme browser AAC execution limit
+D376; exact cause remains unknown, explicit failure is retained. All their local
+ports/browsers are cleaned up; no QA Auth/group/controller/rental is held.
 Native Apple release ownership is separate; Windows remote renderer is updated,
 shell0.2.14 unchanged. No SQL change or rented device is needed for this release.
 Use the measured MIT cropper/installed Mediabunny boundary; no hand-rolled crop
