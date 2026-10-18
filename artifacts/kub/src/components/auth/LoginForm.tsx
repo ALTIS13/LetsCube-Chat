@@ -72,7 +72,7 @@ export function LoginForm() {
           .eq("user_id", uid)
           .order("created_at", { ascending: false });
         if (bansErr) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: "local" });
           throw new Error("Не удалось проверить статус блокировки. Попробуйте ещё раз.");
         }
         const now = Date.now();
