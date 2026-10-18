@@ -1,6 +1,20 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-18:** Codex has resumed after Cursor. Start with
+**Current resume, 2026-10-18:** Codex; item52/D-367 outbox FIFO and item77 live
+transport acceptance. Start with
+[the current continuation](operations/2026-10-18-outbox-restore-and-topic-wire.md).
+Actual production SDK/feed-v2 open marker, newly produced message admission and
+read reconciliation pass on owned QA; both sessions retired, runtime unchanged.
+This does not enable Topic overrides (still OFF). A confirmed cold-restore race
+sent newer messages before older persisted entries; source/storage repair and
+review-discovered stale-discard resurrection fix pass117 affected checks,
+Chromium/WebKit IndexedDB and typecheck. Android0.1.23/build24 is a candidate,
+not yet built/published; Web/PWA/Windows production stillc92e4080 and Android
+Stable0.1.22/build23. Next: build/release the reviewed FIFO repair, then finish
+fresh isolated Topic compatibility/consumer acceptance. No A063, personal
+captures or production SQL changes. No paid rental held.
+
+**Previous accepted release, 2026-10-18:** Codex resumed after Cursor. See
 [the current release record](operations/2026-10-18-cursor-return-notifications.md).
 Cursor's coordinated SQL is installed; chat/cache/reconnect and iPhone first-load,
 WebKit replacement and cold same-session restore defects are repaired. Web

@@ -375,6 +375,7 @@ test("old insert completion and late ACK cannot forget same-ID bytes restored af
 async function epochFixture(omission?: Omission) {
   const { build } = createRequire(kubRequire.resolve("vite"))("esbuild");
   const stubs: Record<string, string> = {
+    "hooks/useCallSound": "export const playMessageSentSoundFor=()=>{};",
     "lib/supabase/client": `export function createClient(){return {from(){let payload;const q={insert(p){payload=p;window.proof.sends.push(p);return q},select(){return q},eq(){return q},lt(){return q},update(){return q},single:async()=>({data:{...payload,id:'server:'+payload.client_message_id,created_at:payload.client_sent_at},error:null,status:201}),maybeSingle:async()=>({data:null}),then(done){return Promise.resolve({}).then(done)}};return q}}}`,
     "lib/monitoring": "export const reportError=()=>{};",
     "lib/personalModeration": "export const blockedSendRefusal=()=>null;",

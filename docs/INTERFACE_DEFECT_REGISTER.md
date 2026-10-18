@@ -25737,3 +25737,16 @@ Browser/adjacent tests, typecheck/build and shared-web a07c5ae6 exact runtime,
 markers, byte parity, rollback and anonymous smoke pass. Actual native package
 acceptance remains separate; Android Stable22 embeds the preceding bundle.
 [Evidence and remaining scope](operations/2026-10-16-recorder-mode-feedback.md).
+
+## D-367 `[~]` A new send overtakes messages still being restored from disk
+
+Medium correctness; item52. `artifacts/kub/src/lib/outbox/outboxRunner.ts` made
+the account sendable before `storage.list()` completed. A new same-chat message
+could therefore reach the server before an older persisted message. Reproduced
+against shipped `c92e4080` with actual IndexedDB/document reload in Chromium and
+WebKit; both FIFO assertions fail, and the old-source negative control passes.
+
+The current-owner restoration barrier and shared initialization repair the
+ordering without changing message IDs/storage/schema. Source/browser acceptance
+is not native/release acceptance. Review/deployment pending.
+[Evidence and exact remaining scope](operations/2026-10-18-outbox-restore-and-topic-wire.md).

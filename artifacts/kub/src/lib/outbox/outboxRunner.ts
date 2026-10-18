@@ -56,9 +56,12 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
   const entries = new Map<string, OutboxEntry>();
   const busy = new Set<string>();
   const waiters = new Map<string, (outcome: SendOutcome<Row>) => void>();
+  const discardedDuringRestore = new Set<string>();
   let wake: unknown = null;
   let userId: string | null = null;
   let accountEpoch = 0;
+  let restored = false;
+  let restoring: Promise<OutboxEntry[]> | null = null;
 
   const settle = (id: string, outcome: SendOutcome<Row>) => {
     const resolve = waiters.get(id);
@@ -69,6 +72,7 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
   const schedule = () => {
     if (wake !== null) timers.clear(wake);
     wake = null;
+    if (!restored) return;
     const due = nextDueAt(entriesToSend([...entries.values()], Number.POSITIVE_INFINITY, busy));
     if (due === null) return;
     wake = timers.set(() => {
@@ -124,7 +128,7 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
   let drainingEpoch: number | null = null;
   let again = false;
   const drain = async (): Promise<void> => {
-    if (!userId) return;
+    if (!userId || !restored) return;
     const epoch = accountEpoch;
     if (drainingEpoch === epoch) {
       again = true;
@@ -149,31 +153,61 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
     }
   };
 
+  const restore = (forUserId: string, epoch: number): Promise<OutboxEntry[]> => {
+    const pending = (async () => {
+      // Publish the barrier/promise before even a synchronous storage failure.
+      const stored = await Promise.resolve().then(() => deps.storage.list(forUserId)).catch(() => null);
+      if (epoch !== accountEpoch || userId !== forUserId) return [];
+      restoring = null;
+      if (stored === null) {
+        // Unknown older entries must not be overtaken. A later explicit start
+        // may retry; the browser store normally supplies its memory fallback.
+        for (const entry of entries.values()) {
+          deps.onWaiting(entry);
+          settle(entry.clientMessageId, { kind: "waiting" });
+        }
+      } else {
+        for (const entry of stored) {
+          if (entry.userId !== forUserId || discardedDuringRestore.has(entry.clientMessageId) || entries.has(entry.clientMessageId)) continue;
+          entries.set(entry.clientMessageId, structuredClone({ ...entry, nextAttemptAt: now() }));
+        }
+        discardedDuringRestore.clear();
+        restored = true;
+        void drain();
+      }
+      return [...entries.values()].map((entry) => structuredClone(entry));
+    })();
+    restoring = pending;
+    return pending;
+  };
+
   return {
     /** Whose messages this runner sends; a different account's entries stay on disk. */
-    async start(forUserId: string): Promise<OutboxEntry[]> {
-      if (userId === forUserId) return [...entries.values()].map((entry) => structuredClone(entry));
+    start(forUserId: string): Promise<OutboxEntry[]> {
+      if (userId === forUserId) {
+        if (restoring) return restoring;
+        if (restored) return Promise.resolve([...entries.values()].map((entry) => structuredClone(entry)));
+        return restore(forUserId, accountEpoch);
+      }
       const epoch = ++accountEpoch;
       userId = forUserId;
+      restored = false;
+      restoring = null;
+      discardedDuringRestore.clear();
       entries.clear();
       busy.clear();
       if (wake !== null) timers.clear(wake);
       wake = null;
       for (const id of [...waiters.keys()]) settle(id, { kind: "waiting" });
-      const stored = await deps.storage.list(forUserId);
-      if (epoch !== accountEpoch || userId !== forUserId) return [];
-      // Restored entries are due at once: the restart is itself a moment to try.
-      for (const entry of stored) {
-        if (entry.userId !== forUserId || entries.has(entry.clientMessageId)) continue;
-        entries.set(entry.clientMessageId, structuredClone({ ...entry, nextAttemptAt: now() }));
-      }
-      void drain();
-      return [...entries.values()].map((entry) => structuredClone(entry));
+      return restore(forUserId, epoch);
     },
 
     stop() {
       accountEpoch += 1;
       userId = null;
+      restored = false;
+      restoring = null;
+      discardedDuringRestore.clear();
       entries.clear();
       busy.clear();
       if (wake !== null) timers.clear(wake);
@@ -196,7 +230,12 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
       await deps.storage.put(queued);
       if (epoch === accountEpoch && entries.get(queued.clientMessageId) === queued) {
         busy.delete(queued.clientMessageId);
-        void drain();
+        if (!restored && !restoring) {
+          deps.onWaiting(queued);
+          settle(queued.clientMessageId, { kind: "waiting" });
+        } else {
+          void drain();
+        }
       }
       return outcome;
     },
@@ -211,6 +250,8 @@ export function createOutboxRunner<Row>(deps: OutboxRunnerDeps<Row>) {
 
     /** «Удалить» on a waiting message: it will not be sent. */
     async discard(clientMessageId: string) {
+      // A pending list may already contain this row, even after disk removal.
+      if (!restored) discardedDuringRestore.add(clientMessageId);
       entries.delete(clientMessageId);
       await deps.storage.remove(clientMessageId);
       settle(clientMessageId, { kind: "waiting" });
