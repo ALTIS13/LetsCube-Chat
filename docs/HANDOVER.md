@@ -1,7 +1,15 @@
 # LETSCUBE — handover
 
-For Cursor continuation, read [the complete Cursor handoff](CURSOR_HANDOVER.md),
-including the measured wire failure, tool/device setup and unfinished Webhost P2.
+**Current resume, 2026-10-18:** Codex has resumed after Cursor. Start with
+[the current release record](operations/2026-10-18-cursor-return-notifications.md).
+Cursor's coordinated SQL is installed; chat/cache/reconnect and iPhone first-load
+defects are repaired. The per-install preview migration is applied after fresh
+backup and actual PG17 apply/exact-rollback rehearsal. Both global flags remain
+OFF while the physical iPhone sender/text/activation canary is being completed.
+Android 23 is not published. Preserve the ignored private operator records.
+
+The [Cursor handoff](CURSOR_HANDOVER.md) and resumes below are historical
+checkpoints, not instructions to repeat accepted work or replay expired cohorts.
 
 **Current resume,2026-10-17 12:46Z:** resource checkpoint after owner reports1%
 usage remaining. Stable NOT published; production unchanged. ProductC6/Android23,

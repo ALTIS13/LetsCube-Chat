@@ -54,8 +54,8 @@ function worker({db=storage(),transform=x=>x}={}){
     rollback(ms){wall-=ms;},async message(data,client={id:'qa-window',type:'window',url:'https://app.letscube.ru/',visibilityState:'visible'},port){
       const pending=[],replies=[];listeners.get('message')({data,source:client,ports:[port??{postMessage:x=>{acks.push(x);replies.push(x);}}],waitUntil:p=>pending.push(p)});
       await Promise.all(pending);return replies[0];
-    },async push(data=push()){
-      const pending=[];listeners.get('push')({data:{json:()=>data},waitUntil:p=>pending.push(p)});await Promise.all(pending);
+    },async push(data=push(),notification,hasData=notification===undefined){
+      const pending=[];listeners.get('push')({data:hasData?{json:()=>data}:null,notification,waitUntil:p=>pending.push(p)});await Promise.all(pending);
     }};
   class Clock extends Date{static now(){return wall;}}
   const sandbox={URL,Request,Response,Headers,Date:Clock,Promise,AbortController,TextDecoder,TextEncoder,Uint8Array,
@@ -84,6 +84,55 @@ async function install(w,{context=ctx(),grant_secret=secret,public_key=publicKey
   assert.equal(result?.ok,true,'CONFIRMED_INSTALL_REQUIRED');return {...ack,...result};
 }
 const generic=w=>{assert.equal(w.shown.length,1);assert.equal(w.shown[0].title,'LETSCUBE');assert.equal(w.shown[0].options.body,'Новое уведомление');};
+
+test('capability handshake: successful actual worker INSTALL ACK proves literal web_push_protocol 1',async()=>{
+  const w=worker(),ack=await install(w);
+  assert.equal(ack.web_push_protocol,1,'ACK_MUST_PROVE_MUTABLE_PUSH_PROTOCOL');
+});
+
+const declarativeData=()=>({kind:'message',url:'/?chat='+id(10)+'&message='+id(20),tag:'message:chat:'+id(10),
+  chatId:id(10),messageId:id(20),renotify:true,web_preview:push().web_preview});
+
+test('declarative protocol: null event.data reads routing and selector from event.notification.data before first rich publication',async()=>{
+  const w=worker();await install(w);
+  await w.push(undefined,{title:'UNTRUSTED DECLARATIVE TITLE',body:'UNTRUSTED DECLARATIVE BODY',data:declarativeData()});
+  assert.equal(w.requests.length,1,'DECLARATIVE_SELECTOR_MUST_REACH_LOOKUP');
+  assert.equal(w.shown.length,1);assert.equal(w.shown[0].title,'QA Sender');assert.equal(w.shown[0].options.body,'Fictional QA message');
+  assert.equal(w.shown[0].options.data.url,'/?chat='+id(10)+'&message='+id(20));
+  assert.equal(w.shown[0].options.tag,'message:chat:'+id(10));assert.equal(w.shown[0].options.renotify,true);
+});
+
+test('declarative protocol: without admission display stays generic while exact route and grouping survive',async()=>{
+  const w=worker();await w.push(undefined,{title:'UNTRUSTED',body:'UNTRUSTED',data:declarativeData()});
+  generic(w);assert.equal(w.requests.length,0);
+  assert.equal(w.shown[0].options.data.url,'/?chat='+id(10)+'&message='+id(20),'DECLARATIVE_ROUTE_MUST_SURVIVE');
+  assert.equal(w.shown[0].options.tag,'message:chat:'+id(10));
+});
+
+test('declarative protocol: malformed data or selector never fetches and never supplies display authority',async()=>{
+  const {web_preview,...withoutSelector}=declarativeData();
+  for(const data of [null,[],42,'invalid',{},withoutSelector,{...declarativeData(),renotify:'true'},
+    {...declarativeData(),body:'UNTRUSTED EXTRA BODY'},
+    {...declarativeData(),web_preview:{...web_preview,api_url:'https://foreign.invalid'}},
+    {...declarativeData(),web_preview:{...web_preview,preview_v:2}}]){
+    const w=worker();await install(w);
+    await w.push(undefined,{title:'UNTRUSTED TITLE',body:'UNTRUSTED BODY',data});
+    generic(w);assert.equal(w.requests.length,0,'MALFORMED_DECLARATIVE_DATA_MUST_NOT_FETCH');
+  }
+});
+
+test('declarative protocol: retirement during tag close still denies first rich publication',async()=>{
+  const w=worker(),active=await install(w);
+  w.close=async()=>{await w.retire(active);return [];};
+  await w.push(undefined,{data:declarativeData()});
+  generic(w);assert.equal(w.requests.length,1,'DECLARATIVE_LOOKUP_POSITIVE_CONTROL');
+});
+
+test('declarative protocol: legacy event.data remains authoritative over notification metadata',async()=>{
+  const w=worker();await install(w);
+  await w.push(push(),{title:'UNTRUSTED',body:'UNTRUSTED',data:null},true);
+  assert.equal(w.requests.length,1);assert.equal(w.shown.length,1);assert.equal(w.shown[0].title,'QA Sender');
+});
 
 test('actual worker looks up before FIRST publication, then preserves tag, routing and grouping',async()=>{
   const w=worker();await install(w);await w.push();
@@ -283,6 +332,18 @@ test('streamed response over 8192 bytes is refused and cancelled, not cached or 
 
 function omitted(from,to){return text=>{assert.equal(text.split(from).length,2,'EXACT_LOADED_OMISSION');return text.replace(from,to);};}
 const omissionCases=[
+  ['capability ACK marker',omitted('installed: true, web_push_protocol: 1','installed: true'),async w=>{
+    const ack=await install(w);assert.equal(ack.web_push_protocol,1);
+  }],
+  ['declarative notification bridge',omitted('event.data ? event.data.json() : declarativePushPayload(event.notification)','event.data ? event.data.json() : {}'),async w=>{
+    await install(w);await w.push(undefined,{data:declarativeData()});assert.equal(w.requests.length,1);
+  }],
+  ['declarative metadata whitelist',omitted('!previewExact(data, Object.hasOwn(data, "web_preview") ? [...keys, "web_preview"] : keys)','false'),async w=>{
+    await install(w);await w.push(undefined,{data:{...declarativeData(),body:'UNTRUSTED EXTRA BODY'}});generic(w);assert.equal(w.requests.length,0);
+  }],
+  ['declarative metadata field types',omitted('typeof data.renotify !== "boolean"','false'),async w=>{
+    await install(w);await w.push(undefined,{data:{...declarativeData(),renotify:'true'}});generic(w);assert.equal(w.requests.length,0);
+  }],
   ['actual worker INSTALL handler',omitted('event.data.type.startsWith("LETSCUBE_WEB_PREVIEW_")','event.data.type.startsWith("UNSUPPORTED_PREVIEW_")'),async w=>{
     await install(w);
   }],

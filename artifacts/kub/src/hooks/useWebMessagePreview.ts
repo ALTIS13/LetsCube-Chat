@@ -9,12 +9,19 @@ import {
 } from "@/lib/platform/webMessagePreviews";
 
 type Reply = { data: unknown; error: unknown };
+type ProtocolUpdate = {
+  eq(column: string, value: string | boolean): ProtocolUpdate;
+  select(columns: "id,web_push_protocol"): {
+    maybeSingle(): PromiseLike<{ data: { id: string; web_push_protocol: number } | null; error: unknown }>;
+  };
+};
 type PreviewClient = {
   rpc(name: string, args: Record<string, string | number>): PromiseLike<Reply>;
   from(name: "notification_preview_preferences"): {
     select(columns: "user_id,preview_level"): { eq(column: "user_id", id: string): PromiseLike<Reply> };
     upsert(row: { user_id: string; preview_level: WebPreviewLevel }, options: { onConflict: "user_id" }): { select(columns: "user_id,preview_level"): PromiseLike<Reply> };
   };
+  from(name: "push_subscriptions"): { update(row: { web_push_protocol: 1 }): ProtocolUpdate };
 };
 const CLOSED: WebPreviewView = { status: "unavailable", savedChoice: null, effectiveChoice: "none", installed: false, error: null };
 const equal = (a: WebPreviewOwner | null, b: WebPreviewOwner | null) => !!a && !!b && a.userId === b.userId && a.sessionId === b.sessionId && a.accountEpoch === b.accountEpoch;
@@ -81,8 +88,37 @@ function start() {
     },
     rpc: (name, args) => preview.rpc(name, args),
     install: async (token, value, current) => {
-      const worker = navigator.serviceWorker.controller;
-      return !!worker && installWebMessagePreview(worker, token, value, getSupabasePublishableKey(), current);
+      const who = owner();
+      if (!current() || !who || !equal(token.owner, who)) return false;
+      let worker = navigator.serviceWorker.controller;
+      if (!worker) {
+        // A fresh SPA document stays uncontrolled until its next navigation.
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        if (!current() || registration?.scope !== new URL("/", window.location.origin).href) return false;
+        const active = registration.active;
+        if (active?.state !== "activated" || active.scriptURL !== new URL("/sw.js", window.location.origin).href) return false;
+        worker = active;
+      }
+      if (!worker || !await installWebMessagePreview(worker, token, value, getSupabasePublishableKey(), current)
+        || !current() || !equal(who, owner())) return false;
+      try {
+        // Only a new worker ACK plus the same current browser descriptor may opt in.
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        if (!current() || !equal(who, owner())) return false;
+        const sub = await registration?.pushManager.getSubscription();
+        if (!current() || !equal(who, owner()) || !sub) return false;
+        const json = sub.toJSON(), context = value.context;
+        if (json.endpoint !== sub.endpoint || typeof json.keys?.p256dh !== "string" || typeof json.keys?.auth !== "string"
+          || context.recipient_id !== who.userId || context.session_id !== who.sessionId) return false;
+        const fingerprint = await webPreviewSubscriptionFingerprint(sub, context.subscription_id, who.userId);
+        if (!current() || !equal(who, owner()) || fingerprint !== context.subscription_fingerprint) return false;
+        const updated = await preview.from("push_subscriptions").update({ web_push_protocol: 1 })
+          .eq("id", context.subscription_id).eq("user_id", who.userId).eq("endpoint", sub.endpoint)
+          .eq("p256dh", json.keys.p256dh).eq("auth", json.keys.auth).eq("is_active", true)
+          .select("id,web_push_protocol").maybeSingle();
+        return current() && equal(who, owner()) && !updated.error && updated.data?.id === context.subscription_id
+          && updated.data.web_push_protocol === 1;
+      } catch { return false; }
     },
   });
   const unbind = bindWebMessagePreviewRuntime(controller);

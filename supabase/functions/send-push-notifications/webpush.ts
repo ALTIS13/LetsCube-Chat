@@ -21,6 +21,7 @@ export function buildDeclarativeWebPushPayload(
   payload: SafeWebPushPayload,
   configuredAppOrigin: string | undefined,
   previewSelector?: unknown,
+  compatibleWorker: boolean = false,
 ): SafeWebPushPayload & Record<string, unknown> {
   // A subscription can outlive the account in this browser, and an already
   // accepted push can arrive after logout. WebKit may display this declarative
@@ -58,11 +59,23 @@ export function buildDeclarativeWebPushPayload(
   return {
     ...neutral,
     web_push: 8030,
+    // Declarative clients skip the worker unless mutation is requested. Their
+    // PushEvent carries Notification.data rather than the original JSON bytes.
+    mutable: compatibleWorker === true,
     notification: {
       title: neutral.title,
       body: neutral.body,
       navigate: new URL(neutral.url, appOrigin).href,
       tag: neutral.tag,
+      data: {
+        kind: neutral.kind,
+        url: neutral.url,
+        tag: neutral.tag,
+        chatId: neutral.chatId,
+        messageId: neutral.messageId,
+        renotify: neutral.renotify,
+        ...(neutral.web_preview ? { web_preview: neutral.web_preview } : {}),
+      },
     },
   };
 }

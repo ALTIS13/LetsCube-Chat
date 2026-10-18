@@ -33,6 +33,9 @@ function loadServiceWorker({ clients = [], notifications = [] } = {}) {
         async matchAll() {
           return clients;
         },
+        async get(id) {
+          return clients.find((client) => client.id === id);
+        },
       },
     },
   };
@@ -113,9 +116,13 @@ test("clicking a message card focuses the PWA and preserves its exact chat and m
   const worker = loadServiceWorker({
     clients: [
       {
+        id: "fictional-pwa-window",
+        type: "window",
+        frameType: "top-level",
         url: "https://app.letscube.ru/chat/another-chat",
-        focus() {
+        async focus() {
           focused = true;
+          return this;
         },
         postMessage(message) {
           posted.push(message);

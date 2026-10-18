@@ -257,8 +257,9 @@ export function installWebMessagePreview(worker: Pick<ServiceWorker, "postMessag
     const timer = setTimeout(() => finish(false), 2000);
     channel.port1.onmessage = event => {
       const ack: unknown = event.data;
-      finish(record(ack) && exact(ack, ["type", "ok", "generation", "intent_id", "installed"])
+      finish(record(ack) && exact(ack, ["type", "ok", "generation", "intent_id", "installed", "web_push_protocol"])
         && ack.type === "LETSCUBE_WEB_PREVIEW_RESULT" && ack.ok === true && ack.installed === true
+        && ack.web_push_protocol === 1
         && ack.generation === token.generation && ack.intent_id === token.intent_id);
     };
     channel.port1.onmessageerror = () => finish(false);

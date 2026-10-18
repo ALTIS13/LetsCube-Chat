@@ -35,6 +35,7 @@ type SubscriptionRow = {
   p256dh: string;
   auth: string;
   is_active?: boolean;
+  web_push_protocol?: number;
 };
 
 type WebPushDeliveryStatus =
@@ -230,7 +231,8 @@ async function dispatchAlbumPush(
     prepare: async (row, payload) => {
       if (row.subscription_id) {
         if (webLookupFailed) return { outcome: "release", error: "subscription_query_failed" };
-        const descriptor = snapshotWebPushDescriptor(subscriptions.get(row.subscription_id));
+        const subscription = subscriptions.get(row.subscription_id);
+        const descriptor = snapshotWebPushDescriptor(subscription);
         if (!descriptor) return { outcome: "release", error: "subscription_missing" };
         const tag = `message:chat:${payload.chatId}`;
         const fingerprint = await webPushDescriptorFingerprint(descriptor);
@@ -242,7 +244,7 @@ async function dispatchAlbumPush(
               { endpoint: descriptor.endpoint, keys: { p256dh: descriptor.p256dh, auth: descriptor.auth } },
               JSON.stringify(buildDeclarativeWebPushPayload(safe, webPushAppOrigin, {
                 subscriptionId: descriptor.id, notificationId: freshPayload.notificationId,
-              })),
+              }, subscription?.web_push_protocol === 1)),
               { TTL: 60 * 60 * 24, urgency: getWebPushUrgency(safe.kind), ...(topic ? { topic } : {}) },
             );
             return { outcome: "sent" };
@@ -395,7 +397,7 @@ async function claimOutbox(
 async function selectSubscriptions(supabaseUrl: string, secretKey: string, ids: string[]) {
   if (ids.length === 0) return { ok: true as const, data: [] as SubscriptionRow[] };
   const url = new URL("/rest/v1/push_subscriptions", supabaseUrl);
-  url.searchParams.set("select", "id,user_id,endpoint,p256dh,auth,is_active");
+  url.searchParams.set("select", "id,user_id,endpoint,p256dh,auth,is_active,web_push_protocol");
   url.searchParams.set("id", `in.(${ids.join(",")})`);
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: 500, body: await summarizeResponse(response) };
@@ -757,7 +759,7 @@ async function deliver(
     descriptorFingerprint = await webPushDescriptorFingerprint(descriptor);
     providerPayload = JSON.stringify(buildDeclarativeWebPushPayload(legacyPayload, webPushAppOrigin, {
       subscriptionId: descriptor.id, notificationId: row.payload.notificationId,
-    }));
+    }, subscription.web_push_protocol === 1));
   } catch (error) {
     await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       attempt_count: row.attempt_count + 1,

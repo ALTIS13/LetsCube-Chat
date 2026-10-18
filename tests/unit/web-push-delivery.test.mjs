@@ -38,11 +38,16 @@ test("Web Push never exposes message or sender content in either display path", 
   assert.equal(result.body, "Новое уведомление");
   assert.equal(result.chatId, "chat-1");
   assert.equal(result.web_push, 8030);
+  assert.equal(result.mutable, false);
   assert.deepEqual(result.notification, {
     title: "LETSCUBE",
     body: "Новое уведомление",
     navigate: "https://app.letscube.ru/?chat=chat-1&message=message-1",
     tag: "message:chat:chat-1",
+    data: {
+      kind: "message", url: "/?chat=chat-1&message=message-1", tag: "message:chat:chat-1",
+      chatId: "chat-1", messageId: "message-1", renotify: false,
+    },
   });
   assert.equal(result.senderKind, "");
   assert.equal(result.botId, "");
@@ -62,6 +67,31 @@ test("declarative web push is omitted when the configured app origin is unsafe",
   assert.equal("notification" in result, false);
   assert.equal(result.title, "LETSCUBE");
   assert.equal(result.body, "Новое уведомление");
+});
+
+test("mutable declarative push carries selectors through Notification.data, never display authority", () => {
+  const result = buildDeclarativeWebPushPayload(
+    { ...messagePayload, foreignSecret: "must-not-reach-notification-data" },
+    "https://app.letscube.ru",
+    { subscriptionId: "a0000000-0000-0000-0000-000000000001", notificationId: "a0000000-0000-0000-0000-000000000002" },
+    true,
+  );
+  assert.equal(result.mutable, true);
+  assert.deepEqual(result.notification.data, {
+    kind: "message", url: "/?chat=chat-1&message=message-1", tag: "message:chat:chat-1",
+    chatId: "chat-1", messageId: "message-1", renotify: false,
+    web_preview: { preview_v: 1, subscription_id: "a0000000-0000-0000-0000-000000000001", notification_id: "a0000000-0000-0000-0000-000000000002" },
+  });
+  assert.doesNotMatch(JSON.stringify(result.notification), /CodexTest|Привет|Помощник|foreignSecret|must-not-reach/);
+});
+
+test("unconfirmed and malformed worker capabilities retain the declarative fallback's exact target", () => {
+  for (const capability of [undefined, false, 1, "1", "true", null]) {
+    const result = buildDeclarativeWebPushPayload(messagePayload, "https://app.letscube.ru", undefined, capability);
+    assert.equal(result.mutable, false);
+    assert.equal(result.notification.navigate, "https://app.letscube.ru/?chat=chat-1&message=message-1");
+    assert.equal(result.notification.tag, "message:chat:chat-1");
+  }
 });
 
 test("web push topics collapse only the same semantic tag", async () => {

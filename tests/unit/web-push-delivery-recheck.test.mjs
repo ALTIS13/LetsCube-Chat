@@ -203,10 +203,25 @@ test("web positive control sends and acknowledges only after actual recheck", as
   const result = await (await handler(request())).json();
   assert.deepEqual([result.sent, result.pruned, result.failed], [1, 0, 0]);
   assert.equal(providerCalls.length, 1);
-  assert.equal(requests.find(entry => entry.url.pathname === "/rest/v1/push_subscriptions").url.searchParams.get("select"), "id,user_id,endpoint,p256dh,auth,is_active");
+  assert.equal(requests.find(entry => entry.url.pathname === "/rest/v1/push_subscriptions").url.searchParams.get("select"), "id,user_id,endpoint,p256dh,auth,is_active,web_push_protocol");
   assert.deepEqual(events, ["recheck", "provider"]);
   assert.equal(requests.filter(entry => entry.url.pathname === "/rest/v1/rpc/push_outbox_delivery_recheck").length, 0);
   assert.equal(requests.filter((entry) => entry.url.pathname === "/rest/v1/notifications_push_outbox").length, 1);
+});
+
+test("Single Web only requests declarative mutation for an acknowledged compatible worker", async () => {
+  env.WEB_PUSH_APP_ORIGIN = "https://app.letscube.ru";
+  try {
+    for (const protocol of [undefined, 0, 1, 2, "1"]) {
+      configure("deliver", { subscription: { web_push_protocol: protocol } });
+      await handler(request());
+      assert.equal(providerCalls.length, 1);
+      const sent = JSON.parse(providerCalls[0][1]);
+      assert.equal(sent.mutable, protocol === 1);
+    }
+  } finally {
+    delete env.WEB_PUSH_APP_ORIGIN;
+  }
 });
 
 test("missing bound RPC fails closed, never falls back to old ABI or settles unverified row", async () => {
@@ -354,7 +369,7 @@ for (const [label, transform, scenario, message] of [
     descriptorChanged, "same-id same-owner descriptor replacement must refuse stale provider bytes"],
   ["different provider endpoint", text => inSingleDelivery(text, body => replaceOnce(body, "endpoint: descriptor.endpoint,", 'endpoint: "https://provider.invalid/other",')),
     boundUnicode, "provider bytes must match bound fingerprint"],
-  ["omit owner projection", text => replaceOnce(text, '"id,user_id,endpoint,p256dh,auth,is_active"', '"id,endpoint,p256dh,auth,is_active"'),
+  ["omit owner projection", text => replaceOnce(text, '"id,user_id,endpoint,p256dh,auth,is_active,web_push_protocol"', '"id,endpoint,p256dh,auth,is_active,web_push_protocol"'),
     boundUnicode, "matching Unicode descriptor must reach provider"],
   ["restore stale cached inactive veto", text => replaceOnce(text, 'if (!eligibility.ok) return "failed";\n\n  const deliveryStatus = eligibility.status;',
     'if (!eligibility.ok) return "failed";\n  if (subscription?.is_active === false) return "pruned";\n\n  const deliveryStatus = eligibility.status;'),

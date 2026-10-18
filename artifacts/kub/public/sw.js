@@ -228,7 +228,7 @@ function isBuildFile(url) {
 self.addEventListener("push", (event) => {
   let raw = {};
   try {
-    raw = event.data ? event.data.json() : {};
+    raw = event.data ? event.data.json() : declarativePushPayload(event.notification);
   } catch {
     raw = { body: event.data ? event.data.text() : "" };
   }
@@ -237,6 +237,18 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(showPushNotification(data));
 });
+
+function declarativePushPayload(notification) {
+  // Mutable declarative push has null event.data. Notification display fields
+  // are not authority: only routing and a fresh-lookup selector cross here.
+  const data = notification?.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  const keys = ["kind", "url", "tag", "chatId", "messageId", "renotify"];
+  if (!previewExact(data, Object.hasOwn(data, "web_preview") ? [...keys, "web_preview"] : keys)
+    || ["kind", "url", "tag", "chatId", "messageId"].some(key => typeof data[key] !== "string")
+    || typeof data.renotify !== "boolean") return {};
+  return { ...data };
+}
 
 async function showPushNotification(data) {
   const preview = await lookupWebPreview(data);
@@ -265,24 +277,42 @@ async function closePushNotificationTag(tag) {
   existing.forEach((notification) => notification.close());
 }
 
+// A second click must see the window opened by the first, not open its own.
+let notificationClicks = Promise.resolve();
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = ensureRelativeUrl(event.notification.data?.url || "/");
 
-  event.waitUntil((async () => {
+  const opening = notificationClicks.then(async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of all) {
-      if (client.url.includes(self.location.origin)) {
-        client.focus();
-        client.postMessage({ type: "kub-open", url: targetUrl });
+      if (!isNotificationWindow(client)) continue;
+      try {
+        const focused = await client.focus();
+        const current = focused && await self.clients.get(focused.id);
+        if (!isNotificationWindow(current)) continue;
+        current.postMessage({ type: "kub-open", url: targetUrl });
         return;
+      } catch {
+        // A closed or not-yet-active client must not swallow the click.
       }
     }
     if (self.clients.openWindow) {
       await self.clients.openWindow(new URL(targetUrl, self.location.origin).href);
     }
-  })());
+  });
+  notificationClicks = opening.catch(() => {});
+  event.waitUntil(opening);
 });
+
+function isNotificationWindow(client) {
+  if (!client || client.type !== "window" || client.frameType === "nested") return false;
+  try {
+    return new URL(client.url).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
 
 function normalizePushPayload(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
@@ -441,7 +471,7 @@ function handleWebPreviewMessage(event) {
       previewStorageFailed = false;
       previewBlocked = false;
       reply({ type: "LETSCUBE_WEB_PREVIEW_RESULT", ok: true, generation: stored.record.generation,
-        intent_id: stored.record.intent_id, installed: true });
+        intent_id: stored.record.intent_id, installed: true, web_push_protocol: 1 });
     });
     previewWrites = pending.catch(() => { previewStorageFailed = true; reply({ type: "LETSCUBE_WEB_PREVIEW_RESULT", ok: false }); });
     return previewWrites;

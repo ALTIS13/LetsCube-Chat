@@ -161,7 +161,7 @@ test("worker handoff has exact metadata-only protocol and refuses a service role
       if(typeof window.api.installWebMessagePreview!=='function')return {missing:true};
       let sent=[];
       const worker={postMessage(message,ports){sent.push(message);ports[0].postMessage({type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,
-        generation:message.generation,intent_id:message.intent_id,installed:true});}};
+        generation:message.generation,intent_id:message.intent_id,installed:true,web_push_protocol:1});}};
       await window.preview.setChoice('sender');const saved=await window.store.read();
       const accepted=await window.api.installWebMessagePreview(worker,saved,saved.envelope,'sb_publishable_fictional',()=>true);
       const secretRole='eyJhbGciOiJIUzI1NiJ9.'+btoa(JSON.stringify({role:'service_role'})).replaceAll('=','')+'.c2ln';
@@ -169,6 +169,34 @@ test("worker handoff has exact metadata-only protocol and refuses a service role
       return {accepted,denied,count:sent.length,keys:Object.keys(sent[0]).sort(),secretInMessage:JSON.stringify(sent).includes(saved.envelope.grant_secret)};
     });
     assert.deepEqual(result,{accepted:true,denied:false,count:1,keys:['context','generation','intent_id','public_key','type','v'],secretInMessage:false});
+  }finally{await f.close();}
+});
+
+test("worker handoff refuses old ACK, nonliteral protocol and unexpected ACK fields",async()=>{
+  const f=await fixture();try{
+    const result=await f.page.evaluate(async()=>{
+      await window.preview.setChoice('message');const saved=await window.store.read(),accepted=[];
+      for(const extra of [{},{web_push_protocol:0},{web_push_protocol:'1'},{web_push_protocol:1,unknown:true}]){
+        const worker={postMessage(message,ports){ports[0].postMessage({type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,
+          generation:message.generation,intent_id:message.intent_id,installed:true,...extra});}};
+        accepted.push(await window.api.installWebMessagePreview(worker,saved,saved.envelope,'sb_publishable_fictional',()=>true));
+      }
+      return accepted;
+    });
+    assert.deepEqual(result,[false,false,false,false]);
+  }finally{await f.close();}
+});
+
+test("compiled protocol marker omission is caught by a literal unsupported-protocol ACK",async()=>{
+  const f=await fixture(['&& ack.web_push_protocol === 1','']);try{
+    const accepted=await f.page.evaluate(async()=>{
+      await window.preview.setChoice('message');const saved=await window.store.read();
+      const worker={postMessage(message,ports){ports[0].postMessage({type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,
+        generation:message.generation,intent_id:message.intent_id,installed:true,web_push_protocol:0});}};
+      return window.api.installWebMessagePreview(worker,saved,saved.envelope,'sb_publishable_fictional',()=>true);
+    });
+    assert.throws(()=>assert.equal(accepted,false),{code:'ERR_ASSERTION'});
+    assert.equal(accepted,true);
   }finally{await f.close();}
 });
 
@@ -314,9 +342,12 @@ async function hookFixture(options={}){
     const endpoint='https://push.fixture.invalid/fictional',p256dh='fictional-key',auth='fictional-auth';
     const sub={endpoint,toJSON:()=>({endpoint,keys:{p256dh,auth}})};
     Object.defineProperty(navigator.serviceWorker,'controller',{configurable:true,value:{postMessage(message,ports){
-      window.events.push({kind:'worker',message});if(ports)ports[0].postMessage({type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,generation:message.generation,intent_id:message.intent_id,installed:true});}}});
+      window.events.push({kind:'worker',message});if(ports)ports[0].postMessage({type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,generation:message.generation,intent_id:message.intent_id,installed:true,web_push_protocol:1});}}});
     navigator.serviceWorker.getRegistration=async()=>({pushManager:{getSubscription:async()=>sub}});
-    window.sdk={auth:{signOut:async()=>{window.events.push({kind:'signOut'});return {error:null};}},from(name){return {select(columns){return {eq(){if(name==='notification_preview_preferences')return Promise.resolve({data:window.savedLevel?[{user_id:U,preview_level:window.savedLevel}]:[],error:null});
+    window.sdk={auth:{signOut:async()=>{window.events.push({kind:'signOut'});return {error:null};}},from(name){return {
+      update(row){const filters=[],query={eq(key,value){filters.push([key,value]);return query;},select(){return query;},
+        async maybeSingle(){window.events.push({kind:'protocol',row,filters});return {data:{id:P,web_push_protocol:1},error:null};}};return query;},
+      select(columns){return {eq(){if(name==='notification_preview_preferences')return Promise.resolve({data:window.savedLevel?[{user_id:U,preview_level:window.savedLevel}]:[],error:null});
       return {eq(){return {maybeSingle:async()=>({data:{id:P,user_id:U,endpoint,p256dh,auth,is_active:true},error:null})}}};}};},
       upsert(row,options){return {select:async columns=>{window.events.push({kind:'write',row,options,columns});if(window.holdWrite)await new Promise(ok=>window.writeRelease=ok);
         window.savedLevel=row.preview_level;window.granted=false;return {data:[row],error:null};}};}};},
