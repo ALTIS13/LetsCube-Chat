@@ -3,11 +3,13 @@
 ## Current Resume
 
 Owner: Codex; stage: item52 restore FIFO fix and item77 live transport acceptance.
-Source baseline: `c92e408075f3dc696363c0e4cfcdda11ecf02992`. Web readable previews
+Source baseline: `c92e408075f3dc696363c0e4cfcdda11ecf02992`; reviewed repair and
+Android24 source: `5af58c2b051ed826adf09567c1b94b79bc36b123`. Web readable previews
 and Android0.1.22/build23 remain accepted; do not repeat their unchanged matrix.
 Topic runtime is still OFF. The current live wire probe is accepted, not the
-child-override compatibility/provider/OS matrix. Next: complete the narrow
-outbox review/release and fresh isolated Topic override acceptance.
+child-override compatibility/provider/OS matrix. The FIFO repair is released;
+next: fresh isolated Topic override acceptance, then the remaining recorded
+Nikita/cache/reconnect intake. No cloud device/runtime is currently held.
 
 ## Observed Cause
 
@@ -78,6 +80,60 @@ based on this ordinary-message baseline or the earlier manual-claims probe.
 
 ## Release State
 
-The review finding is repaired and affected source checks pass. Build and
-deployment are pending. Android0.1.23/build24 is prepared; Android23 is immutable
-and must not be overwritten. Physical/package/public acceptance remains separate.
+Android0.1.23/build24 is Stable, mandatory=false. Real build markers:
+`bca1e854882abe98`, Vite23.41s, Gradle16s. Original APK/AAB signer, four Firebase
+initialization values, ordinary false QA flags, logging-none and bundled web /
+native DEX parity pass. APK7,755,415 bytes, SHA256
+`15a2f563b261e50d0ff824855ba2378dfc3059216dc66041ee4c6f194bd56706`.
+AAB7,387,175 bytes, SHA256
+`11ed53fc3a50c9ffd399f71ab64716e980c4c10b1d623b588dcd9831f8c3fe4c`.
+
+Realme primary23 ->24 is an actual in-place installation; UID, data directory
+and first-install time match. No clear/uninstall/PIN entry or other app update.
+The actual guest login screen and foreground activity are verified, with no
+native fatal in that process. Initial verification refused because the probe
+used Android15's `dumpsys window windows`, which omits current-focus metadata,
+and omitted a UI label field; calibration against `window displays` and the
+existing safe UI reader corrected the probe. The successful recovery inspected
+the already-installed24, not a second install or a fictional successful retry.
+This is guest upgrade/startup evidence, not a new authenticated FIFO/FCM canary.
+The unchanged native delivery/auth acceptance from23 remains explicitly reused.
+
+The existing immutable publisher ran under its catalog CAS/publish lock with
+byte-checked previous Stable23 manifest/APK and rollback retained. Separate
+HTTPS streaming verifies the entire published APK and manifest bytes/hash.
+Android23 was not overwritten. No store/package identity changed.
+
+Shared-web source5af58c2b is deployed; build `6d2e3337463d0e30` has one healthy
+image and exact public/container HTML, entry JS and SW hash parity. The public
+compiled bundle contains the changed deferred-restore/shared-init/discard
+boundary, not only an unrelated inherited notification marker. No production
+SQL, API worker or provider configuration changed. Windows uses the updated
+remote renderer with its unchanged0.2.14 shell. Native Apple release ownership
+is unchanged. Later documentation-only deploys may replace the image/build ID
+without changing this product source; retain their separate private receipt.
+
+Private receipts: `.ops-private/topic-live-20261018/`, including `realme24.json`,
+`publish24-public.json`, build receipts and `web-fifo-5af58c2b.json`; public web
+parity also lives under the preceding web-preview operator directory. Both main
+and worktree preserve ignored credentials and original immutable release files.
+
+## Fresh Topic Runtime Preparation
+
+The new ignored `runtime/` directory contains seven inert preparation files.
+Coordinator local tests12/12 and syntax pass, including exact-owned cleanup,
+lost-ACK reconciliation, schema-only parsing and a killed exact-CID omission.
+No runtime was created or SQL applied by this preparation.
+
+Before execution: capture current schema-only bytes and corresponding current
+Realtime numeric migration versions, and supply a finite in-network SDK/hook
+driver. It must use fresh QA identities and actual producers, ordinary JWTs and
+current/old product hooks; no expired R5/330 cohort, giant per-request metadata
+guard loop, production rows/mounts/secrets or provider side effects. The prepared
+internal network has no exposed host ports, read-only services, random QA-only
+secrets, fixed deadlines and exact labelled CID cleanup in `finally`.
+
+The existing executor lacks read actions/observability and latches CLOSED;
+extend that test boundary minimally before claiming same-document reconnect or
+hook read reconciliation. Do not relabel a remount, manual claims, source tests
+or this preparation as completed override/provider/physical acceptance.

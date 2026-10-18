@@ -2,6 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
+**Latest continuation, 2026-10-18:** item52/D-367 FIFO/discard restoration repair
+is released at source5af58c2b: actual Chromium/WebKit IndexedDB RED/GREEN,
+independent review fix,117 affected tests, typecheck and genuine build pass.
+Shared web build6d2e3337463d0e30 has healthy public/container parity. Android
+Stable0.1.23/build24, mandatory=false, passes original signer/Firebase/assets,
+actual Realme23 ->24 guest upgrade with UID/data/first-install retention and
+full public APK bytes/SHA; Stable23 rollback retained. Native FCM/auth proof
+from23 is reused, not rerun/overclaimed. Current SDK/feed-v2 marker/create/read
+wire passes on owned QA with sessions retired. Topic remains OFF; new isolated
+runtime files are preparation only, requiring fresh schema/history and finite
+SDK/hook driver. No production SQL or paid/cloud resource is held.
+[Current continuation and next](operations/2026-10-18-outbox-restore-and-topic-wire.md).
+
 **Current execution, 2026-10-18:** Cursor return audited. Shared web `dc381840`
 is healthy with public/container parity; chat warm-history/privacy and pending
 reconnect retirement fixes are live. Actual installed iPhone PWA sender/text,
@@ -555,7 +568,7 @@ while the hint was offered **and the page was visible**, not wall clock since it
 ## Current Execution Order
 
 Current as of 2026-10-18; the dated detail under queue items is history, not a
-competing version or permission gate. Web notification text and fresh Android23
+competing version or permission gate. Web notification text and Android24
 are released after physical checks. Finish distinct Topic acceptance next;
 its runtime remains OFF. D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
@@ -568,6 +581,8 @@ maintain their affected regressions, do not rebuild them without a new finding.
 2. `[~]` Synchronization/cache/recovery2,52,53: retain account-owned warm history,
    privacy admission, anchors, pending text/files/voice and duplicate-free retries.
    D-357 throughD-364 are accepted fixes, not instructions to repeat their tests.
+   D-367 cold-restore FIFO/stale-discard repair is released; keep its actual
+   storage tests, do not treat the complete synchronization stage as closed.
 3. `[~]` Notifications76-77,95: iPhone PWA sender/text modes and exact tap are
    accepted and enabled; fresh Android23 useful FCM/none/tap/logout is accepted.
    Complete persisted child overrides and the broader account/device matrix.
@@ -589,9 +604,10 @@ maintain their affected regressions, do not rebuild them without a new finding.
    containers, search motion, typography, controls and keyboards across shells.
 10. `[~]` Product completion17,19-20,27,36-38: public downloads/changelog,
     profiles/contacts/shared-media depth, scoped roles, tasks/staff and support.
-11. `[~]` Platform acceptance7,9,28: Android Stable0.1.22/build23 is published;
-    original signer/Firebase/assets, actual same-session Realme upgrade and
-    readable FCM/none/tap/logout checks are accepted. Broader OEM/long-session
+11. `[~]` Platform acceptance7,9,28: Android Stable0.1.23/build24 is published;
+    original signer/Firebase/assets and actual Realme23 ->24 guest upgrade pass.
+    Same-session upgrade/readable FCM/none/tap/logout acceptance from23 is reused.
+    Broader OEM/long-session
     checks stay open; iPhone installed PWA modes/tap are separately accepted.
     Use Realme/rented devices, not A063. Windows EXE
     remains owner-accepted unsigned; WNS killed-process and Win10/11/long-session

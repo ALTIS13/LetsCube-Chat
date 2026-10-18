@@ -1,18 +1,21 @@
 # LETSCUBE — handover
 
-**Current resume, 2026-10-18:** Codex; item52/D-367 outbox FIFO and item77 live
-transport acceptance. Start with
+**Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
+released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with
 [the current continuation](operations/2026-10-18-outbox-restore-and-topic-wire.md).
 Actual production SDK/feed-v2 open marker, newly produced message admission and
 read reconciliation pass on owned QA; both sessions retired, runtime unchanged.
 This does not enable Topic overrides (still OFF). A confirmed cold-restore race
 sent newer messages before older persisted entries; source/storage repair and
 review-discovered stale-discard resurrection fix pass117 affected checks,
-Chromium/WebKit IndexedDB and typecheck. Android0.1.23/build24 is a candidate,
-not yet built/published; Web/PWA/Windows production stillc92e4080 and Android
-Stable0.1.22/build23. Next: build/release the reviewed FIFO repair, then finish
-fresh isolated Topic compatibility/consumer acceptance. No A063, personal
-captures or production SQL changes. No paid rental held.
+Chromium/WebKit IndexedDB and typecheck. Signed build source5af58c2b, original
+signer/Firebase/QA flags/assets pass; actual Realme23 ->24 keeps UID/data/first
+install and opens the guest UI. Public APK bytes/SHA and Stable23 rollback pass.
+Web source5af58c2b/build6d2e3337463d0e30 is healthy with public/container parity;
+later docs-only deploys keep the same product source. Windows remote renderer
+is updated; shell0.2.14 unchanged. Next: fresh isolated Topic compatibility/
+consumer acceptance (prepared only; runtime OFF), then Nikita/cache/reconnect.
+No A063, personal captures, production SQL changes or cloud resources held.
 
 **Previous accepted release, 2026-10-18:** Codex resumed after Cursor. See
 [the current release record](operations/2026-10-18-cursor-return-notifications.md).

@@ -25738,7 +25738,7 @@ markers, byte parity, rollback and anonymous smoke pass. Actual native package
 acceptance remains separate; Android Stable22 embeds the preceding bundle.
 [Evidence and remaining scope](operations/2026-10-16-recorder-mode-feedback.md).
 
-## D-367 `[~]` A new send overtakes messages still being restored from disk
+## D-367 `[x]` A new send overtakes messages still being restored from disk
 
 Medium correctness; item52. `artifacts/kub/src/lib/outbox/outboxRunner.ts` made
 the account sendable before `storage.list()` completed. A new same-chat message
@@ -25747,6 +25747,10 @@ against shipped `c92e4080` with actual IndexedDB/document reload in Chromium and
 WebKit; both FIFO assertions fail, and the old-source negative control passes.
 
 The current-owner restoration barrier and shared initialization repair the
-ordering without changing message IDs/storage/schema. Source/browser acceptance
-is not native/release acceptance. Review/deployment pending.
+ordering without changing message IDs/storage/schema. Review also exposed stale
+restore snapshots resurrecting discarded rows; tombstones fix that with genuine
+browser RED/GREEN. Affected117/117 and typecheck pass. Web source5af58c2b has
+healthy public/container parity; Android0.1.23/build24 is Stable after unchanged
+signer/Firebase/parity, actual Realme in-place guest upgrade and public APK hash
+checks. Authenticated physical FIFO/new FCM/OEM matrix is not claimed.
 [Evidence and exact remaining scope](operations/2026-10-18-outbox-restore-and-topic-wire.md).
