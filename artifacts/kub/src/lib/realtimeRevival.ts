@@ -79,6 +79,8 @@ export function createRealtimeRevival(
 ) {
   let probe: unknown = null;
   let answered = false;
+  let disposed = false;
+  let reconnecting = false;
 
   return {
     /** Feed every heartbeat status here; `ok` is the answer a probe waits for. */
@@ -88,16 +90,24 @@ export function createRealtimeRevival(
 
     /** A moment of doubt. */
     doubt(): RevivalStep {
+      if (disposed || reconnecting) return "connect";
       if (!socket.isConnected()) {
         // A handshake left on the route that just died still counts as
         // connecting, so `connect()` leaves it there and no probe is sent.
         // Drop it first. `connect()` during the drop is refused as well
         // (`isDisconnecting`), so the new one waits until the drop settles.
         if (socket.isConnecting?.() && socket.disconnect) {
-          const drop = socket.disconnect();
-          void Promise.resolve(drop).then(() => {
-            if (!socket.isConnected()) socket.connect();
-          });
+          reconnecting = true;
+          void (async () => {
+            try {
+              await socket.disconnect!();
+              if (!disposed && !socket.isConnected()) socket.connect();
+            } catch {
+              // A later doubt may retry; a failed drop cannot authorize a reconnect.
+            } finally {
+              reconnecting = false;
+            }
+          })();
           return "connect";
         }
         socket.connect();
@@ -117,6 +127,7 @@ export function createRealtimeRevival(
     },
 
     dispose() {
+      disposed = true;
       if (probe !== null) timers.clear(probe);
       probe = null;
     },

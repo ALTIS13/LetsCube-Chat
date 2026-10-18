@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 
 import {
   REQUEST_DEADLINE_MS,
@@ -283,3 +284,76 @@ test("a socket that closed while the probe waited is not beaten again", () => {
   assert.equal(state.beats, 1);
   assert.equal(state.replaced, 0);
 });
+
+function pendingDisconnect() {
+  let finish!: () => void;
+  const dropped = new Promise<void>((resolve) => { finish = resolve; });
+  const state = { phase: "connecting", drops: 0, connects: 0 };
+  const revival = createRealtimeRevival({
+    isConnected: () => state.phase === "open",
+    isConnecting: () => state.phase === "connecting",
+    disconnect: () => {
+      state.drops += 1;
+      state.phase = "disconnecting";
+      return dropped;
+    },
+    connect: () => { state.connects += 1; state.phase = "connecting"; },
+    sendHeartbeat: () => assert.fail("a closed socket must not be probed"),
+  });
+  return { revival, state, finish: () => { state.phase = "closed"; finish(); } };
+}
+
+test("a disposed revival cannot reconnect after its held disconnect completes", async () => {
+  const { revival, state, finish } = pendingDisconnect();
+  revival.doubt();
+  assert.equal(state.drops, 1, "disconnect positive control");
+  revival.dispose();
+  finish();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.connects, 0, "retired recovery reopened the shared socket");
+  revival.doubt();
+  assert.equal(state.connects, 0, "a queued signal revived a disposed owner");
+});
+
+test("doubts during a held disconnect join one recovery without connecting early", async () => {
+  const { revival, state, finish } = pendingDisconnect();
+  revival.doubt();
+  revival.doubt();
+  revival.doubt();
+  assert.equal(state.drops, 1);
+  assert.equal(state.connects, 0, "connect ran before disconnect settled");
+  finish();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.connects, 1, "one settled recovery opens once");
+});
+
+for (const failure of ["disconnect", "connect"]) {
+  test(`a rejected recovery at ${failure} is handled and a later doubt can retry`, () => {
+    // A separate process makes an unhandled rejection an observable failure
+    // without leaking it into node:test's other lifecycle scenarios.
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      import assert from "node:assert/strict";
+      import { createRealtimeRevival } from ${JSON.stringify(new URL("../../artifacts/kub/src/lib/realtimeRevival.ts", import.meta.url).href)};
+      const errors = [];
+      process.on("unhandledRejection", (error) => errors.push(error));
+      let fail = true, connects = 0;
+      const revival = createRealtimeRevival({
+        isConnected: () => false,
+        isConnecting: () => true,
+        disconnect: () => ${failure === "disconnect" ? 'fail ? Promise.reject(new Error("fictional disconnect failure")) : Promise.resolve()' : "Promise.resolve()"},
+        connect: () => { if (fail) throw new Error("fictional connect failure"); connects += 1; },
+        sendHeartbeat() {},
+      });
+      revival.doubt();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(errors.length, 0, "recovery leaked an unhandled rejection");
+      assert.equal(connects, 0);
+      fail = false;
+      revival.doubt();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(connects, 1, "failed recovery must release the next doubt");
+      revival.dispose();
+    `], { encoding: "utf8", timeout: 10_000 });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+  });
+}

@@ -58,7 +58,7 @@ const fixture = new Function("assert", "path", "vm", "ts", "read", "source", "ro
 
 const count = (f, name) => f.calls.filter((call) => call.name === name).length;
 const ids = (rows) => Array.from(rows, (message) => message.id);
-async function reopened(text = source, initial = [row()]) {
+async function reopened(text = source, initial = [row()], hiddenReads = 0) {
   const rows = initial.slice();
   const f = fixture({ text, historyRows: rows });
   await f.drain();
@@ -68,8 +68,9 @@ async function reopened(text = source, initial = [row()]) {
   f.clear();
   await f.remount();
   assert.equal(f.view.messages.length, initial.length, "trusted cache renders after verification microtasks");
-  assert.equal(f.calls.filter((call) => ["history", "mark", "hidden"].includes(call.name)).length, 0,
-    "trusted warm reopen itself makes no history/privacy request");
+  assert.equal(f.calls.filter((call) => ["history", "mark"].includes(call.name)).length, 0,
+    "trusted warm reopen itself makes no history/membership request");
+  assert.equal(count(f, "hidden"), hiddenReads, "only held reply previews need a fresh privacy read");
   return { f, rows };
 }
 
@@ -109,6 +110,49 @@ test("trusted warm reopen paints held history before privacy microtasks", async 
   assert.equal(f.view.messages.length, 1);
   assert.equal(f.calls.filter((call) => ["history", "mark", "hidden"].includes(call.name)).length, 0);
 });
+
+async function closedReplyHide(text = source, firstFrame = true) {
+  const f = fixture({ text, historyRows: [{ ...row(2), reply_to_id: row().id, reply_to: row() }, row()] });
+  await f.drain();
+  assert.ok(f.view.messages[1].reply_to, "visible reply preview positive control");
+  f.unmount();
+  f.hides.heard({ chatId: CHAT, messageId: row().id, hidden: true });
+  // useChats removes the hidden top-level row, not another row's joined reply.
+  f.state.messages[CHAT] = f.state.messages[CHAT].filter((message) => message.id !== row().id);
+  const hidden = f.hold("hidden");
+  f.clear();
+  f.paint();
+  if (firstFrame) assert.equal(f.view.messages.length, 0, "closed-chat hide exposed its held reply before privacy verification");
+  await f.drain();
+  assert.equal(count(f, "hidden"), 1, "reply previews need a current hidden answer on reopen");
+  hidden.resolve({ data: [{ message_id: row().id }], error: null });
+  await f.drain();
+  assert.deepEqual(ids(f.view.messages), [row(2).id]);
+  assert.equal(f.view.messages[0].reply_to, undefined, "hidden reply must stay scrubbed after verification");
+}
+
+test("a reply hidden while its chat was closed is not exposed by warm reopen", () => closedReplyHide());
+test("live-ID trust cannot skip the reopened reply preview's privacy read", () => closedReplyHide(source, false));
+
+async function clearedWhileClosed(text = source) {
+  const f = fixture({ text, historyRows: [row()] });
+  await f.drain();
+  assert.equal(f.view.messages.length, 1, "uncleared history positive control");
+  f.unmount();
+  const mark = "2026-10-07T00:01:00Z";
+  f.markCache.evictChat(CHAT);
+  // useChats seeds the updated membership mark, but setChats retains held history.
+  f.markCache.seedFromMembershipRead("fictional-owner", [{ chat_id: CHAT, cleared_at: mark }], f.markCache.beginMembershipRead());
+  f.state.chats[0] = { ...f.state.chats[0], cleared_at: mark };
+  f.clear();
+  f.paint();
+  assert.equal(f.view.messages.length, 0, "fresh membership mark exposed already-cleared held history");
+  await f.drain();
+  assert.equal(f.view.messages.length, 0, "cleared held history stays absent after privacy verification");
+  assert.equal(count(f, "mark"), 0, "fresh mark still avoids a membership request");
+}
+
+test("a fresh changed clear mark cannot authorize the old history's first frame", () => clearedWhileClosed());
 
 async function newMessage(text = source) {
   const { f, rows } = await reopened(text);
@@ -152,7 +196,7 @@ for (const kind of ["lost", "joined", "unhide"]) {
 async function currentHide(text = source) {
   const { f } = await reopened(text, [
     { ...row(2), reply_to_id: row().id, reply_to: row() }, row(),
-  ]);
+  ], 1);
   f.hides.heard({ chatId: CHAT, messageId: row().id, hidden: true });
   await f.drain();
   assert.deepEqual(ids(f.view.messages), [row(2).id], "live hide control");
@@ -267,6 +311,13 @@ function mutate(needle, replacement) {
 }
 const decision = "hiddenMessagesLive.canSkip(chatId, [...checkedIds])";
 const omissions = [
+  ["held clear boundary omitted", () => mutate(
+    "if (mark && held.some((message) => new Date(message.created_at).getTime() <= new Date(mark).getTime())) return;", ""),
+    clearedWhileClosed, "fresh membership mark exposed"],
+  ["held reply paint guard omitted", () => mutate("if (held.some((message) => message.reply_to)) return;", ""),
+    closedReplyHide, "closed-chat hide exposed"],
+  ["held reply privacy read omitted", () => mutate("!cached.some((message) => message.reply_to) && ", ""),
+    (text) => closedReplyHide(text, false), "reply previews need a current hidden answer"],
   ["skip omitted", () => mutate(decision, "false"), trusted, "unchanged trusted IDs"],
   ["new-ID trust bypassed", () => mutate(decision, `(heldWhenAsked.length > 0 || ${decision})`), newMessage, "held rows retained"],
   ["reply IDs omitted", () => mutate(decision,

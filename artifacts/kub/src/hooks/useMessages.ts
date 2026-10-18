@@ -240,6 +240,11 @@ export function useMessages(
     const cached = held.some((message) => messageBelongsToTopic(message, topicId, generalTopicIds));
     const unreadWhileClosed = (useAppStore.getState().chats.find((item) => item.id === chatId)?.unread_count ?? 0) > 0;
     if (!cached || unreadWhileClosed) return;
+    // A hide heard while closed removes the row, but not its joined reply preview.
+    if (held.some((message) => message.reply_to)) return;
+    // A fresh membership answer need not have filtered the held page yet.
+    const mark = useAppStore.getState().chats.find((item) => item.id === chatId)?.cleared_at;
+    if (mark && held.some((message) => new Date(message.created_at).getTime() <= new Date(mark).getTime())) return;
     if (!clearedAtCache.hasFresh(chatId, userId)) return;
     if (!hiddenMessagesLive.canSkip(chatId, getMessageAndReplyIds(held))) return;
     verifiedAccountEpochRef.current = accountEpoch;
@@ -552,7 +557,8 @@ export function useMessages(
       const heldIds = getMessageAndReplyIds(cached);
       const hiddenReadAt = Date.now();
       const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
-      const heard = hiddenMessagesLive.canSkip(chatId, heldIds);
+      // The list's live hide handler does not sanitize held reply previews.
+      const heard = !cached.some((message) => message.reply_to) && hiddenMessagesLive.canSkip(chatId, heldIds);
       const [mark, hidden] = await Promise.all([
         loadClearedAt(supabase, chatId, userId),
         heard ? Promise.resolve(new Set<string>()) : fetchHiddenMessageIdSet(supabase, heldIds, () => active && sameAccount()),
