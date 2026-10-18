@@ -3,15 +3,27 @@
 **Active plan,2026-10-18:** Codex owns the
 [production completion plan](superpowers/plans/2026-10-18-production-completion.md).
 Owner authorizes reviewed production rollout and safe migrations throughout.
-Current stage: Topic compatibility/consumer acceptance, runtime still OFF;
-accepted Stable24 remains the baseline. See the
-[execution record](operations/2026-10-18-production-completion.md):68 affected
-checks pass; actual isolated core policy/read/rollback/reconnect wire passes.
-All4 current hooks automatically recover cold CDC startup using the existing
-10s+1s retry contract; premature4.5s test deadline was corrected, not product code.
-Next: inherit/oldWindows/staleCAS, then pending-response/provider cases, not a
-global enable. Nikita's9 newer entries are retained; semantic extraction failed,
-bounded private normalization continues. No production mutation/device/rental.
+Stage: combined chat/task recovery build/release preparation; Topic canary prepared,
+runtime still OFF. Canonical worktree/branch below, coordinator owns integration.
+See the [execution record](operations/2026-10-18-production-completion.md):
+actual core0629, held4463 and fence-omission3f0e pass; actual Edge52e7 passes12
+Web/FCM single/album cases, legacy3e91 passes3 single-Web cases. Provider leaves
+are controlled, not physical delivery.42 changed helper/caller checks pass.
+Shared-web warm-history independence and actual offline RT recovery pass with
+0px anchor drift and exact QA cleanup. Actual D354 shared-web drafts/Retry pass;
+D342 retained payload39 files is sealed, not standalone restore acceptance.
+Actual-hook diagnosis reproduces redundant700/900/900ms reads and late sanitizer
+refetch. Cache repair + reviewed deadline fix pass153 checks/typecheck; not yet
+committed/deployed. Real task outage confirms3 rejoins/0 detail GET/stale title;
+Task fix0bdffb80 passes66 checks/review and is fast-forwarded into the canonical
+branch without discarding its dirty cache/docs. Combined typecheck/build pass:
+219bc5b6e783062f,51.07s;70 task/channel checks +153 chat checks. Android metadata
+0.1.24/build25 is prepared, not built/published; Stable24 is unchanged.
+Next: commit/import review/deploy, changed-input runtime proof, native25 delta;
+then physical Topic canary. Parallel package-only restore and activation prep.
+Nikita's9 entries remain semantic-PENDING, four ungrounded cache leads retained.
+Production3b2d661e deploy healthy; Stable24/product bytes unchanged. No production SQL
+mutation, A063, native update or rental. Realme is online; no device test yet.
 
 **Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with

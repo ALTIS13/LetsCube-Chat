@@ -3240,7 +3240,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     not written a second time to the device.
 
 53. `[~]` The application recovers by itself when the network changes under it
-    — same report. «Если меняется IP… приходится перезапускать мессенджер»:
+    — same report.
+    **2026-10-18 follow-up:** actual shared-web transport recovery/rows/anchor pass.
+    Its measured3 history reads led to two reproduced redundant-read causes;
+    reviewed recovery-timer/authoritative-cache-proof repair passes153 focused
+    checks/typecheck and awaits combined deployment/runtime acceptance. Do not
+    equate this with the still-unidentified original Android VPN case.
+    [Current evidence](operations/2026-10-18-production-completion.md).
+    Original intake: «Если меняется IP… приходится перезапускать мессенджер»:
     switching a VPN off to open another app leaves the messenger dead until it
     is restarted (the Android owner's account; not reproduced yet). Read in the
     code the same day, no recovery of our own exists: realtime runs on library
@@ -4453,11 +4460,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     confirm the transitions, not rendered draft loss or the unidentified tester
     reports86/87. Narrow initial/refresh/error/owner separation and mounted actual
     modal/checklist regression are accepted; source/browser fix4765bcad is included
-    in shipped web5af58c2b and Android24. Authenticated runtime draft preservation,
-    transient error/Retry and terminal retirement remain open. Next: leave owned
+    in shipped web5af58c2b and Android24. Actual authenticated shared-web refresh
+    now holds a genuine RT-triggered server response: both unsaved drafts and
+    original input nodes remain. Separate actual transport outage through SDK
+    retry0/1/2/3 naturally shows compact Retry; one product Retry reads latest data
+    without draft loss. Exact synthetic-task tombstones, browser and fresh SID
+    cleanup pass. Terminal retirement, physical Android and missed-update
+    reconnect are separate boundaries. Actual missed-update reconnect now finds
+    3 real rejoins but no parent read/stale title; source fix0bdffb80 adds an
+    all-three-binding debounced catchup, with66 coordinator checks/review passing.
+    It awaits combined deployment and actual changed-input acceptance. Next: leave owned
     task checklist/comment drafts unsaved on Android24, update through a second
     QA client, and verify real Realtime refresh without reload/unmount or draft
     loss. This does not establish the cause of unidentified reports86/87.
+    [Actual web acceptance](operations/2026-10-18-production-completion.md).
 
 93. `[ ]` Search expand/collapse motion and input responsiveness. Owner intake,
     2026-10-09: testers report lag when search opens and closes. OPEN / PARTIAL;

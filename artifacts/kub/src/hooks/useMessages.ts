@@ -46,6 +46,7 @@ import {
 import { canUseHumanMessageControls, isIncomingMessage } from "@/lib/messageActor";
 import { blockedSendRefusal } from "@/lib/personalModeration";
 import { heldRowsGoneFromPage, mergeMessagesById } from "@/lib/messageMerge";
+import { sameData } from "@/lib/structuralSharing";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import { clearedAtCache } from "@/lib/clearedAtCache";
 import { hiddenMessagesLive } from "@/lib/hiddenMessagesLive";
@@ -70,6 +71,15 @@ type FetchMessagesOptions = {
    * at the bottom, past the first unread message, before the fetch landed.
    */
   cacheIsStale?: boolean;
+};
+
+type VerifiedMessageHistory = {
+  chatId: string;
+  topicId: string | null | undefined;
+  generalTopicIds: readonly string[];
+  messages: MessageWithSender[];
+  isCurrent: () => boolean;
+  privacyIsCurrent: () => boolean;
 };
 
 const ACTIVE_CHAT_RECONCILE_DELAY_MS = 600;
@@ -263,6 +273,7 @@ export function useMessages(
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
   const historyRequestGenerationRef = useRef(0);
+  const historyVerificationRef = useRef<VerifiedMessageHistory | null>(null);
   const clearedAtRef = useRef(clearedAt);
   useEffect(() => { clearedAtRef.current = clearedAt; }, [clearedAt]);
   const hiddenMessageIdsRef = useRef(hiddenMessageIds);
@@ -480,7 +491,9 @@ export function useMessages(
           if (!localClearedAt) return true;
           return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
         }), effectiveHiddenIds);
-        setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+        const reconciledMessages = mergeMessagesById(visibleFetched, visibleExisting);
+        setMessages(chatId, reconciledMessages);
+        const committedMessages = useAppStore.getState().messages[chatId];
         const retiredGoneIds = existing.filter((message) => goneIds.has(message.id) &&
           messageBelongsToTopic(message, topicId, generalTopicIds)).map((message) => message.id);
         if (retiredGoneIds.length && isCurrent()) {
@@ -495,6 +508,11 @@ export function useMessages(
         setVerifiedChatId(chatId);
         setVerifyingChatId(null);
         fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
+        historyVerificationRef.current = committedMessages && sameData(committedMessages, reconciledMessages) ? {
+          chatId, topicId, generalTopicIds,
+          messages: committedMessages,
+          isCurrent, privacyIsCurrent: privacyReadIsCurrent,
+        } : null;
         if (user) {
           const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
           const latestIncoming = [...visibleFetched].reverse().find((message) =>
@@ -523,6 +541,42 @@ export function useMessages(
   const fetchMessagesRef = useRef(fetchMessages);
   fetchMessagesRef.current = fetchMessages;
 
+  const recoveryOwnerRef = useRef<symbol | null>(null);
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recoveryTimerDueRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const owner = Symbol();
+    recoveryOwnerRef.current = owner;
+    return () => {
+      if (recoveryOwnerRef.current !== owner) return;
+      recoveryOwnerRef.current = null;
+      if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+      recoveryTimerDueRef.current = null;
+    };
+  }, [chatId, topicId, generalTopicIds, userId, accountEpoch]);
+
+  // Online/error fallbacks and the joined catchup share the earliest pending deadline.
+  // Once a prejoin read starts, the later join must still schedule a fresh one.
+  const scheduleRecoveryReconcile = useCallback((delay: number) => {
+    const owner = recoveryOwnerRef.current;
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
+    if (!owner || !chatIdRef.current || !sameAccount()) return;
+    const dueAt = Date.now() + delay;
+    if (recoveryTimerRef.current !== null && recoveryTimerDueRef.current !== null &&
+      recoveryTimerDueRef.current <= dueAt) return;
+    if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
+    const timer = setTimeout(() => {
+      if (recoveryTimerRef.current !== timer) return;
+      recoveryTimerRef.current = null;
+      recoveryTimerDueRef.current = null;
+      if (recoveryOwnerRef.current !== owner || !sameAccount()) return;
+      void fetchMessagesRef.current({ background: true });
+    }, delay);
+    recoveryTimerRef.current = timer;
+    recoveryTimerDueRef.current = dueAt;
+  }, []);
+
   // Tracker item 58: a hide or an unhide made on another device, heard for
   // this chat on the account's hides channel. The list has already taken a
   // hidden row out of the store; this conversation also stops drawing it if
@@ -545,6 +599,7 @@ export function useMessages(
     const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     const cached = useAppStore.getState().messages[chatId] ?? [];
     if (!cached.length) return;
+    const verificationAtStart = historyVerificationRef.current;
     let active = true;
     void (async () => {
       // Tracker item 58: the two checks a reopen waits on are independent —
@@ -572,7 +627,14 @@ export function useMessages(
         setHistoryError("Не удалось проверить скрытые сообщения.");
         return;
       }
-      if (useAppStore.getState().messages[chatId] !== cached) {
+      const latest = useAppStore.getState().messages[chatId];
+      if (latest !== cached) {
+        const proof = historyVerificationRef.current;
+        // A completed full read checked held/fetched rows and reply IDs. Neither
+        // a changed array nor a still-verified chat proves that work happened.
+        if (proof && proof !== verificationAtStart && proof.messages === latest &&
+          proof.chatId === chatId && proof.topicId === topicId && proof.generalTopicIds === generalTopicIds &&
+          proof.isCurrent() && proof.privacyIsCurrent()) return;
         void fetchMessages({ background: true });
         return;
       }
@@ -856,25 +918,19 @@ export function useMessages(
   }, [chatId, topicId, userId, accountEpoch, fetchMessageById, fetchMessages]);
 
   // Coming back. Back online always reconciles — that is a real reconnect, and
-  // it is one handler now rather than two timers fetching the same history. A
+  // its pending fallback shares the message channel's recovery timer. A
   // visibility change reconciles only after the page was away long enough for
   // its socket to have been suspended; a socket that dropped reports
   // `SUBSCRIBED` again when it rejoins, and that reconciles on its own.
   useEffect(() => {
     if (!chatId) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     const gate = createResumeRevalidationGate({
       minHiddenMs: RESUME_REVALIDATE_AFTER_HIDDEN_MS,
       minIntervalMs: RESUME_REVALIDATE_MIN_INTERVAL_MS,
     });
     if (document.visibilityState === "hidden") gate.hidden();
     const scheduleReconcile = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        if (!chatIdRef.current) return;
-        void fetchMessages({ background: true });
-      }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
+      scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
     };
     const handleOnline = () => {
       if (gate.online()) scheduleReconcile();
@@ -892,12 +948,11 @@ export function useMessages(
     window.addEventListener(CONNECTION_REVIVED_EVENT, handleOnline);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      if (timer) clearTimeout(timer);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener(CONNECTION_REVIVED_EVENT, handleOnline);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [chatId, fetchMessages]);
+  }, [chatId, fetchMessages, scheduleRecoveryReconcile]);
 
   const fetchPinnedMessages = useCallback(async () => {
     const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
@@ -1154,15 +1209,11 @@ export function useMessages(
           // closes the gap between its first fetch and the join; after a
           // reconnect it brings back whatever the outage cost.
           subscribedChatIdRef.current = chatId;
-          window.setTimeout(() => {
-            if (isCurrent()) void fetchMessagesRef.current({ background: true });
-          }, ACTIVE_CHAT_RECONCILE_DELAY_MS);
+          scheduleRecoveryReconcile(ACTIVE_CHAT_RECONCILE_DELAY_MS);
         }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           if (subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
-          window.setTimeout(() => {
-            if (isCurrent()) void fetchMessagesRef.current({ background: true });
-          }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
+          scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
         }
       });
     registerChannel(channelName);
@@ -1173,7 +1224,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage, accountEpoch]);
+  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage, accountEpoch, scheduleRecoveryReconcile]);
 
   useEffect(() => {
     if (!chatId || !userId) return;

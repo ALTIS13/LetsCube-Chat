@@ -89,9 +89,29 @@ notification decision/read RPCs; current and pinned old client sources.
   Actual schema/tenant/fresh registration seed boot passes. Core wire995e35c45096
   now passes policy/read/runtime-OFF/reconnect with automatic cold recovery;
   full matrix/provider/OS acceptance remains distinct and unfinished.
-- [ ] Exercise ordinary JWTs/current+old hooks: parent-muted child-enabled,
+- [x] Exercise ordinary JWTs/current+old hooks: parent-muted child-enabled,
   inverse, independent recipient positive, own/foreign/cross-session read,
   retained history, terminal suppression, rollback and same-document reconnect.
+  Actual0629b591d65c also covers old Windows, stale CAS and inherit reset;236
+  HTTP requests and exact cleanup. Rollback means retained-data runtime-OFF
+  compatibility, not reverse DDL, as required by the existing Topic Task6.
+- [x] Prove held pre-CAS response retirement and the fence omission negative
+  control: actual4463ef50a208 holds three genuine allowed replies until CAS /
+  authoritative denial / RT terminal; stale effects stay zero and a new message
+  works. Actual3f0e11bd2344 catches a deliberately omitted fence as a real legacy
+  alert in a fresh isolated clone with unchanged RLS/policies. Both cleanup pass.
+- [x] Couple actual Edge source to real claim/recheck/ACK HTTP and ordinary
+  message/album producers: actual52e7f8c9f43c passes12 Web/FCM cases,148HTTP,
+  exact cleanup. Actual3e91d807aa72 separately passes3 legacy single-Web cases /
+  25HTTP, including genuine lookup-response hold before disable CAS. Only
+  provider leaves are controlled; this is not physical/provider acceptance.
+- [x] Reconcile fresh-session/expiry proof against accepted unchanged RPC cases:
+  actual HTTP48 b7b31942 rejects a still-present JWT after server SID retirement;
+  actual PG17 concurrency84294a19 rejects stale epochs and revalidates a retired
+  SID after waiting.52 selected current function bodies match the accepted
+  canonical/patch composition. SDK token renewal and D-356's held same-UID/new-
+  SID action are not established by these cases; the latter remains below.
+  No standalone refreshSession gate was required by the Topic plan.
 - [ ] Repair only demonstrated defects, review, then run affected checks and
   actual provider/device canaries before a backup/CAS/readback global rollout.
 - [ ] For D-356/#95 hold a real bell read/access response across ordinary Auth
@@ -102,7 +122,9 @@ notification decision/read RPCs; current and pinned old client sources.
 
 ## Task2: Nikita Intake and Synchronization (#2,52--53,79,83--87)
 
-**State:** NEXT; already accepted fixes are not blank stages.
+**State:** IN PROGRESS; shared-web warm/offline baseline accepted. Redundant
+recovery/sanitizer reads are reproduced in the actual hook and under repair;
+already accepted fixes are not blank stages.
 **Files:** Existing intake reports, chat cache/reconnect/outbox modules and their
 focused tests; `docs/PRODUCTION_PRIORITY_TRACKER.md` and defect registry.
 **Interfaces:** Account-owned warm history, stable client-message identity,
@@ -111,8 +133,15 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 - [ ] Reconcile new authorized conversation requests against recorded IDs; retain
   no personal message/media bodies in public reports. Establish client/build and
   intended action for unresolved five images/one video before inventing a fix.
-- [ ] Measure one current opening/switching or VPN-reconnect episode; identify the
-  first violated boundary, then add an actual failing regression before repair.
+- [x] Measure current shared-web opening/switching and offline/online episodes:
+  warm history renders before held-response release, anchor drift0px; after a
+  real transport loss, fresh joins/ping/privacy reads recover without reload,
+  same15 rows/anchor. Exact QA cleanup passes. No cache failure is established;
+  early-frame latency is inconclusive, and3 online history reads need source
+  diagnosis before optimization or a new defect claim. Device cases remain.
+- [ ] Publish the reproduced recovery/sanitizer read repair after final review /
+ 153 focused checks/typecheck/build; verify changed production bytes and actual
+  warm/offline recovery with required postjoin privacy reads, then native delta.
 - [ ] Close microphone84, read-state85, task-reload86, sound83 and emoji79 through
   their own changed-input cases; do not infer device acceptance from source.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
@@ -135,7 +164,8 @@ metadata and positional intent; preserve original bytes and explicit downloads.
 
 ## Task4: Faithful Recovery (#82/D-342)
 
-**State:** QUEUED; migration-specific rehearsals are already accepted.
+**State:** IN PROGRESS; retained payload sealed. Package-only entrypoint/tool
+closure remains; migration-specific rehearsals are already accepted.
 **Files:** Existing recovery operators, coverage reports and backup contracts.
 **Interfaces:** Backup-alone restoration of roles/ACL/settings/schema/data, not
 an already initialized clone whose prerequisites come from production.
@@ -145,6 +175,12 @@ an already initialized clone whose prerequisites come from production.
   the missing boundary is a sealed backup package without source-derived
   prerequisites. Supplemental GraphQL/net ACL/settings/two indexes must travel
   inside that durable package, not be fetched again from production.
+- [x] Verify retained R6 payload availability and seal existing bytes without a
+  database/new dump:39 files/27,151,442B, all hashes match, original files intact.
+  Independent JSON/byte/hash readback passes; manifest
+  `a6db6568a77ed02f0b5a2cbb68081dbee1ab4b6054372cbc89633acc16b50115`.
+  This payload-only seal still lacks the closed tool/calibration manifest and
+  standalone restore entrypoint; it is not D342 recovery acceptance.
 - [ ] Complete the isolated backup-alone rehearsal without touching production
   data/services: a clean same-image PG17 target consumes only the retained sealed
   package; reuse accepted comparators. Omit one concrete ACL grant-option in the
@@ -214,8 +250,9 @@ ownership, readable defaults/scale and reduced-motion preference.
 
 ## Task9: Product Depth (#17,19--20,27,36--38,92)
 
-**State:** QUEUED; D-354 source/browser fix4765bcad is included in shipped
-web5af58c2b and Android24; actual authenticated draft/retry/retirement remains.
+**State:** IN PROGRESS; D-354 source/browser fix4765bcad is shipped. Actual
+authenticated shared-web draft refresh and transient Retry pass; terminal and
+Android cases remain, with a separate missed-update/reconnect check in progress.
 **Files:** Existing public download/changelog, profile/contact/shared-media,
 roles/tasks/staff/support components and their focused tests.
 **Interfaces:** Public unauthenticated downloads, scoped roles, contact/phone
@@ -223,6 +260,14 @@ privacy, task invalidation, profile history and existing support assignment.
 
 - [x] Reconcile D-354 inclusion: shipped hook/modal/checklist blobs match current;
   accepted hook SHA matches its report. Do not repeat accepted fictional tests.
+- [x] Actual owned shared-web two-SID refresh holds a genuine RT-triggered detail
+  response; both draft values and original input nodes remain. Separate transient-
+  only run exhausts SDK retry0/1/2/3 with transport failure, then one real Retry
+  loads latest data without draft loss. Exact synthetic-task tombstone/browser/
+  SID cleanup passes. This is not terminal or physical Android acceptance.
+- [ ] Complete the actual missed-update reconnect follow-up: reproduced3 rejoins /
+  zero detail GET/stale title; source fix0bdffb80 passes66 focused checks/review.
+  Publish with the chat repair and repeat only this changed-input runtime case.
 - [ ] On Android24 leave owned task checklist/comment drafts unsaved; update the
   task through a second QA client. Real Realtime refresh must update server data
   without reload/unmount or either draft loss. Test transient error/Retry and
