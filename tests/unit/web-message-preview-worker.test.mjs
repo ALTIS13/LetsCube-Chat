@@ -48,14 +48,16 @@ function storage(){
 }
 
 function worker({db=storage(),transform=x=>x}={}){
-  const listeners=new Map(),shown=[],requests=[],acks=[],timers=new Map();let timerId=0,wall=now,mono=0;
+  const listeners=new Map(),shown=[],requests=[],acks=[],timers=new Map();let timerId=0,wall=now,mono=0,declarativePush=false;
   const state={db,shown,requests,acks,fetch:async()=>new Response(JSON.stringify([content()]),{headers:{'content-type':'application/json'}}),
     close:async()=>[],advance(ms){wall+=ms;mono+=ms;for(const [n,t] of [...timers])if(t.at<=mono){timers.delete(n);t.fn();}},
     rollback(ms){wall-=ms;},async message(data,client={id:'qa-window',type:'window',url:'https://app.letscube.ru/',visibilityState:'visible'},port){
       const pending=[],replies=[];listeners.get('message')({data,source:client,ports:[port??{postMessage:x=>{acks.push(x);replies.push(x);}}],waitUntil:p=>pending.push(p)});
       await Promise.all(pending);return replies[0];
     },async push(data=push(),notification,hasData=notification===undefined){
-      const pending=[];listeners.get('push')({data:hasData?{json:()=>data}:null,notification,waitUntil:p=>pending.push(p)});await Promise.all(pending);
+      declarativePush=!hasData&&notification!==undefined;
+      try{const pending=[];listeners.get('push')({data:hasData?{json:()=>data}:null,notification,waitUntil:p=>pending.push(p)});await Promise.all(pending);}
+      finally{declarativePush=false;}
     }};
   class Clock extends Date{static now(){return wall;}}
   const sandbox={URL,Request,Response,Headers,Date:Clock,Promise,AbortController,TextDecoder,TextEncoder,Uint8Array,
@@ -63,7 +65,12 @@ function worker({db=storage(),transform=x=>x}={}){
     setTimeout(fn,delay){const id=++timerId;timers.set(id,{fn,at:mono+delay});return id;},clearTimeout:id=>timers.delete(id),
     fetch:(url,init)=>{requests.push({url,init});return state.fetch(url,init);},caches:{},
     self:{location:{origin:'https://app.letscube.ru'},addEventListener:(name,fn)=>listeners.set(name,fn),
-      registration:{getNotifications:()=>state.close(),showNotification:(title,options)=>{shown.push({title,options});return Promise.resolve();}},
+      registration:{getNotifications:()=>state.close(),showNotification:(title,options)=>{
+        if(declarativePush){
+          let valid=false;try{const url=new URL(options.navigate);valid=typeof options.navigate==='string'&&url.origin==='https://app.letscube.ru';}catch{}
+          if(!valid)return Promise.reject(new TypeError('DECLARATIVE_REPLACEMENT_REQUIRES_NAVIGATE'));
+        }
+        shown.push({title,options});return Promise.resolve();}},
       clients:{matchAll:async()=>[]}},console:{log(){assert.fail('NO_LOGS');},error(){assert.fail('NO_LOGS');}}};
   vm.runInNewContext(transform(source),sandbox,{filename:'sw.js'});
   const module={exports:{}};vm.runInNewContext(clientCode,{...sandbox,MessageChannel,module,exports:module.exports},{filename:'webMessagePreviews.js'});
@@ -99,7 +106,17 @@ test('declarative protocol: null event.data reads routing and selector from even
   assert.equal(w.requests.length,1,'DECLARATIVE_SELECTOR_MUST_REACH_LOOKUP');
   assert.equal(w.shown.length,1);assert.equal(w.shown[0].title,'QA Sender');assert.equal(w.shown[0].options.body,'Fictional QA message');
   assert.equal(w.shown[0].options.data.url,'/?chat='+id(10)+'&message='+id(20));
+  assert.equal(w.shown[0].options.navigate,'https://app.letscube.ru/?chat='+id(10)+'&message='+id(20));
   assert.equal(w.shown[0].options.tag,'message:chat:'+id(10));assert.equal(w.shown[0].options.renotify,true);
+});
+
+test('declarative protocol: contract refuses omitted, relative or foreign replacement navigate',async()=>{
+  for(const replacement of ['', '    navigate: data.url,\n', '    navigate: "https://foreign.invalid/",\n']){
+    const w=worker({transform:text=>text.replace(/^    navigate: new URL\(data\.url, self\.location\.origin\)\.href,\r?\n/m,replacement)});
+    await install(w);
+    await assert.rejects(w.push(undefined,{data:declarativeData()}),/DECLARATIVE_REPLACEMENT_REQUIRES_NAVIGATE/);
+    assert.equal(w.shown.length,0,'INVALID_REPLACEMENT_MUST_NOT_PUBLISH');
+  }
 });
 
 test('declarative protocol: without admission display stays generic while exact route and grouping survive',async()=>{

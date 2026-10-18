@@ -67,6 +67,18 @@ production apply. Both general flags remain OFF. Client/worker/provider 111/111,
 single/album dispatch 140/140 and first-document Chromium/WebKit 36/36 pass.
 Final source typecheck passes; web build `a6232b5b92cc6b36`, built in 19.48s.
 
+The first production protocol canary enrolled on a fresh iPhone without restart
+and reached content HTTP 200 (647 response bytes), but still displayed generic.
+WebKit's actual `ServiceWorkerRegistration::showNotification` rejects a mutable
+replacement without a valid top-level `navigate`; `data.url` is not that option.
+The narrow follow-up supplies the exact same-origin route while retaining legacy
+data.url. The rejecting contract was RED; worker/click/lifecycle 65/65 now pass.
+Build `ab8230e0484b44cb` completed in 23.63s. Physical follow-up is pending.
+The first rental expired automatically and its exact QA subscription was
+deactivated; a second owned QA-only iPhone session is active. One inactive-grant
+old QA subscription was also retired to isolate delivery; this did not resolve
+the fallback and was not called the cause. No real user's subscriptions changed.
+
 Review the final provider/worker pair, deploy verified web and then the exact
 Edge helper with a retained previous file. On the rented Home Screen PWA verify
 message/sender, exact tap, sender-only/none and logout; retire the finite

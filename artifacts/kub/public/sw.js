@@ -256,6 +256,7 @@ async function showPushNotification(data) {
   // No await remains between this final durable recheck and FIRST publication.
   const readable = preview && await currentWebPreview(preview);
   return self.registration.showNotification(readable ? preview.content.title : data.title, {
+    navigate: new URL(data.url, self.location.origin).href,
     body: readable ? preview.content.body : data.body,
     tag: data.tag,
     renotify: data.renotify,
