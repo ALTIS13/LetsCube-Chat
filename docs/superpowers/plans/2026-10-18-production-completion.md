@@ -173,6 +173,10 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   survival/refresh pass, all6 prior SIDs preserved. Actual rendered web exit,
   immutable Android26 upgrade/public bytes pass. Security-wide flows and current-
   install browser preview retirement remain intact; native Auth UI is separate.
+- [ ] Publish D369 transient post-login check cleanup: actual callback/SDK503
+  reproduces global logout/peer failure; candidate2dad8198 changes only bansErr
+  to local. Four new literal checks plus seven adjacent/typecheck pass; preserve
+  active-ban/security-wide semantics and immutable26, release next native batch.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
   boundary and publish independently accepted slices.
 

@@ -2,6 +2,11 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
+**Next reviewed slice:** D369 candidate2dad8198 limits transient post-login
+check-failure cleanup to the newly opened session. Actual callback/SDK RED,
+4 new+7 adjacent checks/typecheck and genuine20.63s build pass. Active-ban and
+security-wide behavior are unchanged. Publication follows; Stable26 immutable.
+
 **Latest release,2026-10-18:** D-368 ordinary logout previously used the SDK's
 global default, terminating other devices. Two ordinary calls now specify local
 scope; security-wide password recovery is unchanged. Three actual callback/SDK

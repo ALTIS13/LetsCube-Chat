@@ -25793,3 +25793,22 @@ Android0.1.25/build26 is Stable after original signer/Firebase/assets verificati
 actual Realme25 ->26 guest/data-retaining upgrade and full public APK hash;
 25 rollback remains. Authenticated native UI/logout/OEM acceptance stays separate.
 [Current execution](operations/2026-10-18-production-completion.md).
+
+## D-369 `[~]` A temporary login check failure terminates other devices
+
+Medium multi-device correctness; found2026-10-18 during native QA preparation.
+After successful password Auth, LoginForm checks bans. A transient503/read error
+used the SDK global-default logout to clean up that newly opened session, also
+ending other devices. Actual selected handleLogin plus installed SDK reproduces
+one RED/three controls: global HTTP scope and modeled peer refresh failure.
+This is a fictional HTTP leaf, not an injected production fault.
+
+Candidate2dad8198 changes ONLY the bansErr cleanup to explicit local scope.
+Normal success still routes without logout; error still clears the new local
+session and shows the existing error without routing. Active-ban/security-wide
+behavior is byte-identical and separately characterized, not silently changed.
+Four new literal behavioral/omission checks and seven adjacent checks pass;
+coordinator independently verifies the new4 and typecheck. Genuine web build
+e9921413ca9965c7 completes20.63s; publication and embedded Android follow.
+Stable26 is immutable and does not contain this
+additional repair. No live Auth failure, UI/design or database change is claimed.

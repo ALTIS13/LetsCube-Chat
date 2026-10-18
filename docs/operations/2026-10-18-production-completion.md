@@ -436,3 +436,22 @@ Two exact owner-created messages are deleted normally and tombstoned, their
 notices scrubbed/read; all3 fresh SIDs are locally logged out and independently
 absent, browser closed. Topic stays OFF. This covers held access only, not held
 read/settings, invite retirement, manual/replaced jump or native-device cases.
+
+### D369 Transient Post-Login Cleanup (Candidate)
+
+The installed LoginForm's post-Auth ban read can temporarily fail. Its cleanup
+used SDK global scope, terminating modeled peer sessions rather than only the
+new login. Coordinator reproduces3PASS/1RED14.727s using actual selected handler
+and installed SDK with fictional HTTP503; no production error is injected.
+Source2dad8198 changes only that cleanup call to local. Normal success, local
+error/session cleanup/no routing and a literal global-omission negative pass;
+active-ban branch stays byte-identical/global, separately characterized.
+New4 +adjacent7 checks and typecheck pass; independent coordinator new4 run
+passes14.392s, typecheck passes. No JSX/style, SQL, credential or permission
+change. The two owned paths were initially edited in D:main; preserved there,
+reviewed/committed, then canonical feature fast-forwarded without stash/reset or
+copying foreign edits. Publication follows; native26 stays immutable.
+Genuine Vite7.3.2 build finishes20.63s, local builde9921413ca9965c7; existing
+sourcemap/chunk warnings do not become a failure or a new fix claim. Actual
+before marker has2 local logout calls and the verified old JS hash. Production
+build/config-derived IDs must be read after deployment, not copied from local.

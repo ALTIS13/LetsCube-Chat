@@ -36,6 +36,10 @@ D342 V3 tools are staged/verified, but host Node is absent. Reviewed V4-r2
 split-phase tools are also staged/verified. Its first Node preflight refuses;
 exact CID is absent after cleanup, no PG restore ran. Diagnosis is pending,
 not standalone restore acceptance or a new dump.
+D369 follow-up candidate2dad8198 changes only transient post-login bans-read
+cleanup to local scope; active-ban behavior is unchanged. Actual callback/SDK
+503 RED,4 new+7 adjacent checks/typecheck and genuine20.63s web build pass.
+Web publication follows; Android26 stays immutable and lacks this extra repair.
 
 **Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with
