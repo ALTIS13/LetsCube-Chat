@@ -43,7 +43,8 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK26 is immutable; use the next version/build for new code.
+  parity. Published APK27 and rollback26 are immutable; use the next version/build
+  for new code.
 
 ## Review Focus
 
@@ -71,24 +72,37 @@ this document coordinates their remaining deliverables, not a replacement design
   build33dfcab91705590b. Android0.1.24/build25 Stable, mandatory=false, original
   signer/Firebase/assets, Realme24 ->25 guest/data retention and public APK hash;
   previous24 rollback retained. Signed-in native recovery remains separate.
-- [x] Topic runtime remains OFF. Ordinary production feed-v2 admission/read is
-  accepted, but does not substitute for override compatibility or provider proof.
+- [x] Topic current runtime is OFF after bounded cohort7d511's temporary ON/
+  two-message physical canary and actual rollback/readback. Ordinary feed-v2 and
+  the scoped provider cases do not close the whole override/history matrix.
 - [x] D-368 local ordinary logout released at14686afd/webb23d4adce4f05bb0 and
   Android0.1.25/build26. Actual rendered local exit/other-SID refresh,97 affected
   checks, original signer/Firebase/assets, Realme25 ->26 guest/data retention
   and public APK bytes pass;25 rollback retained. Actual Native26 ordinary UI
   login/binding/logout and peer refresh `0185bbd86af1` pass; other native cases stay
   separate, including the unclaimed post-logout guest frame.
-- [x] D369 shared-web repair is deployed at `8ce5e18c`/build prefix `9b2` with
-  public/container parity and local-scope marker2 ->3. Immutable26 lacks this
-  later repair; the next native release/error-path case remains open.
+- [x] D369 shared-web repair initially deployed at `8ce5e18c`/build prefix `9b2`
+  with public/container parity and local-scope marker2 ->3; retained proof.
+- [x] Source `da28afbd795ee1b3499b815d74160502c43fd474` carries D369 and releases
+  D370 on sole-healthy web/build `9fd9efb24b98dfb6` with public/nav-marker parity,
+  and Stable 0.1.26/build27. Actual Realme26 ->27 retains UID/data/firstInstall,
+  guest/fatal0 and full public APK 7,755,887B/SHA prefix01863eb5 pass;
+  mandatory=false, rollback26 retained. D369/D370 are FIXED/RELEASED by the bounded
+  compositional evidence, including later actual PWA navigation and Native27
+  normal cleanup below. No physical503/held-early-phone or all-platform claim.
 
 Evidence: [notifications release](../../operations/2026-10-18-cursor-return-notifications.md)
-and [FIFO/Topic continuation](../../operations/2026-10-18-outbox-restore-and-topic-wire.md).
+and [FIFO/Topic continuation](../../operations/2026-10-18-outbox-restore-and-topic-wire.md);
+[latest Native27/web release and limits](../../operations/2026-10-18-production-completion.md#navigation-and-d369-release).
 
 ## Task1: Finish Topic Notification Acceptance (#75--77,95)
 
-**State:** IN PROGRESS; immediate critical path. No global enable yet.
+**State:** IN PROGRESS; actual cohort7d511 completes two physical messages in a
+temporary global ON window, followed by actual OFF readback at 17:34:30Z. No permanent
+enable or whole-matrix acceptance. Exact cleanup and A1 RO diagnosis are complete:
+legacy SELECT0 is expected after enabled-CAS fencing, not missing production data.
+Private v2 read-oracle/finite ACK-driver repair and the four-message/history/
+mark-read/OFF-fallback cases remain; no new rental until those instruments are ready.
 **Files:** `tests/server/topic-notification-realtime-client.hook.mjs`, its focused
 control tests, existing notification consumer/SQL contracts and private finite
 runtime operators. Product files change only after a reproduced failure.
@@ -125,8 +139,29 @@ notification decision/read RPCs; current and pinned old client sources.
   canonical/patch composition. SDK token renewal and D-356's held same-UID/new-
   SID action are not established by these cases; the latter remains below.
   No standalone refreshSession gate was required by the Topic plan.
-- [ ] Repair only demonstrated defects, review, then run affected checks and
-  actual provider/device canaries before a backup/CAS/readback global rollout.
+- [x] Actual physical7d511 messages1/2: A muted-parent/enabled-child FCM ACK and
+  exact OS chat/message positive; then allowed-parent/disabled-child FCM0 and
+  no NEW ordinal2 (stale card1 may remain). B allowed/inherit and muted/enabled
+  both Web ACK/OS synthetic body positives. These two cases are accepted only.
+- [x] Accept Linnaeus's RO/source diagnosis: A1 legacy SELECT0 is the expected
+  enabled-CAS fence; exact outbox JOIN/ACK proves the underlying notification row.
+  Public clients use v2 RPCs. The private raw-table read and fake CAS without the
+  fence explain its faulty expectation, not a public producer/feed defect/new D.
+- [ ] Complete Linnaeus's successor private v2 read-oracle repair plus finite
+  ACK-driver readiness before another rental. Preserve frozen27 evidence and the
+  two actual provider/OS positive/inverse subcases; four-message/history/mark-read/
+  OFF-fallback cases remain unrun, historyVerified=false. Do not relax RLS/fences.
+- [x] Bounded 450s controller retains expected failed=true with API/native cleanup
+  PASS, all old SIDs/zero gaps. Fresh verified backup/mirrored guarded OFF and
+  separate readback at 17:34:30Z preserve schema/catalog. Initial BACKUP refusal is
+  NOT_DISPATCHED; exact owned-parent root -> techadmin owner repair is nonrecursive,
+  mode0700 unchanged. Both fully decoded archives retained; no SQL guard relaxed.
+- [x] Exact subscription cleanup f3c8d49a170b: one inactive/protocol-retired row,
+  one PATCH ACK, fresh API local204/SID absent, all old SIDs retained and
+  cleanupComplete. PWA semantic none/pushEnabled true is restored; UI logout
+  leaves fresh SIDs0/grants0, both rentals released/registry true. No Auth/
+  controller/rental held. Reuse 19 old+5 changed private controls; no UID/time sweep.
+  Coordinator owns the commit/fix checkpoint; no worker push.
 - [x] Rehearse the actual activation operator on isolated PG: c8901ef3d64a passes
   canonical rollback positive, raising guards, COMMIT with deliberately lost ACK,
   separate ON inspect/no replay, ordinary CAS and compatible OFF. All12 tables
@@ -142,7 +177,9 @@ notification decision/read RPCs; current and pinned old client sources.
   completes unchanged; all7 observable late counters remain zero. Two owned
   messages tombstoned/notices scrubbed/read and all3 fresh SIDs absent. Held
   read/settings/invite/manual-jump/native cases are not inferred from this.
-- [ ] Record final runtime state and cleanup; close only covered tracker parts.
+- [x] Record this cohort's final OFF and cleanupComplete; close only the covered
+  subcases, not the remaining Topic matrix. A1 legacy0 is diagnosed as expected;
+  the private oracle repair is separate from the public product.
 
 ## Task2: Nikita Intake and Synchronization (#2,52--53,79,83--87)
 
@@ -151,8 +188,9 @@ recovery/sanitizer read repair are accepted and released in web/Android25.
 Remaining native/intake boundaries are not closed by these cases.
 D-368 ordinary global logout is repaired and released on web/Android26; actual
 rendered web exit and actual Native26 ordinary UI login/binding/local logout,
-peer retention/refresh and cleanup pass. Native transient-error/recovery cases
-remain separate; D369 is deployed on web but absent from immutable26.
+peer retention/refresh and cleanup pass. D369/D370 are now FIXED/RELEASED on web/
+Stable27 using compositional evidence; broader recovery/platform QA is separate,
+not an unclosed product defect merely because physical503 was not injected.
 **Files:** Existing intake reports, chat cache/reconnect/outbox modules and their
 focused tests; `docs/PRODUCTION_PRIORITY_TRACKER.md` and defect registry.
 **Interfaces:** Account-owned warm history, stable client-message identity,
@@ -161,6 +199,21 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 - [ ] Reconcile new authorized conversation requests against recorded IDs; retain
   no personal message/media bodies in public reports. Establish client/build and
   intended action for unresolved five images/one video before inventing a fix.
+- [x] Reconcile the separate newer nine-item intake: 6 text/1 voice/2 images map
+  to existing #2/#87 and provisional #52, not nine new defects. Voice semantics /
+  queued-versus-acknowledged state remain uncertified; stills are state-only.
+  No new D, confirmed cache cause or tester build. Reuse ignored reconciliation,
+  not earlier ungrounded model paraphrases or another extraction run.
+- [x] Complete the one warm-photo return candidate (#87/#2): GREEN_NO_SOURCE_PATCH
+  with actual React/store/signing SDK and browser HTTP cache over a synthetic
+  loopback backend. Calibration: 2 loads/1 server request; history and decoded inline
+  original appear in the same 57.1ms sample, 39 sampled frames/zero history-only
+  frames, zero new object requests and two held history responses. Owner retirement
+  plus late release keeps the old photo absent; exact cleanup/zero listeners pass.
+  First strict B locator refusal was before the case, not a product RED. No
+  production/Auth/device, thumbnail-only or whole-#87 acceptance follows; unknown
+  tester build and broader complaints remain. Do not replay or invent a patch.
+  [Actual case and limits](../../operations/2026-10-18-production-completion.md#warm-photo-return-candidate).
 - [x] Measure current shared-web opening/switching and offline/online episodes:
   warm history renders before held-response release, anchor drift0px; after a
   real transport loss, fresh joins/ping/privacy reads recover without reload,
@@ -187,9 +240,13 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   reproduces global logout/peer failure; source2dad8198 changes only bansErr
   to local. Four new literal checks plus seven adjacent/typecheck pass; actual
   deployed `8ce5e18c`/build prefix `9b2` has public/container parity and marker2 ->3.
-- [ ] Carry D369 into the next native release and accept its affected boundary;
-  preserve active-ban/security-wide semantics and immutable26. Native26's
-  normal-success/logout receipt does not cover the transient error path.
+- [x] Carry D369 into immutable Stable27/source da28afbd and verify actual
+  Realme26 ->27 guest retention, old26 catalog CAS, public bytes and rollback26.
+- [x] Close D369's one-option JS repair: exact LoginForm/installed-SDK503 negative
+  and controls plus actual Auth local retirement/peer retention on web, Native26
+  and Native27 normal UI cleanup establish the scope contract. APK27 parity
+  includes the repair and active-ban/security-wide behavior is unchanged. No
+  physical503 was injected; this is an explicit QA limit, not a new closure gate.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
   boundary and publish independently accepted slices.
 
@@ -303,8 +360,10 @@ participant lifecycle and group-call state; no duplicate room/call on reconnect.
 
 ## Task8: Interface and Motion (#18,30--31,34,93)
 
-**State:** IN PROGRESS; measured D-370 navigation candidate is reviewed, not yet
-published. Preserve current glass and accepted focus/reduced-motion fixes.
+**State:** IN PROGRESS for the wider UI stream; D-370 itself is FIXED/RELEASED.
+Shared-DOM readiness/omission tests, both engines/themes, actual installed-PWA
+final navigation/return callbacks and build27 parity close this bounded bug.
+Preserve current glass and accepted focus/reduced-motion fixes.
 **Files:** Existing navigation, container sizing, search, typography and settings
 components; targeted visual/performance fixtures.
 **Interfaces:** Stable dimensions, actual container width, keyboard/safe-area
@@ -313,7 +372,15 @@ ownership, readable defaults/scale and reduced-motion preference.
 - [x] Reproduce actual installed-PWA access-hydration hitbox movement; repair only
   account-owned readiness. Nine focused checks/four omissions, Chromium/WebKit
   four cases and synthetic1440/390 pixels in both themes pass. Source review is
-  clean; release/physical post-fix acceptance remain separate.
+  clean; retain the source/E2E/pixel evidence without replay.
+- [x] Publish D-370 at da28afbd on sole-healthy web/build9fd9efb24b98dfb6 and
+  Stable27, with public/nav markers and actual guest upgrade/full APK bytes.
+- [x] Actual installed da28 PWA after background: Profile ->Settings ->Chats twice
+  retains four stable targets/Profile rect[236,862,65,48] and working Settings
+  callback. This accepts the final-nav/background/Profile subcase. Early physical
+  hydration was not held; actual-hook held-response tests already cover readiness.
+  No forced phone Auth/permission fault or all-platform claim is needed to close
+  D370; unexercised device/fault/OEM cases remain separate QA coverage.
 - [ ] Measure one uncovered native search expand/collapse or compact-container
   defect, including frame/layout evidence before changing animation.
 - [ ] Verify exact changed elements at1440/390 in both themes and enlarged text;
@@ -356,8 +423,11 @@ privacy, task invalidation, profile history and existing support assignment.
 
 ## Task10: Platform Delta Matrix (#7,9,28)
 
-**State:** IN PROGRESS; Android26 is released and its ordinary UI/logout/binding
-subcase is accepted; broader device matrix and native D369 delta remain.
+**State:** IN PROGRESS; Android27 is released with actual guest upgrade/public
+bytes. Native26 ordinary UI/logout/binding evidence is retained; Native27 normal
+UI cleanup and installed-PWA final-nav/background/Profile subcase are accepted.
+D369/D370 are FIXED/RELEASED; unexercised physical503/held-early-phone/OEM cases
+remain broader QA coverage, not known remaining product bugs. Topic remains partial.
 **Files:** Platform QA/release checklists, existing native adapters and manifests.
 **Interfaces:** Shared client parity, native activation/download/keyboard, stable
 signer/package identity and verified in-place upgrade with retained user data.
@@ -377,6 +447,10 @@ signer/package identity and verified in-place upgrade with retained user data.
   retains all older sessions and package identity; exact cleanup passes. This
   does not prove a post-logout guest frame, transient-login failure handling,
   chat/task recovery, Topic/provider/OEM or long-session behavior.
+- [x] Release immutable Android0.1.26/build27 from da28afbd: exact Realme26 ->27
+  UID/data/firstInstall retention, guest/fatal0, old26 CAS, mandatory=false,
+  rollback26 and full public bytes/SHA match. D369/D370 closure uses the composed
+  evidence above, not an invented physical fault test or this upgrade alone.
 
 ## Task11: Monitoring and Capacity (#6)
 

@@ -3,17 +3,20 @@
 **Current State, 2026-10-18:** Owner: Codex coordinator, canonical branch
 `codex/topic-alerts-20261016`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Stage: D369 web `8ce5e18c`/build prefix `9b2` deployed; Stable 0.1.25/build26 ordinary
-UI login/binding/local logout and peer refresh accepted; D342 sealed-only package
-entrypoint/restore accepted. Navigation hydration repair is reviewed and passes
-focused hook/browser/pixel checks; Android0.1.26/build27 is reserved, not released.
-Source/evidence and chronology:
+Stage: source `da28afbd` is released on sole-healthy web/build `9fd9efb24b98dfb6`
+and Android Stable0.1.26/build27. Realme26 ->27 retains data/identity; full public
+APK bytes pass, mandatory=false, rollback26 retained. D369/D370 are fixed/released
+within the recorded coverage, not all-platform claims. Source/evidence:
 [execution report](operations/2026-10-18-production-completion.md).
-Blockers/limits:26 lacks D369; Topic is OFF pending physical/provider acceptance; D356's
-other actions, Nikita semantics and off-host/current-RPO recovery remain open.
-Next: release the reviewed navigation/D369 native batch, then bounded Topic
-canary, remaining D356 cases, intake and external recovery follow-up.
-No clone/rental is held; do not replay accepted cases.
+Open: Topic has two actual provider/OS cases, not the full history/read/OFF
+matrix. Its private oracle used the fenced legacy API; no public feed defect is
+established. Runtime OFF is independently confirmed at17:50:50Z after exact
+cleanup: no new SIDs/grants/active subscriptions, no Auth/controller/rental held.
+Next: successor v2 read-oracle and finite ACK driver, then the remaining Topic
+cases; do not allocate another rental before both are ready. Nikita's nine
+entries map to #2/#87 plus provisional #52; warm-photo return is GREEN/no patch,
+not whole-intake closure. Continue D356 and the other completion-plan streams;
+reuse accepted evidence and preserve the explicit platform/recovery limits.
 
 ## Historical Release Checkpoints
 

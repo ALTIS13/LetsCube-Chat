@@ -1,9 +1,14 @@
 # Production Completion Continuation
 
-This report is chronological. Latest accepted deltas:
-[D369 web deployment](#d369-web-deployment-1519z),
-[Native26 ordinary UI logout/binding](#native26-ordinary-ui-logout-and-binding-1533z),
-and [D342 sealed-only restore](#d342-sealed-only-package-restore-1537z).
+This report is chronological. Latest physical outcome:
+[two-message Topic canary, OFF and cleanup](#physical-topic-canary-7d511).
+Latest release:
+[navigation/D369 web and Native27](#navigation-and-d369-release).
+Retain [Native26 ordinary UI logout/binding](#native26-ordinary-ui-logout-and-binding-1533z),
+[D342 sealed-only restore](#d342-sealed-only-package-restore-1537z), and the
+[nine-item intake reconciliation](#parallel-queue-reconciliation) with their limits.
+The [warm-photo candidate](#warm-photo-return-candidate) is completed without a
+source patch; this does not close #87 or all tester complaints.
 Older candidate/refusal paragraphs below retain their original evidence boundary.
 
 ## Scope And Baseline
@@ -114,19 +119,29 @@ Private operators and metadata-only receipts: `.ops-private/topic-live-20261018/
   R6 restore/rollback and settings/roles/default-ACL work are accepted. The
   outstanding case must restore supplements without source-derived prerequisites,
   with a real ACL grant-option omission control, timing and cleanup.
-- A newer-only readonly intake finds9 new tester entries after the Oct15 tuple
-  cursor:6 text,1 audio,2 images. Content analysis is in progress in ignored
-  private storage. Local offline semantic extraction encountered a grammar error
-  and then a timeout; this is not evidence of no feedback. Preserve all9 aliases
-  pending semantic admission; do not repeat accepted OCR/ASR or copy personal
-  content into the repository.
+- The newer-only readonly intake and retained reconciliation cover nine entries
+  after the Oct15 tuple cursor: 6 text, 1 voice and 2 images, not nine defects.
+  Text supports cache/conversation/photo-loading subjects under existing #2/#87;
+  the voice adds provisional #52 only if the missing item was unacknowledged
+  outgoing data. That precondition and the voice ASR semantics remain uncertified.
+  Other entries are questions/context; the images are state-only, not evidence
+  of duration, a prior cache hit, an action sequence or a recovery failure.
 
-The local CLI output blocker was isolated with a public constant control; after
-removing the output-suppressing option, finite offline generation returns output.
-A subsequent extraction retains four ungrounded cache/chat-
-loading paraphrases, not confirmed tester wording. All9 aliases remain pending
-semantic grounding. These leads overlap the owner's explicit cache requirements;
-an independent actual warm-cache check can proceed without inventing a new bug.
+Ignored `.ops-private/nikita-intake-20261018/reconciliation.md` reconciles the
+retained aliases without a new fetch/model/OCR/ASR run or copying personal content.
+The earlier extraction failures and four ungrounded model paraphrases remain
+provenance, not confirmed wording or mechanisms. No new D, confirmed cache cause,
+tester client/build or failure rate is established. These reports predate the
+Oct18 repair evidence: passing current shared-web cases neither attributes the
+reports to this release nor closes all complaints. The older five-image/one-video
+intake remains separate and unresolved.
+
+The #87/#2 warm-photo return candidate has now completed
+[GREEN_NO_SOURCE_PATCH](#warm-photo-return-candidate), observing history and media
+separately without replaying the accepted history-only case. No new object
+request occurred on return, so no object response was held. This does not settle
+the unknown tester client/build, other media paths or pending-versus-acknowledged
+voice state, and does not justify a presumed cache repair.
 
 ## Next Coupled Consumer Boundary
 
@@ -606,7 +621,7 @@ Private metadata: `topic-live-20261018/physical-live-{147a9339983c,64022cd2e496}
 the released cloud lease. No new production SQL flag/DDL change or native
 publication was made by this physical preparation.
 
-## Navigation Access Hydration Candidate
+## Navigation Access Hydration (Source Stage; Released Below)
 
 The measured iPhone hitbox shift is repaired in `BottomNav`: access hooks belong
 to one UID/account epoch, and the capsule exposes no interactive destinations
@@ -624,8 +639,169 @@ ancestor opacity and finite animations to settle; two WebKit opacity cases and
 one changed-input final-animation case pass. An early unfinished modal animation
 was a capture-timing problem, not a separate product defect.
 
-The genuine web build completes in23.69s with `sw.js build 7b215869b104a9b4`.
-The owned fake-backend Vite server is stopped after inspection. Android version
-0.1.26/build27 is reserved to include both this repair and D369; the already
-published26 is untouched. This is candidate evidence, not production/native
-acceptance. Topic remains OFF and no production SQL change is needed here.
+The genuine source-stage web build completes in23.69s with
+`sw.js build 7b215869b104a9b4`. The owned fake-backend Vite server is stopped after
+inspection. At that checkpoint Android0.1.26/build27 was reserved for this repair
+and D369; actual publication follows below. The source-stage evidence alone was
+not production/native acceptance. Topic remains OFF; no production SQL change.
+
+## Navigation and D369 Release
+
+Source `da28afbd795ee1b3499b815d74160502c43fd474` is now released on web and
+Android Stable 0.1.26/build27. At 16:53Z the web image is sole healthy with
+public/container parity, production build `9fd9efb24b98dfb6`. The new navigation
+marker is 1 and old bare-gate marker 0 versus 1 in the old renderer. This publishes
+D-370's account-owned readiness repair and retains D369's local transient-login
+cleanup; it is not a newly injected Auth503 or physical signed-in navigation case.
+
+Actual `PASS_REALME27_UPGRADE_SMOKE` at 16:58:30Z upgrades the same owned Realme
+from 0.1.25/build26 to 0.1.26/build27 using the frozen24 operator's pinned behavior
+and reviewed release bindings. Exact UID/dataDir/firstInstall remain unchanged,
+no clear/uninstall occurs, and foreground guest UI/fatal0 pass. This is guest
+upgrade/startup evidence only, not authenticated navigation or failure handling.
+
+Publisher stage/publish/verify pass by 16:59:08Z. Old26 catalog CAS, immutable27,
+retained rollback26 and full public APK bytes pass: 7,755,887 bytes, SHA256
+`01863eb51e78c0f6f79907f2afe885fb1eba43940eb98c240ab6a982b3825e9c`.
+Stable is 0.1.26/build27 and mandatory=false; no published26 bytes are replaced.
+The private adapters bind the full CLI source commit and directly reuse frozen24,
+not a nested26 adapter. No accepted provider/RT/cache/ordinary-logout suite is
+replayed for this publication.
+
+D369/D370 are FIXED/RELEASED under the coordinator's bounded bug judgment. D369
+composes the exact LoginForm callback/installed-SDK503 negative and controls with
+actual Auth local retirement/peer retention on web, Native26 and the subsequent
+Native27 normal UI cleanup. APK27 carries the changed option; active-ban/security-
+wide semantics are unchanged. No physical/runtime503 was injected or claimed,
+and one is not required to close this JS option repair. D370 composes actual-hook
+held-readiness/omission tests, two-engine/both-theme visuals and asset parity with
+the subsequent installed-PWA final-navigation/background/Profile callback case
+[below](#physical-topic-canary-7d511). It does not claim a held early phone
+permission response or blanket all-platform coverage. Those unexercised fault/OEM
+cases are QA coverage, not known remaining D369/D370 product bugs. Prior failure
+evidence is retained without replay or a new fault-injection gate.
+
+Private logs/metadata stay under `.ops-private/message-reconcile-20261018/`:
+`realme27.json`, `publish27-{stage,intent,result,public}.json` and
+`nav-live-da28afbd.json`; web receipt is
+`.ops-private/web-preview-install-20261018/live-da28afbd.json`.
+No credentials, raw UI content or private log bodies are reproduced here.
+
+## Warm-Photo Return Candidate
+
+Accepted private `nikita-intake-20261018/warm-photo/{result.md,receipt-r2.json}`
+records GREEN_NO_SOURCE_PATCH in synthetic Chromium at 390x960/QA0. Actual
+React/store, message/privacy admission, signing SDK and HTTP cache run unchanged
+against loopback HTTP/Realtime leaves and generated PNGs. Playwright 1.59.1's own
+API contract notes that HTTP routing disables HTTP cache; no Playwright HTTP
+routing was installed. Calibration confirms two image loads/one server request.
+
+On warm return, history and the decoded inline original are first observed in
+the same 57.1ms sample; 39 sampled visible frames include zero frames with history
+but no ready image. New object requests are zero while two actual history responses
+are held. Owner retirement via the real store action removes the old photo,
+which remains absent after late release. Browser/context/Vite/backend/proxy close;
+independent exact-port readback finds zero listeners. The first strict B locator
+matched preview and bubble and refused before the return case; its receipt is
+retained as an instrument refusal, not a product RED. Only that locator changed.
+
+This completes only the proposed candidate, not #87 or all complaints. The 57.1ms
+sample is not a performance guarantee; the inline source was the original, not
+a separate thumbnail-only proof. Synthetic signed immutable PNG reuse does not
+establish production/Auth/RLS, actual SDK account switching, native/PWA lifecycle,
+expired signatures, other object headers or physical storage pressure. No source
+patch or new D follows. Web da28/build9fd9 pins are unchanged; the later physical
+outcome is recorded below, without widening this synthetic case.
+
+## Physical Topic Canary 7d511
+
+Actual cohort `7d51142205c6` runs with a bounded temporary Topic runtime-ON window
+on Native27 and the installed da28 iPhone PWA. Two ordinary messages complete
+before the 450s controller cleanup boundary; this is not the full four-message
+acceptance. Exact binding/provider/OS metadata establishes:
+
+| Message | Receiver A, Native27 | Receiver B, installed PWA |
+| --- | --- | --- |
+| 1 | Parent muted, child enabled: FCM ACK; exact OS chat/message witnesses true. | Parent allowed, child inherit: Web ACK; exact synthetic OS body1 true. |
+| 2 | Parent allowed, child disabled: FCM0; no NEW ordinal2, while stale card1 remains. | Parent muted, child enabled: Web ACK; exact synthetic OS body2 true. |
+
+The raw message1 snapshot returns A legacy notifications0 versus B1. Linnaeus's
+accepted RO/source diagnosis in private `physical27/inapp-intake.md` explains it:
+successful enabled CAS inserts the restrictive legacy fence, so A SELECT0 is
+expected; B initial inherit leaves that legacy route available. The exact scoped
+outbox JOIN requires the matching notification row/recipient/binding, so A1's
+ACK already proves its underlying note existed, not producer absence. The public
+client uses v2 RPCs. Private `actions.mjs` used the raw legacy table, while its fake
+CAS transport omitted the fence. This is a private read-oracle/API mismatch, not
+a demonstrated public producer/feed defect; no public patch/new D is justified.
+No suitable ordinary v2 row/read state was measured for A here, and no evidence
+attributes the controller timeout to its raw snapshot or a v2 feed failure.
+Four-message completion, history, mark-read and OFF-fallback behavior were NOT
+run; `historyVerified=false`. The bounded-window outcome retains `failed=true`,
+not a whole-canary PASS. Automatic controller cleanup passes for API/native,
+all protected older SIDs and zero gaps; Native27 uses normal UI local logout.
+
+The initial operator apply refused BACKUP with NOT_DISPATCHED: the one owned
+resolved parent was root-owned/mode0700 and not readable by techadmin. Only that
+exact parent's owner changed root -> techadmin, nonrecursively; mode0700 stayed
+unchanged. The corrected apply succeeds without SQL/backup-guard relaxation.
+Actual OFF readback at 17:34:30Z follows a fresh verified backup, mirrored guarded
+transaction and unchanged schema/catalog. Both archived backups are fully decoded
+and retained.
+This establishes actual OFF, not the unrun message-delivery OFF-fallback case.
+
+ON then OFF were each applied once with fresh verified before-backups. These are
+one-time cohort/TTL operational transactions: **do not replay** either file as a
+new window. Their byte-identical SQL mirrors are the two owned, non-ignored paths
+under `.migration-backup/supabase/migrations/`, not durable CLI migrations under
+`supabase/migrations/`. They are included with this documentation checkpoint for
+audit, not ignored private artifacts or instructions to run a new window.
+CLI SHA256 readback of the mirrors:
+
+| Mirror filename | SHA256 |
+| --- | --- |
+| `20261018_topic_physical_7d51142205c6_apply.sql` | `6349a63c9370f61f2b367a9f24f793406fe6083953d5574e76082a271c632b10` |
+| `20261018_topic_physical_7d51142205c6_rollback.sql` | `35d4e9907121aa1f8cd725614b834271387a359838bea785946428bc5a4beb13` |
+
+The private prepare-window parent-access guard is now amended with its old bytes
+retained and coordinator node-check PASS. This is source preparation, not another
+flag execution. No dump, token or private SQL/data content is reproduced here.
+
+PWA original semantic choice `none` and account `pushEnabled=true` are restored.
+Normal UI logout plus RO metadata confirms fresh SIDs0/grants0. Rental release
+returns OK, lease27 registry is `released=true` after approximately 18 minutes.
+Coordinator actual cleanup `f3c8d49a170b` now passes after full adapter review:
+exactly one subscription is inactive/protocol-retired, one PATCH ACK, fresh API
+local logout204/SID absence, all older SIDs retained and `cleanupComplete=true`.
+Private source verification reuses 19 old controls plus 5 changed controls, not
+another app/device suite. No Auth/controller/rental remains held. The first
+rental lasted 23 minutes and this second approximately 18; both are released,
+without a broader budget/cost claim. No UID/time sweep was used.
+
+The same installed da28 PWA also accepts D370's bounded physical subcase: after
+background, Profile ->Settings ->Chats twice leaves all four navbar targets
+stable; Profile rect is `[236,862,65,48]` and clicking it opens Settings normally.
+The former Profile rect at x315 is not observed in this settled state. Hydration was
+not physically held; actual source held-response tests cover that boundary.
+Together with reviewed hooks/omissions, both engines/themes and build27 asset
+parity, this closes the shared-DOM product defect without an all-platform claim.
+D369 is likewise closed compositionally, not by claiming physical503 injection.
+
+Private ledger/observer/controller and sanitized cloud card/state metadata remain
+under `.ops-private/topic-live-20261018/physical27/`; `cloud27/` holds the adapters,
+with the separate `cloud-lease27.private.json` registry. No personal content or
+raw UI is published. Current runtime is OFF, source/web da28 pins are unchanged,
+and the exact cleanup checkpoint is complete. Documentation is ready for the
+coordinator's commit checkpoint; no worker push is dispatched. Linnaeus owns the
+successor private v2 read-oracle repair, preserving this cohort's frozen evidence.
+No further rental before v2 read and the finite ACK driver are ready. The two
+physical provider/OS positives/inverse remain accepted; four-message/history/read/
+OFF-fallback acceptance stays unfinished. Do not weaken RLS/fencing or claim the
+public feed is broken to make a private oracle pass.
+
+Independent post-cleanup observation at17:50:50Z confirms Topic OFF with the
+same schema/catalog guards. The exact PWA metadata scope has fresh SIDs0,
+active subscriptions0, protocol1 subscriptions0 and current message grants0;
+original `none`/`pushEnabled=true` remains. Device inventory no longer contains
+the released iPhone. No new activation, Auth or device case is dispatched by
+these final readbacks.

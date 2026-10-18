@@ -25828,7 +25828,7 @@ transient login failure, Topic/provider/OEM, chat/task recovery and long-session
 cases are not inferred. Captures/raw output and Auth-failure injection stayed off.
 [Current execution](operations/2026-10-18-production-completion.md).
 
-## D-369 `[~]` A temporary login check failure terminates other devices
+## D-369 `[x]` A temporary login check failure terminates other devices
 
 Medium multi-device correctness; found2026-10-18 during native QA preparation.
 After successful password Auth, LoginForm checks bans. A transient503/read error
@@ -25843,17 +25843,27 @@ session and shows the existing error without routing. Active-ban/security-wide
 behavior is byte-identical and separately characterized, not silently changed.
 Four new literal behavioral/omission checks and seven adjacent checks pass;
 coordinator independently verifies the new4 and typecheck. Genuine local web
-build `e9921413ca9965c7` completes20.63s. Actual web image `8ce5e18c`/build prefix `9b2`
-is now deployed with public/container parity and local-scope marker2 ->3; served
+build `e9921413ca9965c7` completes20.63s. Initial web image `8ce5e18c`/build prefix `9b2`
+deployed with public/container parity and local-scope marker2 ->3; served
 JS SHA71134b30cd8d5706922736560aeb45d01afe0a0274b8d68bc8677b354c8b8fa5.
-Only the shared-web publication subcase is closed. Stable26 remains immutable
-and lacks this later repair; the next native release/error-path acceptance is
-open. Native26 ordinary UI/binding/logout0185 is normal-success-only, not a D369
-failure test. No live Auth fault injection, UI/design or database change is claimed.
+The repair is now also carried in source
+`da28afbd795ee1b3499b815d74160502c43fd474`, sole-healthy web/build
+`9fd9efb24b98dfb6` and Stable 0.1.26/build27. Actual Realme26 ->27 guest upgrade
+retains UID/data/firstInstall with fatal0; full public APK verification passes,
+mandatory=false, rollback26 retained. **FIXED/RELEASED:** the exact LoginForm
+callback/installed-SDK503 negative and controls establish the changed option;
+actual Auth local retirement/peer retention on prior web/Native26 and now
+Native27 cohort7d511 normal UI cleanup establish the SDK scope contract. APK27
+asset parity carries that repair; active-ban/security-wide behavior is unchanged.
+No physical/runtime503 was injected or claimed. That unexercised fault/OEM matrix
+is QA coverage, not an additional product-bug closure gate for this one-option
+repair. Prior failures and their boundaries remain; no database change is claimed
+for D-369.
+[Current release and exact limits](operations/2026-10-18-production-completion.md#navigation-and-d369-release).
 
-## D-370 `[~]` Mobile navigation hitboxes move while account permissions hydrate
+## D-370 `[x]` Mobile navigation hitboxes move while account permissions hydrate
 
-Medium navigation correctness; source candidate, found 2026-10-18 on the actual
+Medium navigation correctness; found 2026-10-18 on the actual
 rented installed iPhone 17/iOS 26.3.1, public web `8ce5e18c`, LOCATION_ADMIN after
 ordinary login. Initial Chats rect `[59,862,45,48]` and Profile
 `[315,862,65,48]` become `[44,862,45,48]` and `[236,862,65,48]` after access settles
@@ -25867,7 +25877,7 @@ offering three interactive destinations before Tasks access resolved. Adding
 Tasks to `justify-around` moves every hitbox even though Tasks is last; the old
 list-order-only test and comment did not establish stable geometry.
 
-The candidate keeps the existing navbar frame with `KubStableSkeleton` until
+The repair keeps the existing navbar frame with `KubStableSkeleton` until
 account-owned access settles, without hiding the application. A UID/epoch-keyed
 boundary prevents reuse of prior-account hook state; a settled-result guard
 also closes the actual routing-to-location-check one-commit gap. Role/access
@@ -25882,6 +25892,20 @@ Typecheck/diff-check pass. Coordinator accepts synthetic rendered pixels at 390
 and 1440 in both themes; `tests/e2e/bottom-nav-access-readiness.spec.ts` passes 4/4
 on Chromium/WebKit, with two additional WebKit desktop-opacity checks and one
 dark finite-animation check passing. These use the local fake backend, QA0,
-not actual Auth. Source review is clean. Production publication, native27
-release and physical verification of the repair remain open; the actual
-iPhone observation above is the defect reproduction, not post-fix acceptance.
+not actual Auth. Source review is clean. Source
+`da28afbd795ee1b3499b815d74160502c43fd474` is now released on sole-healthy web/build
+`9fd9efb24b98dfb6` with public/container parity and new-nav marker1/old-bare0
+(old renderer1), and on Stable 0.1.26/build27 with full public APK verification.
+Realme26 ->27 retains UID/data/firstInstall and passes guest/fatal0 smoke;
+mandatory=false, rollback26 retained. **FIXED/RELEASED:** the nine actual-hook
+checks/four omissions, two-engine/both-theme visuals and APK27 asset parity now
+compose with actual installed da28 PWA checks: after background, Profile ->
+Settings -> Chats twice keeps all four destinations stable, Profile rect
+`[236,862,65,48]`, with its normal callback working. The former Profile rect at
+x315 is not observed in that settled state. This accepts PWA navigation/return/callback,
+not a physically held early permission response or all platforms. Early readiness
+is covered by the actual-hook held-response tests; another forced phone Auth/
+permission fault is not required to close this shared-DOM repair. Broader physical
+fault/OEM checks remain separate QA coverage, not a known remaining D-370 bug.
+[Release and retained evidence](operations/2026-10-18-production-completion.md#navigation-and-d369-release).
+[Physical subcase and limits](operations/2026-10-18-production-completion.md#physical-topic-canary-7d511).

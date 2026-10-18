@@ -2,28 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
-**Current source candidate, 2026-10-18:** D-370 `[~]` records the actual installed
-iPhone 17/iOS 26.3.1 LOCATION_ADMIN navbar reflow on public `8ce5e18c`: three active
-tabs become four after permission hydration, and `justify-around` shifts every
-hitbox, allowing the old Profile point to select another destination. The narrow
-BottomNav candidate uses existing loading UI plus UID/epoch-owned settled access;
-role/access hooks and accepted Profile/settings behavior stay unchanged. Actual-
-hook RED -> 9/9 includes four literal omission controls; coordinator Chromium/
-WebKit E2E 4/4 and synthetic 390/1440 pixels in both themes pass, as do WebKit
-desktop-opacity 2/2 and dark finite-animation 1/1. Source review is clean. This is
-not a published or physically verified fix: production and native27 remain open.
-[Defect and evidence](INTERFACE_DEFECT_REGISTER.md#d-370--mobile-navigation-hitboxes-move-while-account-permissions-hydrate).
-
-**Latest accepted checkpoint,2026-10-18:** D369 source `2dad8198` is deployed through
-web image `8ce5e18c`, production build prefix `9b2`: public/container parity and local-
-scope marker2 ->3 pass. Actual callback/SDK503 RED,4 new+7 adjacent checks and
-typecheck support the narrow transient-error cleanup; active-ban/security-wide
-behavior is unchanged. Stable0.1.25/build26 remains immutable and lacks D369.
-Its original signer/Firebase/assets, Realme25 ->26 data-retaining upgrade and
-public APK bytes remain accepted, mandatory=false;25 rollback retained.
-Actual Native26 receipt `0185bbd86af1` now closes ordinary UI login/exact FCM
-binding/local logout plus peer retention/refresh and exact cleanup. No post-
-logout guest frame, transient-login failure, Topic/OEM or recovery claim follows.
+**Latest accepted checkpoint, 2026-10-18:** source
+`da28afbd795ee1b3499b815d74160502c43fd474` is sole-healthy web/build
+`9fd9efb24b98dfb6`, with public/container parity and new-nav marker1/old-bare0
+versus old renderer1. Android Stable 0.1.26/build27 is published: actual
+Realme26 ->27 retains UID/data/firstInstall, guest/fatal0 smoke passes; full
+public APK 7,755,887B/SHA prefix `01863eb5` matches, mandatory=false, rollback26
+retained. D369/D370 are FIXED/RELEASED by bounded compositional evidence: exact
+callback/SDK503 controls plus actual Auth local retirement/peer retention and
+APK27 parity for D369; actual-hook readiness/omissions, both engines/themes,
+installed-PWA final navigation/background/Profile callback and parity for D370.
+No physical503 or held early phone permission response is claimed or required
+to close these JS/shared-DOM defects. Broader fault/OEM/platform checks are QA
+coverage, not known remaining product bugs.
+[Release and exact boundaries](operations/2026-10-18-production-completion.md#navigation-and-d369-release).
 
 D342 sealed-only package-entrypoint case `c2d954b5ecab` passes actual PG17 restore:
 173 tables/124,112 rows, catalog/ACL/settings/roles/default ACL/sequences match;
@@ -31,9 +23,29 @@ same-copy grant-option negative/exact ROLLBACK, DDL768 constraints and independe
 artifact/custody/exact PG+Node cleanup pass. Restore360.972s, verify7.308s.
 No live source DB or new dump; only this retained-snapshot subcase is closed.
 Item82/D-342 remains open for off-host custody/current RPO and wider guarantees.
-Topic isolated activation c8901ef3d64a remains accepted; production Topic is OFF.
-Next: bounded physical Topic canary, remaining D356 actions, the native D369
-release delta and external recovery follow-up. Do not replay accepted cases.
+Topic isolated activation c8901ef3d64a remains accepted. Actual cohort7d511 runs
+two physical messages during temporary ON: A enabled-over-muted FCM/OS positive,
+then disabled-over-allowed FCM0/no NEW ordinal2; B inherit-over-allowed and enabled-
+over-muted Web/OS positives. Four-message/history/mark-read/OFF-fallback matrix
+is incomplete, `historyVerified=false`. Accepted RO diagnosis: A1 legacy SELECT0
+is expected after enabled CAS/fence; the exact outbox JOIN/ACK proves its retained
+note exists. The private action used the fenced legacy API, unlike the public v2
+client; no producer/feed defect or new D follows. Controller `failed=true` retains API/
+native cleanup PASS/all old SIDs/zero gaps. Actual OFF readback at 17:34:30Z follows
+verified backup/mirror without SQL relaxation; both decoded archives retained.
+PWA choice/push state restored, fresh SIDs/grants0 and both rentals released.
+Exact cleanup f3c8d49a170b passes: one inactive/protocol-retired subscription,
+one PATCH ACK, fresh API logout204/SID absence and all older SIDs retained;
+cleanupComplete. No Auth/controller/rental is held. Coordinator owns the next
+doc commit checkpoint; this worker does not push. Linnaeus owns successor private
+v2 read-oracle repair; no new rental before v2 read and finite ACK-driver readiness.
+[Physical outcome and limits](operations/2026-10-18-production-completion.md#physical-topic-canary-7d511).
+Nikita's nine newer entries (6 text/1 voice/2 images) are reconciled into #2/#87
+and provisional #52, not nine defects. Tester build and cache cause remain
+unknown; no new D or closure of all complaints follows. The synthetic actual-
+React/SDK/HTTP-cache warm-photo candidate completed GREEN_NO_SOURCE_PATCH; #87
+stays open. Remaining Topic/D356, broader platform QA and external recovery stay
+open. Do not replay accepted cases.
 Actual D356 held-access76749ab0ab0f now passes genuine same-document UI Auth,
 new-SID route/jump, zero late effects and exact cleanup; other actions stay open.
 [Current execution](operations/2026-10-18-production-completion.md).
@@ -617,9 +629,13 @@ while the hint was offered **and the page was visible**, not wall clock since it
 ## Current Execution Order
 
 Current as of 2026-10-18; the dated detail under queue items is history, not a
-competing version or permission gate. Web notification text and Android26
-are released after physical checks. Finish distinct Topic acceptance next;
-its runtime remains OFF. D-365 is accepted;
+competing version or permission gate. Web notification text is accepted; Android27
+is released with guest upgrade/public bytes verified, not all signed-in paths.
+Topic is partial after two physical messages and actual OFF rollback/readback;
+A1 legacy0 is explained by the expected fence; the private v2 oracle needs repair,
+not the public feed. Exact owned cleanup is complete. The warm-photo candidate
+under #2/#87 is completed GREEN_NO_SOURCE_PATCH, not whole-report closure.
+D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
 anti-abuse, RLS, support/email and basic operator security baselines are accepted;
 maintain their affected regressions, do not rebuild them without a new finding.
@@ -632,6 +648,10 @@ rollback and device/provider acceptance gates remain mandatory.
 1. `[~]` Finish Nikita's recorded intake and reproduce current reports: opening/
    switching delay and VPN behavior87, mic84, read notifications85, task reload86,
    audio83 and exact emoji79. Five images/one video remain semantically open.
+   The newer9 are already triaged as 6 text/1 voice/2 images under #2/#87 plus
+   provisional #52; no confirmed cache cause or tester build. The one synthetic
+   warm-photo candidate passes without a source patch; do not replay it or close
+   all complaints from that GREEN.
 2. `[~]` Synchronization/cache/recovery2,52,53: retain account-owned warm history,
    privacy admission, anchors, pending text/files/voice and duplicate-free retries.
    D-357 throughD-364 are accepted fixes, not instructions to repeat their tests.
@@ -639,8 +659,10 @@ rollback and device/provider acceptance gates remain mandatory.
    storage tests, do not treat the complete synchronization stage as closed.
 3. `[~]` Notifications76-77,95: iPhone PWA sender/text modes and exact tap are
    accepted and enabled; fresh Android23 useful FCM/none/tap/logout is accepted.
-   Complete persisted child overrides and the broader account/device matrix.
-   Topic runtime is still OFF, not implicitly accepted by the Web release.
+   Topic7d511 adds two physical provider/OS positive/inverse cases, not full
+   acceptance. Runtime is OFF and exact cleanup complete. Repair the private v2
+   read oracle/finite ACK driver before a new rental and the remaining four-
+   message/history/mark-read/OFF-fallback work; A1 legacy0 is expected, no new D.
 4. `[~]` Media25,29,104: positional-intent D-365/104 is released; finish remaining
    albums/HD/original/download/cache cases and the pre-send photo/video editor.
 5. `[~]` Faithful recovery82/D-342: sealed-only entrypoint/rehearsal `c2d954b5ecab`
@@ -660,10 +682,13 @@ rollback and device/provider acceptance gates remain mandatory.
    containers, search motion, typography, controls and keyboards across shells.
 10. `[~]` Product completion17,19-20,27,36-38: public downloads/changelog,
     profiles/contacts/shared-media depth, scoped roles, tasks/staff and support.
-11. `[~]` Platform acceptance7,9,28: Android Stable0.1.25/build26 is published;
-    original signer/Firebase/assets and actual Realme25 ->26 guest upgrade pass.
-    Actual0185 ordinary UI login/binding/local logout and peer refresh pass;
-    immutable26 lacks later D369 and that native error-path case stays open.
+11. `[~]` Platform acceptance7,9,28: Android Stable0.1.26/build27 from da28afbd is
+    published; actual Realme26 ->27 UID/data/firstInstall-retaining guest/fatal0
+    and full public bytes pass, mandatory=false, rollback26 retained. D369 is
+    carried and D370 released; both scoped product bugs are FIXED/RELEASED.
+    Installed PWA final navigation/background/Profile callback and Native27
+    normal UI cleanup are now accepted in their exact bounds; prior0185 is reused.
+    No physical503/held-early-phone or blanket platform coverage is claimed.
     Same-session upgrade/readable FCM/none/tap/logout acceptance from23 is reused.
     Broader OEM/long-session
     checks stay open; iPhone installed PWA modes/tap are separately accepted.
@@ -4478,6 +4503,18 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     intake, 2026-10-07. Screen/state/client/build and cause are unknown. Closed
     item 58 and D-089/D-320 are comparison context, not proved duplicates or
     regressions. No presumed cache correction is authorized by this report.
+    Newer nine-item triage on 2026-10-18 retains 6 text/1 voice/2 images: cache/
+    conversation/photo-loading subjects map to #87/#2; possible pending voice
+    absence maps provisionally to #52 only if its unacknowledged state is proved.
+    Images are state-only; voice semantics are not human-certified. No new D,
+    confirmed cache cause, build attribution or blanket complaint closure.
+    Specific candidate completed GREEN_NO_SOURCE_PATCH: actual React/SDK/signed-
+    URL and browser HTTP-cache paths retain history plus the decoded inline image
+    before held history release, without a new object request. This uses a local
+    synthetic backend, not production/Auth/device acceptance; tester build and
+    broader media/lifecycle behavior remain unknown. No source fix is justified.
+    [Completed candidate and limits](operations/2026-10-18-production-completion.md#warm-photo-return-candidate).
+    [Reconciled evidence and limits](operations/2026-10-18-production-completion.md#parallel-queue-reconciliation).
     [Intake and limits](operations/2026-10-07-tester-feedback.md).
 
 88. `[x]` Retired microphone acquisition/recording intent, **D-350**, shared web.
