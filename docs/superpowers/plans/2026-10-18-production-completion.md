@@ -43,7 +43,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK27 and rollback26 are immutable; use the next version/build
+  parity. Published APK28 and rollback27 are immutable; use the next version/build
   for new code.
 
 ## Review Focus
@@ -256,8 +256,11 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   ordering, quiet-reload veto, late local ACK and explicit retry distinction.
   Final affected text/caption/restore/metadata integration passes93; forced
   native-disk failure and whole-platform coverage are not claimed.
-- [ ] Publish D371/D372/D373 and packaged OSS notice on web and Stable28 after
-  final build, original signer/Firebase/assets and Realme27 ->28/public bytes.
+- [x] Publish D371/D372/D373 and packaged OSS notice at source `efcc9da0`:
+  web/build `6a66afb9a57ceb59`, sole-healthy image, old/new markers and public/
+  container parity; Stable0.1.27/build28, original signer/Firebase/assets,
+  Realme27 ->28 guest/data retention, full public APK SHA and rollback27.
+  Browser faults/native guest evidence do not establish forced native disk faults.
 
 ## Task3: Media Completion (#25,29,104--105)
 

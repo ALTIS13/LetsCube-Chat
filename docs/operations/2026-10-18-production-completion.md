@@ -3,7 +3,7 @@
 This report is chronological. Latest Topic outcome:
 [physical b875, retained enforcement and production ON](#topic-production-enforcement).
 Latest release:
-[navigation/D369 web and Native27](#navigation-and-d369-release).
+[D371--D373 durability/readability and Native28](#durability-and-readability-release).
 Retain [Native26 ordinary UI logout/binding](#native26-ordinary-ui-logout-and-binding-1533z),
 [D342 sealed-only restore](#d342-sealed-only-package-restore-1537z), and the
 [nine-item intake reconciliation](#parallel-queue-reconciliation) with their limits.
@@ -922,3 +922,49 @@ from Settings and entry HTML; both Vite bases and Capacitor/AAPT asset-only chec
 retain bytes. This is a technical compliance correction, not a legal assurance
 or proof from a signed APK. Android0.1.27/build28 is reserved; native signing,
 installation/publication and actual deployed web parity remain the next steps.
+
+## Durability and Readability Release
+
+Product commit `efcc9da022e611d0ed4d12217cc9060b159f4bc2` is released. Outgoing
+range (`a73abe2e`, `efcc9da0`) was read separately before push; own-tree alias
+resolution passes11 files/191 imports. Only owned42 paths are committed; private
+operators/credentials stay ignored. D: main fast-forwards cleanly, preserving
+ignored material; the older push-retirement worktree has an existing version-file
+edit and was inspected read-only, not reused or reset.
+
+Actual sole-healthy web image is
+`l64kyyu1sysev2izzjjbizhe:efcc9da022e611d0ed4d12217cc9060b159f4bc2`, build
+`6a66afb9a57ceb59`. Public/container HTML, SW and JS hash parity passes. JS SHA256:
+`c5cd4e70b80ad1127616db563c5b7c0e31b2db8b8c3bd2487c931d8d0f43fd0a`.
+Three actual durability literals are absent from the pinned old bundle and
+present in the new one; the pre-existing storage-version literal calibrates
+both reads. Notice and full licence bytes match source/public/container.
+The initial check sees the old image, then two healthy rolling replicas; natural
+retirement yields the sole new image. No container was forcibly removed.
+
+**Android Stable0.1.27/build28** from the same product commit is public,
+mandatory=false; Stable27 rollback remains. Native build markers:
+`sw.js build 0c319541b965f997`, `built in17.33s`, `BUILD SUCCESSFUL in17s`.
+APK7,764,659B, SHA256:
+`89955aff892849f74c36b2eb2e51657dd62e26c9a577bd3c60348fa0d793e70b`.
+AAB7,396,638B, SHA256:
+`1c17820f2675f0f113e700baede0de896a318b335d4c097767503a52f32e4240`.
+Original signer, Firebase4 values, release QA flags false, web/config/DEX and
+APK/AAB asset parity pass. Actual Realme27 ->28 retains UID/data/firstInstall,
+foreground guest/fatal0, with no clear/uninstall. Full public catalog+APK bytes
+pass at19:22:46Z; signed APK also contains byte-identical notice and full licence.
+No new native Auth/provider/OS or forced-disk-failure acceptance is claimed.
+
+The private publication adapter initially confuses the unchanged publisher-script
+pin with an old-APK pin and refuses **before remote staging**. Exact RO proves
+stage absent/Stable27 unchanged. Correcting that adapter preserves and verifies
+the actual publisher SHA `e4d6da63…`; nine metadata controls pass, then one stage,
+one guarded publish and public verification succeed. No guard was weakened,
+catalog replayed, publisher script edited or failed build relabeled successful.
+
+Public APK: [LETSCUBE0.1.27](https://api.letscube.ru/releases/files/android/0.1.27/letscube-0.1.27.apk).
+Windows shell remains0.2.14 with updated remote renderer; shared iPhone PWA/web
+receives the same JS. A native Apple build and universal device acceptance are
+not asserted. Topic runtime remains ON; this release has no DB schema migration.
+All owned Auth/groups/rentals/controllers are retired, no server/test job held.
+Next is the separate pre-send editor stream; the full twelve-stream goal is active.

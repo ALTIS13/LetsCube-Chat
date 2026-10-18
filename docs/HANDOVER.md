@@ -7,11 +7,17 @@ Stage: Topic overrides are globally ON after the physical b875 cohort, accepted
 retained-disable rollback contract and fresh verified backup/guarded CAS; separate
 readback at18:55:56Z preserves schema/catalog/RLS. Source/evidence and exact limits:
 [execution report](operations/2026-10-18-production-completion.md#topic-production-enforcement).
-Web remains `da28afbd`/build `9fd9efb24b98dfb6`, Android Stable0.1.26/build27;
-D369/D370 are fixed/released. No QA group/Auth/controller/rental is held.
-Next: finish and review D371 text/media durability repairs, adjacent caption
-contracts and reload veto, then web and Android0.1.27/build28 (reserved only).
-Do not publish the dirty candidate before those affected checks pass. Nikita's
+Product source `efcc9da0` is released: initial web/build `6a66afb9a57ceb59`
+has sole-healthy image/public-container/changed-marker parity; Android Stable0.1.27/build28
+with original signer/Firebase/assets and full public APK hash. Realme27 ->28
+retains UID/data/firstInstall; mandatory=false, rollback27 retained. D371--D373
+are fixed/released within the recorded browser/guest-native coverage; no forced
+native disk failure or all-platform claim. No QA group/Auth/controller/rental held.
+Later documentation-only web images may be newer; they do not change that native
+product pin. Verify their actual image/content rather than replaying native builds.
+Next: Task3 pre-send photo/video editor, photo first, per the completion plan.
+Use the measured MIT cropper/installed Mediabunny boundary; no hand-rolled crop
+interaction or unedited-original fallback after a failed privacy edit. Nikita's
 nine entries map to #2/#87 plus provisional #52; warm-photo return is GREEN/no
 patch, not whole-intake closure. D356's other actions and the remaining completion
 streams stay open; reuse accepted evidence and preserve platform/recovery limits.

@@ -25916,7 +25916,7 @@ fault/OEM checks remain separate QA coverage, not a known remaining D-370 bug.
 [Release and retained evidence](operations/2026-10-18-production-completion.md#navigation-and-d369-release).
 [Physical subcase and limits](operations/2026-10-18-production-completion.md#physical-topic-canary-7d511).
 
-## D-371 `[~]` Cancelled queued message can return after a storage transaction abort
+## D-371 `[x]` Cancelled queued message can return after a storage transaction abort
 
 **Severity:** high. Local unsent-message cancellation and cold restore, all shared
 clients using IndexedDB. This is a reproduced storage/controller defect, not an
@@ -25938,7 +25938,7 @@ completion. Its memory fallback concealed persistence errors; the runner and UI
 removed their evidence without a durable-delete outcome. A memory-only restore
 tombstone could not survive process loss.
 
-**Source accepted, release pending:** transaction-complete acknowledgement, explicit failure
+**Fixed/released:** transaction-complete acknowledgement, explicit failure
 propagation, immediate same-lifetime cancellation, and UI removal only after
 committed deletion. Failed deletion must remain visible/retryable rather than
 claiming durable cancellation. Preserve FIFO, owner/epoch isolation and the
@@ -25954,8 +25954,11 @@ existing restore-order contracts. This does not claim forced native disk failure
 **Evidence:** finite two-engine reproduction on 2026-10-18, four contexts,
 native request-success/abort ordering, positive commit controls and fresh
 document restore. All browsers closed, no production/Auth/device effects.
+Product source `efcc9da0` is live on verified shared web and Stable0.1.27/build28;
+Realme in-place guest upgrade/public APK bytes pass. Browser fault proof is not
+a forced native-disk-failure claim. [Release](operations/2026-10-18-production-completion.md#durability-and-readability-release).
 
-## D-372 `[~]` Outgoing media can be reported saved without a committed device copy
+## D-372 `[x]` Outgoing media can be reported saved without a committed device copy
 
 **Severity:** high. Outgoing media persistence, cancellation, reload protection
 and retry. Source: `lib/outbox/outgoingMediaStorage.ts`, `appOutgoingMedia.ts`,
@@ -25972,7 +25975,7 @@ storage with native `UnknownError`. ArrayBuffer plus file metadata commits and
 restores exact bytes/File in a fresh document. This is an observed engine boundary,
 not proof that all iPhones fail to store File objects.
 
-**Source accepted, release pending:** shared transaction-complete ACK, explicit committed /
+**Fixed/released:** shared transaction-complete ACK, explicit committed /
 pending / failed persistence state, owner-scoped cancellation/restore fences and
 reload veto. A compatible versioned bytes DTO retains old-record support; no
 database rename, destructive migration or new dependency. Actual media suite
@@ -25982,8 +25985,10 @@ owner separation, held byte conversion/delete ordering and background retry.
 Legacy File coexistence is tested in Chromium, where that old representation
 can actually commit. Adjacent caption integration passes with the text repair;
 native lifecycle and authenticated upload are not inferred from browser proof.
+Product source `efcc9da0` is live on shared web/Stable28, with full assets/public
+APK parity; actual guest upgrade retains data. [Release](operations/2026-10-18-production-completion.md#durability-and-readability-release).
 
-## D-373 `[~]` Pending and failed message wrappers dim readable text and actions
+## D-373 `[x]` Pending and failed message wrappers dim readable text and actions
 
 **Severity:** medium. `components/chat/MessageBubble.tsx`, outgoing pending /
 failed states in both themes.
@@ -25997,4 +26002,5 @@ failure icon, retry/edit/delete callbacks, message colours, radius and layout.
 Four actual-component RED/GREEN cases include a literal opacity-omission control;
 action contrast is at least4.75:1. Coordinator and worker inspect1440/390, light/
 dark PNGs: no overlaps or clipped actions. Synthetic QA0 only, no external
-requests. Source is ready; production/native release is still pending.
+requests. Released in `efcc9da0` on verified shared web and Stable28; native
+asset parity includes the same component. [Release](operations/2026-10-18-production-completion.md#durability-and-readability-release).

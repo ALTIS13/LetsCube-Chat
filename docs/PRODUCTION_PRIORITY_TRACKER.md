@@ -2,7 +2,21 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
-**Latest accepted checkpoint, 2026-10-18:** source
+**Latest accepted checkpoint, 2026-10-18:** product source `efcc9da0` is released
+on shared web/PWA/Windows renderer and Android Stable0.1.27/build28. Web initial
+release image/build `6a66afb9a57ceb59`, changed old/new markers and public/container
+parity pass. Realme27 ->28 retains data/UID/firstInstall, guest/fatal0; original
+signer/Firebase/assets and full public APK SHA pass, mandatory=false, rollback27.
+D371--D373 are FIXED/RELEASED: commit-aware text/media persistence, cancellation/
+retention/reload/explicit-retry guards, readable pending/failed bubbles and packaged
+OSS notices. Final integration93, media61 (23 actual two-engine cases/zero skips),
+readability4 and notice9 pass, with typecheck/build. Forced native disk faults and
+all-platform acceptance are not claimed. Topic enforcement remains ON after the
+separate verified activation below. Next is Task3 pre-send photo/video editor,
+photo first; no repeat of the accepted durability or Topic canaries.
+[Release and exact boundaries](operations/2026-10-18-production-completion.md#durability-and-readability-release).
+
+**Previous accepted checkpoint, 2026-10-18:** source
 `da28afbd795ee1b3499b815d74160502c43fd474` is sole-healthy web/build
 `9fd9efb24b98dfb6`, with public/container parity and new-nav marker1/old-bare0
 versus old renderer1. Android Stable 0.1.26/build27 is published: actual
@@ -630,8 +644,8 @@ is released with guest upgrade/public bytes verified, not all signed-in paths.
 Topic enforcement is ON after physical b875, compatible retained-disable rollback
 and fresh verified backup/CAS/readback; raw incomplete instrumentation remains
 documented, not promoted to a whole-client-matrix claim. Exact owned cleanup is
-complete. D371 text/media durability and reload safeguards are in progress for
-web/Android28, not yet released. The warm-photo candidate
+complete. D371--D373 durability/readability safeguards are released on verified
+web/Android28; pre-send photo/video editing is next. The warm-photo candidate
 under #2/#87 is completed GREEN_NO_SOURCE_PATCH, not whole-report closure.
 D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
