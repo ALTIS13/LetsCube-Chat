@@ -78,6 +78,9 @@ The first rental expired automatically and its exact QA subscription was
 deactivated; a second owned QA-only iPhone session is active. One inactive-grant
 old QA subscription was also retired to isolate delivery; this did not resolve
 the fallback and was not called the cause. No real user's subscriptions changed.
+The retained local fixture also passes 2/2 in Chromium/WebKit using a real
+registered worker, native IndexedDB, MessagePorts and streamed HTTP response;
+only notification publication is an OS-leaf stub. It is not physical acceptance.
 
 Review the final provider/worker pair, deploy verified web and then the exact
 Edge helper with a retained previous file. On the rented Home Screen PWA verify
