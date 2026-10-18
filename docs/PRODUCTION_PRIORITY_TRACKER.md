@@ -2,7 +2,29 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
-**Latest continuation, 2026-10-18:** item52/D-367 FIFO/discard restoration repair
+**Current candidate,2026-10-18:** D-368 ordinary logout wrongly uses the SDK's
+global default, terminating other devices. Two ordinary calls now specify local
+scope; security-wide password recovery is unchanged. Three actual callback/SDK
+REDs,95 affected checks/typecheck, independent review and actual two-session
+Auth/refresh/cleanup pass, all6 prior SIDs retained. Additional browser-order/
+failure controls cover both callbacks. Android26 metadata is prepared, not
+published; Stable25 below remains immutable. Next: rendered web/native release.
+[Current execution](operations/2026-10-18-production-completion.md).
+
+**Latest continuation, 2026-10-18:** reviewed chat/task recovery fixes0bdffb80 /
+a3cfd1f2 are live; tool/test follow-up6f41cccc is the sole healthy web image,
+build33dfcab91705590b with public/container parity. Actual shared-web offline
+recovery retains15 rows/0px anchor and reduces full history reads3 ->2. Actual
+three-channel task rejoin now triggers one parent read/latest title without
+reload or draft loss. All exact owned QA cleanup passes. Android0.1.24/build25
+is Stable, mandatory=false: original signer/Firebase/assets, in-place Realme
+24 ->25 guest startup/data retention and full public APK SHA pass;24 rollback
+retained. These are not physical Topic or authenticated native recovery proof.
+Topic remains OFF; next are its bounded physical canary, D356 and D342 package-
+only restore. No A063, production SQL mutation or cloud resource held.
+[Current plan and evidence](operations/2026-10-18-production-completion.md).
+
+**Previous continuation, 2026-10-18:** item52/D-367 FIFO/discard restoration repair
 is released at source5af58c2b: actual Chromium/WebKit IndexedDB RED/GREEN,
 independent review fix,117 affected tests, typecheck and genuine build pass.
 Shared web build6d2e3337463d0e30 has healthy public/container parity. Android
@@ -3244,7 +3266,9 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     **2026-10-18 follow-up:** actual shared-web transport recovery/rows/anchor pass.
     Its measured3 history reads led to two reproduced redundant-read causes;
     reviewed recovery-timer/authoritative-cache-proof repair passes153 focused
-    checks/typecheck and awaits combined deployment/runtime acceptance. Do not
+    checks/typecheck and is released in weba3cfd1f2 / Android25. Actual changed-
+    input shared-web recovery retains15 rows/0px anchor, fresh trust and no reload;
+    full history reads fall3 ->2. Exact SID cleanup passes. Do not
     equate this with the still-unidentified original Android VPN case.
     [Current evidence](operations/2026-10-18-production-completion.md).
     Original intake: «Если меняется IP… приходится перезапускать мессенджер»:
@@ -4469,8 +4493,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     reconnect are separate boundaries. Actual missed-update reconnect now finds
     3 real rejoins but no parent read/stale title; source fix0bdffb80 adds an
     all-three-binding debounced catchup, with66 coordinator checks/review passing.
-    It awaits combined deployment and actual changed-input acceptance. Next: leave owned
-    task checklist/comment drafts unsaved on Android24, update through a second
+    Released in weba3cfd1f2 / Android25. Actual changed-input acceptance passes:
+    one parent GET starts267ms after the last real join, latest title appears
+    automatically and both draft nodes/values remain for8s. Exact task/two-SID
+    cleanup passes. Next: leave owned
+    task checklist/comment drafts unsaved on Android25, update through a second
     QA client, and verify real Realtime refresh without reload/unmount or draft
     loss. This does not establish the cause of unidentified reports86/87.
     [Actual web acceptance](operations/2026-10-18-production-completion.md).

@@ -3741,3 +3741,20 @@ direction refuses adding somebody to a group. `channels.inviteToChannel` lists
   a blocked person cannot write there, and what they wrote before is the
   conversation itself. Folding is the reader's alone: nothing is hidden from
   anybody else.
+
+## Ordinary Logout Scope (2026-10-18)
+
+Telegram's current official FAQ documents simultaneous signed-in devices and
+separately terminating an old device from Devices/Active Sessions. It lists
+ordinary logout entry points for iOS, Android and Desktop. This is a documented
+cross-client mechanism, not a new physical/UI measurement:
+[logout](https://telegram.org/faq#q-how-do-i-log-out),
+[device termination](https://telegram.org/faq#q-my-phone-was-stolen-what-do-i-do).
+
+LETSCUBE therefore keeps ordinary exit local to this installation; security-wide
+termination is separate. This is an explicit product derivation, not a claim
+that Supabase's default matches Telegram. Installed auth-js2.105.1 and the
+[official signOut contract](https://supabase.com/docs/reference/javascript/auth-signout)
+both default to global scope and require explicit local scope. Candidate proof
+combines actual callback/SDK request scope with real owned two-session Auth/
+refresh and exact cleanup; device UI proof is recorded separately.

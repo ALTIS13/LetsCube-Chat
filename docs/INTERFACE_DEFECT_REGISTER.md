@@ -25754,3 +25754,25 @@ healthy public/container parity; Android0.1.23/build24 is Stable after unchanged
 signer/Firebase/parity, actual Realme in-place guest upgrade and public APK hash
 checks. Authenticated physical FIFO/new FCM/OEM matrix is not claimed.
 [Evidence and exact remaining scope](operations/2026-10-18-outbox-restore-and-topic-wire.md).
+
+## D-368 `[~]` Ordinary logout terminates sessions on other devices
+
+Medium account/multi-device correctness, found2026-10-18 while preparing device
+QA. Both ordinary `useSignOut` and `useUser.signOut` invoked Auth without options.
+The installed auth-js2.105.1 defaults to global scope, confirmed by its code and
+current official documentation. Three actual selected-callback/installed-SDK
+HTTP assertions are RED (`scope=global`, expected local); two controls pass.
+
+Only these two ordinary logout calls now specify local scope. Existing browser
+installation preview retirement still completes before Auth and refuses logout
+on retirement failure. Password recovery/security-wide actions are unchanged.
+The stale ownership harness now explicitly models a native platform and refuses
+unexpected browser preview calls. Affected95 checks and typecheck pass.
+
+Actual candidate callback + installed SDK + production Auth: two fresh owned QA
+SIDs, logoutA204 removes onlyA; B survives and actually refreshes with the same
+SID. All6 older SIDs remain; both fresh SIDs are then retired and independently
+absent in DB. No global logout is dispatched, no SQL mutation or device claim.
+Candidate is not yet deployed or embedded in Stable25. Android26 metadata is
+prepared; rendered web/current-device acceptance and release remain.
+[Current execution](operations/2026-10-18-production-completion.md).

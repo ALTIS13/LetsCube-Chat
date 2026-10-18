@@ -43,7 +43,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK24 is immutable; use the next version/build for new code.
+  parity. Published APK25 is immutable; use the next version/build for new code.
 
 ## Review Focus
 
@@ -67,6 +67,10 @@ this document coordinates their remaining deliverables, not a replacement design
   checks; production owned HTTP FIFO; Android24 in-place guest upgrade.
 - [x] Android0.1.23/build24 Stable, mandatory=false, original signer/Firebase and
   full public APK hash; web source5af58c2b, image8159c627. Windows shell0.2.14.
+- [x] Chat/task recoverya3cfd1f2 released; current image6f41cccc, product web
+  build33dfcab91705590b. Android0.1.24/build25 Stable, mandatory=false, original
+  signer/Firebase/assets, Realme24 ->25 guest/data retention and public APK hash;
+  previous24 rollback retained. Signed-in native recovery remains separate.
 - [x] Topic runtime remains OFF. Ordinary production feed-v2 admission/read is
   accepted, but does not substitute for override compatibility or provider proof.
 
@@ -122,9 +126,11 @@ notification decision/read RPCs; current and pinned old client sources.
 
 ## Task2: Nikita Intake and Synchronization (#2,52--53,79,83--87)
 
-**State:** IN PROGRESS; shared-web warm/offline baseline accepted. Redundant
-recovery/sanitizer reads are reproduced in the actual hook and under repair;
-already accepted fixes are not blank stages.
+**State:** IN PROGRESS; shared-web warm/offline baseline and reproduced redundant
+recovery/sanitizer read repair are accepted and released in web/Android25.
+Remaining native/intake boundaries are not closed by these cases.
+New D-368 ordinary global logout is reproduced and repaired locally; actual
+two-session Auth/refresh and cleanup pass. Shared/native publication follows.
 **Files:** Existing intake reports, chat cache/reconnect/outbox modules and their
 focused tests; `docs/PRODUCTION_PRIORITY_TRACKER.md` and defect registry.
 **Interfaces:** Account-owned warm history, stable client-message identity,
@@ -139,11 +145,19 @@ privacy admission, message anchors and lifecycle recovery already in the client.
   same15 rows/anchor. Exact QA cleanup passes. No cache failure is established;
   early-frame latency is inconclusive, and3 online history reads need source
   diagnosis before optimization or a new defect claim. Device cases remain.
-- [ ] Publish the reproduced recovery/sanitizer read repair after final review /
- 153 focused checks/typecheck/build; verify changed production bytes and actual
-  warm/offline recovery with required postjoin privacy reads, then native delta.
+- [x] Publish the reproduced recovery/sanitizer repair:153 focused checks,
+  review/typecheck/build, changed production marker/exact image/hash parity.
+  Actual changed-input offline recovery retains15 rows/0px anchor, fresh joins/
+  privacy reads and no reload, with2 history reads instead of3. Native25 original
+  signer/Firebase/assets, Realme guest/data-retaining upgrade and Stable public
+  bytes pass. This is not signed-in Android recovery acceptance.
 - [ ] Close microphone84, read-state85, task-reload86, sound83 and emoji79 through
   their own changed-input cases; do not infer device acceptance from source.
+- [ ] Release D-368 local ordinary logout:3 actual callback/SDK REDs before the
+  two-call repair;95 affected checks/typecheck and actual owned two-session Auth
+  survival/refresh pass, all6 prior SIDs preserved. Verify rendered web exit,
+  next immutable Android26 upgrade/public bytes, leaving security-wide flows
+  and current-install browser preview retirement intact.
 - [ ] Verify cold/warm/offline/background/account-switch behavior at the affected
   boundary and publish independently accepted slices.
 
@@ -252,7 +266,8 @@ ownership, readable defaults/scale and reduced-motion preference.
 
 **State:** IN PROGRESS; D-354 source/browser fix4765bcad is shipped. Actual
 authenticated shared-web draft refresh and transient Retry pass; terminal and
-Android cases remain, with a separate missed-update/reconnect check in progress.
+Android cases remain; missed-update/reconnect repair is now actually accepted
+on shared web and released in web/Android25.
 **Files:** Existing public download/changelog, profile/contact/shared-media,
 roles/tasks/staff/support components and their focused tests.
 **Interfaces:** Public unauthenticated downloads, scoped roles, contact/phone
@@ -265,10 +280,12 @@ privacy, task invalidation, profile history and existing support assignment.
   only run exhausts SDK retry0/1/2/3 with transport failure, then one real Retry
   loads latest data without draft loss. Exact synthetic-task tombstone/browser/
   SID cleanup passes. This is not terminal or physical Android acceptance.
-- [ ] Complete the actual missed-update reconnect follow-up: reproduced3 rejoins /
-  zero detail GET/stale title; source fix0bdffb80 passes66 focused checks/review.
-  Publish with the chat repair and repeat only this changed-input runtime case.
-- [ ] On Android24 leave owned task checklist/comment drafts unsaved; update the
+- [x] Complete actual missed-update follow-up: reproduced3 rejoins/zero detail
+  GET/stale title; reviewed source0bdffb80 passes66 checks and is released with
+  the chat repair. Actual new cohort gets one parent read267ms after last rejoin,
+  latest title automatically and both draft nodes/values intact throughout8s;
+  exact task/two-SID cleanup passes, no reload.
+- [ ] On Android25 leave owned task checklist/comment drafts unsaved; update the
   task through a second QA client. Real Realtime refresh must update server data
   without reload/unmount or either draft loss. Test transient error/Retry and
   permission-loss retirement as separate controls.
@@ -279,7 +296,7 @@ privacy, task invalidation, profile history and existing support assignment.
 
 ## Task10: Platform Delta Matrix (#7,9,28)
 
-**State:** QUEUED; latest Android24 baseline supersedes old0.1.3 notes.
+**State:** IN PROGRESS; Android25 delta released, broader device matrix remains.
 **Files:** Platform QA/release checklists, existing native adapters and manifests.
 **Interfaces:** Shared client parity, native activation/download/keyboard, stable
 signer/package identity and verified in-place upgrade with retained user data.
@@ -290,8 +307,10 @@ signer/package identity and verified in-place upgrade with retained user data.
   rented iPhone; do not claim native iOS/macOS release from web evidence.
 - [ ] Finish Windows killed-process WNS and available Win10/11/offline/long-session
   cases while retaining owner-accepted unsigned EXE distribution.
-- [ ] For changed embedded clients build the next immutable version, verify
+- [x] For this changed embedded client build immutable25, verify
   signer/Firebase/assets, actual upgrade/canary, catalog CAS and public byte hash.
+  Realme24 ->25 is guest/data-preserving startup proof; broader signed-in and
+  physical Topic cases below remain open. Retain24 as rollback.
 
 ## Task11: Monitoring and Capacity (#6)
 

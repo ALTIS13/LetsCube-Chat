@@ -3,27 +3,28 @@
 **Active plan,2026-10-18:** Codex owns the
 [production completion plan](superpowers/plans/2026-10-18-production-completion.md).
 Owner authorizes reviewed production rollout and safe migrations throughout.
-Stage: combined chat/task recovery build/release preparation; Topic canary prepared,
-runtime still OFF. Canonical worktree/branch below, coordinator owns integration.
-See the [execution record](operations/2026-10-18-production-completion.md):
-actual core0629, held4463 and fence-omission3f0e pass; actual Edge52e7 passes12
-Web/FCM single/album cases, legacy3e91 passes3 single-Web cases. Provider leaves
-are controlled, not physical delivery.42 changed helper/caller checks pass.
-Shared-web warm-history independence and actual offline RT recovery pass with
-0px anchor drift and exact QA cleanup. Actual D354 shared-web drafts/Retry pass;
-D342 retained payload39 files is sealed, not standalone restore acceptance.
-Actual-hook diagnosis reproduces redundant700/900/900ms reads and late sanitizer
-refetch. Cache repair + reviewed deadline fix pass153 checks/typecheck; not yet
-committed/deployed. Real task outage confirms3 rejoins/0 detail GET/stale title;
-Task fix0bdffb80 passes66 checks/review and is fast-forwarded into the canonical
-branch without discarding its dirty cache/docs. Combined typecheck/build pass:
-219bc5b6e783062f,51.07s;70 task/channel checks +153 chat checks. Android metadata
-0.1.24/build25 is prepared, not built/published; Stable24 is unchanged.
-Next: commit/import review/deploy, changed-input runtime proof, native25 delta;
-then physical Topic canary. Parallel package-only restore and activation prep.
-Nikita's9 entries remain semantic-PENDING, four ungrounded cache leads retained.
-Production3b2d661e deploy healthy; Stable24/product bytes unchanged. No production SQL
-mutation, A063, native update or rental. Realme is online; no device test yet.
+Stage: chat/task recovery released on web and Android Stable0.1.24/build25;
+Topic runtime still OFF. Canonical branch/worktree below, coordinator integrates.
+See [execution evidence](operations/2026-10-18-production-completion.md): reviewed
+Task0bdffb80/cachea3cfd1f2 pass223 affected checks/typecheck/build. Actual deployed
+offline recovery retains15 rows/0px anchor, with2 history reads instead of3;
+actual task rejoins cause one automatic parent read/latest title, drafts intact.
+All fresh QA SIDs and synthetic tasks are retired. Web image6f41cccc is sole
+healthy with public/container parity, product build33dfcab91705590b. Android25
+original signer/Firebase/assets pass, actual Realme24 ->25 preserves UID/data/
+first install and opens guest UI, fatal0. Stable public bytes/SHA verified,
+mandatory=false, previous24 rollback retained. Unchanged FCM proof from23 reused;
+no signed-in Android recovery or Topic device acceptance is claimed.
+Next: bounded physical Topic canary after isolated activation rehearsal; parallel
+D356 same-UID/new-SID actions and D342 sealed-package-only restore entrypoint.
+Accepted core/held/fence/Edge/legacy cases are not to be replayed. Nikita's9
+entries remain semantic-PENDING, not confirmed by ungrounded paraphrases.
+No production SQL mutation, A063 or rental; no live coordinator exec is held.
+D-368 ordinary logout currently uses the SDK's global default. Candidate changes
+only two ordinary calls to local scope;3 actual callback/SDK REDs,95 affected
+checks/typecheck and real two-session Auth/refresh/cleanup pass. All6 prior SIDs
+remain. Android26 metadata is prepared; source/rendered/native release pending,
+not included in Stable25. Security-wide password recovery remains unchanged.
 
 **Current resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with

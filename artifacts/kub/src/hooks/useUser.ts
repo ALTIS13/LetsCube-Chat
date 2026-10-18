@@ -17,7 +17,7 @@ const PROFILE_LOAD_ERROR = "Не удалось загрузить профил�
 export function useSignOut(): () => Promise<void> {
   return useCallback(async () => {
     if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке. Повторите выход.");
-    await createClient().auth.signOut();
+    await createClient().auth.signOut({ scope: "local" });
   }, []);
 }
 
@@ -261,7 +261,7 @@ export function useUser() {
 
   const signOut = async () => {
     if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке. Повторите выход.");
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
   };
   const retry = useCallback(() => {
     setLoadingError(null);

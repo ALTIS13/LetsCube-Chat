@@ -183,7 +183,7 @@ Three full history reads are observed after online (54,423B); this is a measured
 optimization lead, not yet a proven duplication defect or a reason to weaken
 postjoin reconciliation. No accepted warm case was rerun for this proof.
 
-## Recovery Read Repair (Not Yet Deployed)
+## Recovery Read Repair (Source Stage; Release Below)
 
 The measured3-read episode led to actual-hook/store/privacy diagnosis, not an
 assumed cache rewrite. Coordinator reproduction is RED on two literal cases:
@@ -255,8 +255,8 @@ debounced catchup, plus active-effect cleanup. Independent review finds no furth
 issue; coordinator66 focused actual React/browser tests pass, including4 compiled
 omissions. Test fixture auto-subscription is explicit for older controlled state
 cases. This source fix is integrated from D: main into the canonical branch by
-fast-forward, preserving dirty chat/docs work. It is not yet deployed; one real
-changed-input reconnect acceptance follows the combined release.
+fast-forward, preserving dirty chat/docs work. Deployment and the real changed-
+input reconnect acceptance are recorded below.
 
 ## Retained Backup Payload Seal
 
@@ -275,3 +275,92 @@ The remaining D342 boundary is a closed tool/calibration/evidence manifest and
 package-only restore entrypoint, then source-unavailable restore plus independent
 ACL grant-option omission control. A cached exact PG17 image may be an external
 runtime dependency; an unrequested air-gap image export is not a prerequisite.
+
+## Chat/Task Recovery Release (13:39Z)
+
+Commits0bdffb80 and a3cfd1f2 are reviewed and atomically pushed to main/feature;
+own-tree import validation passes39 aliases. Source/typecheck/build and223 focused
+chat/task/channel checks are reused. Actual web imagea3cfd1f2 is sole healthy;
+public/container HTML/JS/SW hashes match, build33dfcab91705590b. The recovery marker
+is absent from retained3b2 bytes and present in the changed public entry. The
+subsequent tool/test-only commit6f41cccc has the same served bytes/build, verified
+against its own sole healthy image. D: main is fast-forwarded without stash/reset.
+
+One new owned shared-web offline case on these bytes passes:2.028s offline with
+a real transport close, then new membership/hides/message joins, fresh own ping,
+postjoin privacy reads, same15 rows and0px anchor, no reload. Online full-history
+reads fall3 ->2 (previous54,423B; current36,713B). This is an observed reduction,
+not a general speed guarantee; complete fresh trust is observed2.168s after
+online. Exact local logout204/DB SID absence and browser closure pass. No message,
+profile or media write is made; screenshots/trace/video remain off, QA flag0.
+
+The new actual task cohort passes after3 genuine rejoins: one parent GET starts
+267ms after the last ACK, plus3 ancillary reads; latest title appears without
+reload/manual refetch. Both draft nodes and values remain throughout8s. Exactly
+one synthetic create/update/soft-delete and both local logout204 pass. The first
+read-only retirement observer had an SSH refusal; an independent successful
+readback confirms both exact SIDs absent, with no new cohort or task/Auth writes.
+The refusal is retained, not overwritten. Neither case proves physical Android
+or terminal permission-loss behavior.
+
+Native builder observation had a real tooling gap: pinned Vite7.3.2 can emit
+`built in 1m 7s` / `built in 2m`, but the safe forwarding regex accepted only
+milliseconds/seconds. A real child-process test is RED before the one-line fix;
+both minute forms and existing controls pass afterward, while suffix/prefix,
+invalid seconds and arbitrary child output remain excluded. Two literal canonical
+version tests are updated for25. A cold Gradle25s test first timed out before the
+signing guard; after the daemon's cold startup, the unchanged negative-signing
+case completes10.089s and refuses the absent key as intended. Final affected
+results7 +35 =42 pass, zero skips. No global JDK/PATH or credential gate changes.
+
+Android0.1.24/build25 from6f41cccc is signed and verified: web build2a9123ebd057f5e3,
+28.43s; Gradle27s, original sole APK-v2/AAB signer, all4 Firebase values exact,
+QA flags false, logging none, no remote server URL, web/config/DEX parity and
+known-secret scan pass. APK7,755,707B, SHA256
+`1a81a9436bb7a32227e3a11304ad344d88f27bbec27f46039e64d93e51b0c0e7`;
+AAB7,387,471B, SHA256
+`40ceabc27409766746be2b6660b0a8f01c85cc9ecc54782a4994f270485567fc`.
+Actual Realme24 ->25 upgrade retains UID/data/first-install, no clear/uninstall,
+opens the guest UI and has zero native fatals. Initial unlock precondition refused
+before any credential attempt because the device had already unlocked after wake;
+separate strict metadata readback confirms this, no PIN/bypass is used. Native
+authenticated recovery/Topic delivery are not claimed; unchanged FCM acceptance
+from23 is explicitly reused.
+
+Stable publication uses the existing locked publisher with old-catalog/artifact
+CAS, retained byte-identical24 rollback manifest and immutable new artifact.
+Fresh public catalog and streamed whole APK bytes/hash pass at13:39:11Z:
+0.1.24/build25, mandatory=false. Windows remote renderer receives the same web
+repair; shell0.2.14 is unchanged. No production SQL mutation, A063 or paid rental.
+Next: Topic activation isolated rehearsal/device canary, D356 held new-SID
+actions and D342 package-only restore; the full completion plan is still active.
+
+## D-368 Ordinary Logout Scope (Candidate)
+
+Preparing multi-device QA exposed an unrelated actual user-visible defect:
+ordinary `useSignOut` and `useUser.signOut` call the installed auth-js2.105.1
+without options, which sends global logout and ends other devices' sessions.
+This matches the current official SDK contract, not Telegram's per-device
+exit/device-management distinction; references are dated in reference-clients.
+Three selected actual callbacks/installed-SDK HTTP assertions fail before the
+repair; the refusal and SDK-global calibration controls pass. The fix changes
+only these two calls to explicit local scope. Browser current-install preview
+retirement remains before Auth and must succeed; password recovery and security-
+wide flows are untouched. Independent review finds no P1/P2; both callbacks now
+also have browser-order/failure controls, closing its noted test gap.
+
+The first adjacent invocation refused the missing QA0 flag before browser work,
+and an older ownership harness lacked its existing capabilities/preview import
+ports. The latter is explicitly native now, throwing on unexpected browser
+entry, with no ownership rule changed. The corrected QA0 run passes95/95;
+two added browser callback controls and literal Android26 version checks are
+verified separately. Typecheck passes; no production-screen capture is used.
+
+One actual candidate callback + installed SDK + live Auth check passes:
+two fresh ordinary owned QA SIDs, local logoutA204, independent DB A absence/B
+presence, then an actual refresh ofB retaining that same SID. All6 pre-existing
+SIDs are preserved. Both fresh SIDs are cleaned through local logout and verified
+absent, target unchanged. This is actual Auth/SDK/callback proof, not rendered
+web or native-device acceptance. No global logout, SQL mutation, new profile,
+push registration or device operation is made. Native25 remains immutable;
+Android0.1.25/build26 is reserved for this repair. Deployment/upgrade follow.

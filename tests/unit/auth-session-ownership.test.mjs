@@ -158,6 +158,11 @@ function fixture({ hook = hookSource, store = storeSource, identity = identitySo
     "@/lib/dev/instrumentation": { registerChannel() {}, unregisterChannel() {} },
     "@/lib/singleFlight": compile(read("lib/singleFlight.ts")),
     "@/lib/media/mediaUrl": { signedMediaUrls: () => ({ setAccount() {} }) },
+    "@/lib/platform/capabilities": { isWebBrowser: () => false },
+    "@/lib/platform/webMessagePreviews": {
+      observeWebMessagePreviewIdentity() { throw new Error("native ownership fixture must not enter browser preview"); },
+      retireWebMessagePreviews() { throw new Error("native ownership fixture must not enter browser preview"); },
+    },
   }, clock);
   const availabilityModule = compile(read("lib/rpcAvailability.ts"));
   const availability = availabilityModule.createRpcAvailability({ now: () => 0 });
