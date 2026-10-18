@@ -266,8 +266,9 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 **State:** IN PROGRESS; D372 durable media representation/cancel/reload repair is
 released in webefcc/Stable28 with61/61 source checks, including23 actual
-Chromium/WebKit cases without skips. Pre-send editor is now in progress under
-[its bounded plan](2026-10-18-media-editor.md), not shipped. D-365/#104 is DONE, not an outstanding
+Chromium/WebKit cases without skips. Pre-send editor is released at323d7cfc on
+verified web and Android Stable0.1.28/build29 under
+[its bounded plan](2026-10-18-media-editor.md). D-365/#104 is DONE, not an outstanding
 position repair.
 **Files:** Existing media upload/playback/album/cache/editor components and tests.
 **Interfaces:** Existing HD/original choice, durable upload identity, variant
@@ -277,8 +278,10 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   recorder feedback evidence; reproduce only uncovered user workflows.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
-- [ ] Implement the remaining pre-send photo/video editor as a separate slice,
-  choosing a maintained permissively licensed component before bespoke engines.
+- [x] Implement/release the pre-send photo/video editor as a separate slice:
+  maintained MIT cropper and installed Mediabunny, explicit unsupported/error
+  states, no raw privacy-edit fallback. Source/UI/bytes/native upgrade/public
+  release checks pass; successful Realme/iPhone encoding is not inferred.
 - [ ] Accept actual send/retry/view/save behavior on affected shells and release.
 
 ## Task4: Faithful Recovery (#82/D-342)

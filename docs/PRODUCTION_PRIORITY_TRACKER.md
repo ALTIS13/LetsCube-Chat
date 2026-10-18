@@ -2,7 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-18.
 
-**Latest accepted checkpoint, 2026-10-18:** product source `efcc9da0` is released
+**Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** pre-send
+photo/video editor source `323d7cfc` is released on web/PWA/Windows renderer
+build `c99fbb6c515e4180` and Android Stable0.1.28/build29. Sole healthy image and
+all6 editor graph assets match public/container bytes. Original native signer,
+Firebase/assets, actual Realme28 ->29 guest/data retention and full public APK
+7,790,993B/SHA `ec441041...c677e668` pass at21:03:00Z; mandatory=false, rollback28.
+D374 is fixed/released within the documented capability/failure limits:
+browser photo passes, native decoder trim failure remains an explicit refusal,
+not silent unedited upload or a claim that every Android/iPhone can encode.
+Next: measured search motion and the remaining Task3 workflow map. Topic stays
+ON; no SQL change. [Release](operations/2026-10-18-media-editor.md#release).
+
+**Previous accepted checkpoint, 2026-10-18:** product source `efcc9da0` is released
 on shared web/PWA/Windows renderer and Android Stable0.1.27/build28. Web initial
 release image/build `6a66afb9a57ceb59`, changed old/new markers and public/container
 parity pass. Realme27 ->28 retains data/UID/firstInstall, guest/fatal0; original
@@ -645,7 +657,8 @@ Topic enforcement is ON after physical b875, compatible retained-disable rollbac
 and fresh verified backup/CAS/readback; raw incomplete instrumentation remains
 documented, not promoted to a whole-client-matrix claim. Exact owned cleanup is
 complete. D371--D373 durability/readability safeguards are released on verified
-web/Android28; pre-send photo/video editing is next. The warm-photo candidate
+web/Android28; pre-send photo/video editing is now released on web/Android29.
+Next is measured search motion and the remaining media workflow map. The warm-photo candidate
 under #2/#87 is completed GREEN_NO_SOURCE_PATCH, not whole-report closure.
 D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
@@ -1028,7 +1041,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     are source-accepted; actual390/1440 light/dark geometry and markup are
     inspected. Review P2s (focus, badge overlap, pending Send and exact endpoint)
     are repaired. Final mounted photo/video flow27 and cold-offline6 assets pass;
-    source/review is accepted, native/device release and publication remain open.
+    source/review is accepted. Released at323d7cfc on verified shared web and
+    Android Stable0.1.28/build29; actual Realme guest upgrade/public APK hash pass,
+    rollback28 retained. Wider send/view/save journeys and native codec success
+    remain distinct Task3/Task10 checks, not inferred from this release.
     [Current source evidence](operations/2026-10-18-media-editor.md).
     D374 records the separately
     reproduced File-identity/lifecycle flaw in the existing video ladder.

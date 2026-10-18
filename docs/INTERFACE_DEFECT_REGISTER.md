@@ -26005,7 +26005,7 @@ dark PNGs: no overlaps or clipped actions. Synthetic QA0 only, no external
 requests. Released in `efcc9da0` on verified shared web and Stable28; native
 asset parity includes the same component. [Release](operations/2026-10-18-production-completion.md#durability-and-readability-release).
 
-## D-374 `[~]` Video selection facts and preparation outlive their File or panel
+## D-374 `[x]` Video selection facts and preparation outlive their File or panel
 
 **Severity:** medium. `hooks/useVideoSendLadder.ts`; discovered while integrating
 the pre-send editor, not attributed to an unverified tester recording.
@@ -26025,5 +26025,8 @@ starts zero encoders. Positive same-File rerender remains one inspection.
 Source fix: selection revision, File-bound read cache, preparation controller
 before the first await, lifetime/selection fences and current-only progress/
 cleanup. The actual browser test and22 adjacent ladder/plan checks pass; a later
-focused browser run covers the added held-response case. Scoped review and
-publication are pending. No authenticated send/native/device proof is inferred.
+focused browser run covers the added held-response case. Scoped review and final
+mounted flow27/27 pass. Released at `323d7cfc` on verified shared web and Android
+Stable0.1.28/build29 with exact embedded assets and data-retaining guest upgrade.
+No authenticated send or successful native video trim is inferred from that
+upgrade. [Release and limits](operations/2026-10-18-media-editor.md#release).

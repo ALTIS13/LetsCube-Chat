@@ -91,17 +91,53 @@ Realme sidecar first refused at a nonsecure lockscreen. A later authorized
 standard dismissal allowed the owned loopback page: actual photo crop/opaque
 preview and final WebP pixels pass in Yandex/Chromium144 on Android15. That
 attempt's synthetic video generator failed before product trimming; it is not
-a successful trim or proof of unsupported product editing. A valid-source
-follow-up is separate. Exact port mappings/server/foreground cleanup is retained.
+a successful trim or proof of unsupported product editing. The later valid-source
+follow-up independently hashes the same known-good AVC/AAC bytes on the phone:
+inspection passes, but actual trim rejects with native EncodingError / Decoding
+error before output. This does not identify audio versus video or init versus
+execute. The editor's rejection path retains the draft/range and returns before
+Apply; no raw fallback. A separate single origin-tagged diagnostic is assigned,
+not a repeated acceptance run. Exact port/server/foreground cleanup is retained.
 Browser-engine evidence is not installed Capacitor WebView acceptance.
 
 Successful native/iPhone encoding is not inferred from desktop WebKit or an API
 capability declaration. Unsupported devices retain their draft and the explicit
 Cancel path to sending unedited media. A063 remains excluded. No rental held.
 
-Publication remains pending: reviewed source commit, outgoing own-tree imports,
-sole healthy image plus all editor asset bytes, Android signed candidate with
-original signer/Firebase/QA/assets/known-secret checks, in-place Realme update,
-public Stable APK bytes and retained previous rollback. Windows uses the shared
-remote renderer; shell remains0.2.14/unsigned by owner decision. Native Apple
-release ownership is unchanged. No SQL or service deployment is needed here.
+## Release
+
+Product source `323d7cfc9ab2ea61d0796c799ebd78614526d1cf` is RELEASED. The
+separately inspected outgoing range contains only5d2f5eb6/323d7cfc; own-commit
+alias resolution passes11 files/110 imports. Feature push precedes the reviewed
+fast-forward main push. D: main fast-forwards cleanly, ignored secrets preserved.
+The previous native build was recovered from its immutable result, not replayed.
+
+At21:02:50Z, sole healthy image is
+`l64kyyu1sysev2izzjjbizhe:323d7cfc9ab2ea61d0796c799ebd78614526d1cf`, build
+`c99fbb6c515e4180`. HTML/SW and all6 graph JS/CSS assets match public/container
+SHA256 and byte length. Before rollout, old build6a66afb9a57ceb59 has2 boot
+assets/zero editor roots; the new build includes both editor roots and cropper
+CSS, without unrelated LiveKit precaching. Changed editor markers and unchanged
+notification protocol/boot bindings pass. Rolling replicas retire naturally.
+Main JS SHA256 `2caf62db9049b66c94c7ede2fe7dff8c76ab6552a5aa3a816804a2eb5a951509`.
+
+Android Stable **0.1.28/build29**, same source, mandatory=false; rollback28
+retained. Actual build markers: SW37a4c73f04bcf7fe / Vite14.08s /
+BUILD SUCCESSFUL13s. APK7,790,993B, SHA256:
+`ec4410416fe22bce1f460b984efb3533be9c0492daead7a88eaa6a21c677e668`.
+AAB7,423,748B, SHA256:
+`e0f7a07003fb61c7588c4cfb360b77572195207543821f6dbfa55bf875c5b145`.
+Original signer, Firebase4 values, QA flags false, web/config/DEX/APK-AAB parity
+and bounded known-secret scan pass. At20:57:53Z actual Realme28 ->29 retains
+UID/data/firstInstall, foreground guest/fatal0; no clear/uninstall. Initial
+lockscreen refusal is before install; wake followed by standard nonsecure
+dismissal permits the single install. At21:03:00Z public catalog and full APK
+bytes/SHA pass after guarded catalog CAS with prior manifest/artifact rollback.
+
+[Public Android APK](https://api.letscube.ru/releases/files/android/0.1.28/letscube-0.1.28.apk).
+Windows uses the shared remote renderer; shell remains0.2.14/unsigned by owner
+decision. Shared iPhone PWA receives the web source, not a claimed successful
+iPhone trim or native Apple release. No SQL change, new backend deployment,
+Auth/group mutation or rental is part of this slice. Topic enforcement stays ON.
+Task3's wider send/retry/view/save journeys stay open. Next bounded work: measured
+search motion, remaining media workflow map and the assigned decoder diagnostic.

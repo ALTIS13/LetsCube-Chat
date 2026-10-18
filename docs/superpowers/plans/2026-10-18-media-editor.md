@@ -54,8 +54,11 @@ approval round. This extends the existing attach flow, not a new upload path.
    No production or personal captures.
 5. [x] Inspect exact editor390/1440, both themes; crop/cover/pen/keyboard/touch,
    Apply/Cancel/no-op/album/caption/reload/owner controls. Typecheck + build.
-6. [ ] Commit/review/publish shared web after own-tree import and production
-   image/content checks. Native packages are separate immutable release steps.
+6. [x] Source `323d7cfc` released on sole-healthy web/buildc99fbb6c515e4180;
+   own-tree imports and all6 editor graph asset/public-container hashes pass.
+   Android0.1.28/build29 retains original signer/Firebase/assets and Realme
+   UID/data/firstInstall; public full APK hash and rollback28 pass. Successful
+   native video encoding is not inferred; retain the documented decoder failure.
 7. [x] Video source: bounded trim/preview using installed Mediabunny1.56.1; invalidate
    ladder cache by actual File identity; no original fallback after an edit
    failure. Check installed allowRotationMetadata API, copy:false, required
@@ -63,7 +66,8 @@ approval round. This extends the existing attach flow, not a new upload path.
    for video are optional follow-ups, not a reason to delay the requested trim.
    Same-size replacement cache readiness is repaired; actual mounted RED/GREEN
    plus22 adjacent pure checks pass. Keep item25
-   open until its required video and photo subcases are released. Local WebKit
+   open until its required video and photo subcases are released (now released
+   within the recorded capability/failure boundaries). Local WebKit
    explicitly refuses unsupported encoding; successful native/iPhone editing is
    not inferred. [Evidence and remaining release checks](../../operations/2026-10-18-media-editor.md).
 
