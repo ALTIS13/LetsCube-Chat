@@ -8,9 +8,17 @@ WebKit replacement and cold same-session restore defects are repaired. Web
 sender/text, sender-only, none and exact notification activation pass. Global Web
 previews are ON after fresh verified backup/raising CAS/readback; Topic overrides
 remain OFF. QA grant/admission/subscription are retired and the rental released.
-Next: build a NEW Android 0.1.22/23 from current clean main (do not publish the old
-Cursor APK), verify affected upgrade/notification behavior and publish through
-the guarded catalog path. Then continue the current tracker order. D: main was
+Android 0.1.22/23 from `4d394ecf` is now Stable: original signer/Firebase/assets,
+in-place Realme20 ->23 with the same Auth session, actual readable FCM/none,
+system-card tap/read cleanup and logged-out stale tap pass. Public APK bytes/SHA
+are verified; mandatory=false and Stable22 rollback remains. Native preview SQL
+`5b2dd526` is applied after fresh backup/PG17 COMMIT+exact rollback: guarded
+typed-PK lookup removes the actual multi-second scan without changing privacy
+rules. Actual device lookup returns HTTP200 and sender/text. QA sessions/devices
+are retired, no cloud phone is held. Next: finish Topic overrides' distinct live
+acceptance (runtime still OFF), then current Nikita/cache/reconnect intake and
+the broader device/long-session matrix, reusing accepted evidence. Do not replay
+old Cursor APK/expired QA intents. D: main was
 fast-forwarded cleanly; preserve ignored private secrets and operator evidence.
 
 The [Cursor handoff](CURSOR_HANDOVER.md) and resumes below are historical

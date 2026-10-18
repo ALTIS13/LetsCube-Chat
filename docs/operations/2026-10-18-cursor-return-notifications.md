@@ -1,7 +1,7 @@
 # Cursor Return: Notification Release
 
-Owner: Codex coordinator. Date: 2026-10-18. Stage: Web preview released after
-physical iPhone acceptance; Android candidate refresh next. This record
+Owner: Codex coordinator. Date: 2026-10-18. Stage: Web preview and Android Stable23
+released after physical acceptance; distinct Topic acceptance next. This record
 supersedes the October 17 resource hold, not its historical evidence.
 
 ## Verified Baseline
@@ -14,7 +14,8 @@ supersedes the October 17 resource hold, not its historical evidence.
   Live web was `d61efd3a`, API `aed60557`; both notification runtimes were OFF.
   Cursor's fresh "wire" proves a SQL transaction/CAS, not a browser/Realtime
   transport or physical notification acceptance.
-- The unpublished Android 0.1.22/build 23 candidate remains unpublished. Windows
+- At the audit baseline the old Android 0.1.22/build 23 candidate was unpublished;
+  it was not promoted. The fresh candidate's release is recorded below. Windows
   0.2.14 uses the remote renderer; its native package/signature is unchanged.
 
 ## Repairs And Evidence
@@ -134,17 +135,78 @@ including phone-event booleans, exact runtime receipts, activation backup and
 guarded `activate-web.mjs`. Server backup remains under the matching dated
 `/srv/letscube/backups/` directory. Never replay a spent apply or expired rental.
 
+## Android Stable23 And Native Lookup Repair
+
+Final Android source `4d394ecf`, build23, APK SHA-256
+`147a06405a827a026fa8cb6d0453c1bc1ce2891667f31d6bf83ae9998f562c71`,
+7,755,291 bytes. Real build markers: `8f4c9d7d37fdbce4`, built in21.61s,
+Gradle34s. Original signer, four Firebase values, release flags and APK/AAB/web
+parity pass. Realme primary20 ->23 in-place retains UID/data directory/first
+install and its already-authenticated owned QA session; a fresh device row
+reports23 under the same session. No clear/uninstall or protected-app update.
+Codex Process Jobs refused this Windows host (`win32` unsupported); no detached
+job was started, and the foreground release builder completed normally.
+
+The actual current primary's FCM card was generic despite account choice message.
+Kong observed native preview POST499 while capability POST200 succeeded. The
+actual SQL inner plan evaluated privacy on thousands of unrelated messages
+before a text-cast join; it took4.4s, beyond the unchanged native2s read timeout.
+JIT-off did not improve it. A read-only guarded UUID PK join returned the same
+authorized row in20ms using `messages_pkey`, not a scan. That diagnostic alone
+was not called authenticated HTTP/device acceptance.
+
+`5b2dd526` / migration `20261018031000_native_preview_point_lookup.sql` changes
+only that join. Case-sensitive canonical UUID validation preserves rejection of
+malformed, missing, uppercase and noncanonical payload IDs without cast errors.
+All existing session/recipient/device, unread, hidden/blocked/deleted, topic,
+push-choice and ordinary/album delivery predicates remain. SQL mirror SHA-256:
+`612bb2b9b75f38bac44ce6deb830245436f4f5899bfe3d7a382607141e5daa24`.
+Focused PGlite37/37 passes in both agent and coordinator runs; executed old join
+causes9003 visibility/4501 push checks, new join3/1, with the correct row intact.
+
+A fresh 6,648,997-byte backup was SHA/TOC/full-decode verified. A new network-none
+PG17 schema-only clone received no production users/messages/sessions. Its first
+metadata comparison refused four differently parenthesized CHECK definitions;
+the function/ACL and all other components matched. These four differences were
+calibrated by exact raw prod/clone hashes, not removed from verification. Every
+raw protected component stayed unchanged within its environment through actual
+migration COMMIT and exact old-function rollback. Production guards/rollback
+remained byte-identical to the original prepared operator. The raising migration
+was applied once; separate readback confirms unchanged protected catalog,
+Web=true, Topic=false, RLS missing=0. The owned clone is stopped, backup retained.
+
+Post-apply actual RPC diagnostic is39.6ms; an ordinary Realme background FCM then
+performed content HTTP200 and showed the expected sender and unique synthetic
+body in the real shade. Actual SystemUI tap opened the target message, marked
+its notification read and removed that chat card. None produced a new generic
+card without sender/body. Actual UI logout revoked the same phone session and
+registration. Tapping the retained generic card after logout opened only login,
+did not mark the target read and cleared the stale card. This does not claim all
+cards disappear automatically at logout. An unrelated old QA device was left
+unchanged; no bulk account/device retirement was performed.
+
+Stable23 was published through the existing immutable publisher with a catalog
+CAS and byte-checked previous manifest backup under its publish lock. Separate
+HTTPS verification confirms version0.1.22/build23, mandatory=false, exact public
+APK length7,755,291 and SHA above. Previous Stable22 manifest/artifact remain.
+Only server SQL/tests/docs changed after APK source4d; no mobile source or build
+tool delta requires another binary. Private proofs include `realme-acceptance`,
+`realme-tap`, `realme-logout`, `native-apply`, `native-rehearsal` and
+`publish23-public` JSON in the current operator directory. Do not replay them.
+Both extra API-only QA sessions were locally signed out and their cached tokens
+removed after acceptance; the unrelated older QA device was not revoked. The
+published0.1.22/23 path is immutable; a future binary change needs a new version
+and build, not another overwrite of23.
+
 ## Next
 
-Rebuild Android 0.1.22/build 23 from the final clean main with the maintained
-`android23-release.mjs` operator and fresh run receipt. The old Cursor candidate
-predates these repairs and must not be published. Retain original signer,
-Firebase resources, embedded-assets parity and protected application data;
-upgrade/notification QA and guarded Stable publication are distinct from build.
-Topic overrides, real Realtime acceptance and the broader tracker remain open;
-they do not hold the independently checked Web text release behind another
-preparation-only loop. Windows remote renderer uses the released web repair;
-no new native signature, WNS killed-process or full device matrix is claimed.
+Topic overrides' distinct real transport/consumer acceptance is still unfinished
+and its runtime remains OFF. Resume that bounded current stage, then the
+Nikita/cache/reconnect intake and broader tracker. Reuse the physical iPhone,
+Realme and recovery evidence instead of replaying accepted harnesses. Windows
+remote renderer uses the released web repair; no new native signature, WNS
+killed-process or full device matrix is claimed. Native Apple release ownership
+is unchanged. The original Cursor binary remains unpublished.
 
 No A063 access, personal captures, secret output, global Java/PATH changes or
 legacy sender activation. Figma/Mobbin/Rive are available for visual work;

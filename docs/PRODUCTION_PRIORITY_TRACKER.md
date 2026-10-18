@@ -8,8 +8,11 @@ reconnect retirement fixes are live. Actual installed iPhone PWA sender/text,
 sender-only, none and exact OS-card activation pass. Web previews are globally
 ON after fresh backup/guarded CAS/separate readback; Topic overrides remain OFF.
 No privacy choice is overwritten. QA installations are retired and rented
-phones released. Android Stable remains 0.1.21/build22; rebuild unpublished23
-from current clean main before upgrade QA/publication, not Cursor's old binary.
+phones released. Fresh Android0.1.22/build23 is Stable, mandatory=false: original
+signer/Firebase/assets, same-session Realme upgrade, readable/none FCM, real tap
+and logged-out stale action pass. Native preview SQL point lookup repairs the
+actual multi-second scan after fresh backup/PG17 COMMIT+exact rollback; no privacy
+gate was removed. Public APK bytes/SHA and Stable22 rollback are verified.
 [Current evidence and next action](operations/2026-10-18-cursor-return-notifications.md).
 
 **Current execution,2026-10-16:** Android0.1.21/build22 is Stable,mandatory=false;
@@ -552,8 +555,9 @@ while the hint was offered **and the page was visible**, not wall clock since it
 ## Current Execution Order
 
 Current as of 2026-10-18; the dated detail under queue items is history, not a
-competing version or permission gate. Web notification text is released after
-physical iPhone checks; update the Android embedded bundle next. D-365 is accepted;
+competing version or permission gate. Web notification text and fresh Android23
+are released after physical checks. Finish distinct Topic acceptance next;
+its runtime remains OFF. D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
 anti-abuse, RLS, support/email and basic operator security baselines are accepted;
 maintain their affected regressions, do not rebuild them without a new finding.
@@ -565,8 +569,8 @@ maintain their affected regressions, do not rebuild them without a new finding.
    privacy admission, anchors, pending text/files/voice and duplicate-free retries.
    D-357 throughD-364 are accepted fixes, not instructions to repeat their tests.
 3. `[~]` Notifications76-77,95: iPhone PWA sender/text modes and exact tap are
-   accepted and enabled; Android22 useful FCM remains accepted. Refresh Android23,
-   then complete persisted child overrides and the broader account/device matrix.
+   accepted and enabled; fresh Android23 useful FCM/none/tap/logout is accepted.
+   Complete persisted child overrides and the broader account/device matrix.
    Topic runtime is still OFF, not implicitly accepted by the Web release.
 4. `[~]` Media25,29,104: finish current positional-intent release, then remaining
    albums/HD/original/download/cache cases and the pre-send photo/video editor.
@@ -585,9 +589,10 @@ maintain their affected regressions, do not rebuild them without a new finding.
    containers, search motion, typography, controls and keyboards across shells.
 10. `[~]` Product completion17,19-20,27,36-38: public downloads/changelog,
     profiles/contacts/shared-media depth, scoped roles, tasks/staff and support.
-11. `[~]` Platform acceptance7,9,28: Android Stable0.1.21/build22 is published;
-    its ordinary readable FCM/none/tap/logout checks are accepted. New shared
-    repairs require rebuilt23; broader OEM/long-session checks stay open.
+11. `[~]` Platform acceptance7,9,28: Android Stable0.1.22/build23 is published;
+    original signer/Firebase/assets, actual same-session Realme upgrade and
+    readable FCM/none/tap/logout checks are accepted. Broader OEM/long-session
+    checks stay open; iPhone installed PWA modes/tap are separately accepted.
     Use Realme/rented devices, not A063. Windows EXE
     remains owner-accepted unsigned; WNS killed-process and Win10/11/long-session
     stay open. Installed iOS PWA/keyboard/safe-area acceptance remains distinct;
@@ -3910,13 +3915,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     boundaries. No production message/provider request was sent in this intake.
     [Evidence and limits](operations/2026-10-03-tester-feedback.md).
 
-    **2026-10-18 current status supersedes the historical intake below:** Android
-    Stable22 readable FCM/none/tap/logout is accepted. Installed physical iPhone
+    **2026-10-18 current status supersedes the historical intake below:** fresh
+    Android Stable23 same-session upgrade/readable FCM/none/tap/logout is accepted.
+    The native preview SQL point lookup removes the actual multi-second scan,
+    retaining privacy predicates, after verified backup/PG17 exact rollback.
+    Installed physical iPhone
     PWA sender+text, sender-only, none and exact system-card activation now pass;
     Web previews are generally enabled with per-install consent and unchanged
     user privacy choices. The worker/provider protocol, WebKit navigate option
     and first-document/cold-restore repairs are deployed. Broader locked/OEM/
-    long-session scenarios and refreshed Android23 remain open, not the basic
+    long-session scenarios remain open, not the basic
     readable-notification implementation. [Current release](operations/2026-10-18-cursor-return-notifications.md).
 
     **2026-10-05 adjacent repair:** D-344/D-345 fence shared activation ownership,
