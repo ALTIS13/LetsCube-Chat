@@ -2,11 +2,16 @@
 
 **Current resume, 2026-10-18:** Codex has resumed after Cursor. Start with
 [the current release record](operations/2026-10-18-cursor-return-notifications.md).
-Cursor's coordinated SQL is installed; chat/cache/reconnect and iPhone first-load
-defects are repaired. The per-install preview migration is applied after fresh
-backup and actual PG17 apply/exact-rollback rehearsal. Both global flags remain
-OFF while the physical iPhone sender/text/activation canary is being completed.
-Android 23 is not published. Preserve the ignored private operator records.
+Cursor's coordinated SQL is installed; chat/cache/reconnect and iPhone first-load,
+WebKit replacement and cold same-session restore defects are repaired. Web
+`dc381840` is healthy with public/container parity. Actual installed iPhone PWA
+sender/text, sender-only, none and exact notification activation pass. Global Web
+previews are ON after fresh verified backup/raising CAS/readback; Topic overrides
+remain OFF. QA grant/admission/subscription are retired and the rental released.
+Next: build a NEW Android 0.1.22/23 from current clean main (do not publish the old
+Cursor APK), verify affected upgrade/notification behavior and publish through
+the guarded catalog path. Then continue the current tracker order. D: main was
+fast-forwarded cleanly; preserve ignored private secrets and operator evidence.
 
 The [Cursor handoff](CURSOR_HANDOVER.md) and resumes below are historical
 checkpoints, not instructions to repeat accepted work or replay expired cohorts.

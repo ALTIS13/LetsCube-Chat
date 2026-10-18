@@ -1,6 +1,16 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-16.
+Status: active production-hardening tracker, updated 2026-10-18.
+
+**Current execution, 2026-10-18:** Cursor return audited. Shared web `dc381840`
+is healthy with public/container parity; chat warm-history/privacy and pending
+reconnect retirement fixes are live. Actual installed iPhone PWA sender/text,
+sender-only, none and exact OS-card activation pass. Web previews are globally
+ON after fresh backup/guarded CAS/separate readback; Topic overrides remain OFF.
+No privacy choice is overwritten. QA installations are retired and rented
+phones released. Android Stable remains 0.1.21/build22; rebuild unpublished23
+from current clean main before upgrade QA/publication, not Cursor's old binary.
+[Current evidence and next action](operations/2026-10-18-cursor-return-notifications.md).
 
 **Current execution,2026-10-16:** Android0.1.21/build22 is Stable,mandatory=false;
 public APK bytes/SHA and rollback are verified. Product main/web75096aa3 is
@@ -541,8 +551,9 @@ while the hint was offered **and the page was visible**, not wall clock since it
 
 ## Current Execution Order
 
-Current as of2026-10-15; the dated detail under queue items is history, not a
-competing version or permission gate. D-365 shared-web release is accepted;
+Current as of 2026-10-18; the dated detail under queue items is history, not a
+competing version or permission gate. Web notification text is released after
+physical iPhone checks; update the Android embedded bundle next. D-365 is accepted;
 continue this order, with independent bounded work in parallel. Auth,
 anti-abuse, RLS, support/email and basic operator security baselines are accepted;
 maintain their affected regressions, do not rebuild them without a new finding.
@@ -553,9 +564,10 @@ maintain their affected regressions, do not rebuild them without a new finding.
 2. `[~]` Synchronization/cache/recovery2,52,53: retain account-owned warm history,
    privacy admission, anchors, pending text/files/voice and duplicate-free retries.
    D-357 throughD-364 are accepted fixes, not instructions to repeat their tests.
-3. `[~]` Notifications75-77,95: safe useful OS context, persisted child overrides,
-   account/device read agreement and exact retained actions. Rich preview/native
-   delivery acceptance is distinct from shared-source fixes.
+3. `[~]` Notifications76-77,95: iPhone PWA sender/text modes and exact tap are
+   accepted and enabled; Android22 useful FCM remains accepted. Refresh Android23,
+   then complete persisted child overrides and the broader account/device matrix.
+   Topic runtime is still OFF, not implicitly accepted by the Web release.
 4. `[~]` Media25,29,104: finish current positional-intent release, then remaining
    albums/HD/original/download/cache cases and the pre-send photo/video editor.
 5. `[~]` Faithful recovery82/D-342: isolated restore must preserve actual ACLs and
@@ -573,9 +585,10 @@ maintain their affected regressions, do not rebuild them without a new finding.
    containers, search motion, typography, controls and keyboards across shells.
 10. `[~]` Product completion17,19-20,27,36-38: public downloads/changelog,
     profiles/contacts/shared-media depth, scoped roles, tasks/staff and support.
-11. `[~]` Platform acceptance7,9,28: Android Stable0.1.20/build21 is published,
-    but FCM21/authenticated upgrade/broad OEM are not proved and new D-365 needs
-    a later embedded bundle. Use Realme/rented devices, not A063. Windows EXE
+11. `[~]` Platform acceptance7,9,28: Android Stable0.1.21/build22 is published;
+    its ordinary readable FCM/none/tap/logout checks are accepted. New shared
+    repairs require rebuilt23; broader OEM/long-session checks stay open.
+    Use Realme/rented devices, not A063. Windows EXE
     remains owner-accepted unsigned; WNS killed-process and Win10/11/long-session
     stay open. Installed iOS PWA/keyboard/safe-area acceptance remains distinct;
     native Apple release work stays separately owned. No fabricated platform parity.
@@ -3880,7 +3893,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     D-208 actual signed-media consumers, without a private-bucket switch.
     [Release evidence](operations/2026-10-01-implementation.md).
 
-76. `[ ]` System chat notifications must give useful sender/message context
+76. `[~]` System chat notifications must give useful sender/message context
     when the user's preview/privacy choices permit it. Tester voice note of
     2026-10-02, 14:22 MSK, read and transcribed locally Oct 3. **D-335:** the
     reported shade only signals LETSCUBE/messages; author/body are missing.
@@ -3896,6 +3909,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     foreground/background and locked/unlocked cards at supported real client
     boundaries. No production message/provider request was sent in this intake.
     [Evidence and limits](operations/2026-10-03-tester-feedback.md).
+
+    **2026-10-18 current status supersedes the historical intake below:** Android
+    Stable22 readable FCM/none/tap/logout is accepted. Installed physical iPhone
+    PWA sender+text, sender-only, none and exact system-card activation now pass;
+    Web previews are generally enabled with per-install consent and unchanged
+    user privacy choices. The worker/provider protocol, WebKit navigate option
+    and first-document/cold-restore repairs are deployed. Broader locked/OEM/
+    long-session scenarios and refreshed Android23 remain open, not the basic
+    readable-notification implementation. [Current release](operations/2026-10-18-cursor-return-notifications.md).
 
     **2026-10-05 adjacent repair:** D-344/D-345 fence shared activation ownership,
     Windows emitted click order and old-account card retirement, including true
