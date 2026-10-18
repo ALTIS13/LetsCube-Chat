@@ -1,5 +1,9 @@
 # Прогресс агента
 
+Текущая точка Codex от 2026-10-18: [release record](operations/2026-10-18-cursor-return-notifications.md).
+Ниже сохранён исторический журнал Cursor, включая более ранние отказы и
+последующее применение SQL. Его «провод» не заменяет физическую приёмку.
+
 Обновлено: 2026-10-17. Канон: `android-current-20261015`, ветка `codex/topic-alerts-20261016`. Секретов в этом файле нет.
 
 ## План
@@ -19,11 +23,18 @@
 - Сразу после вставки: 4 строки, горизонт 5399 с, публичные таблицы без RLS: 0. Один запрос занял 159 мс; fastguard вернул `PARENT330_FASTGUARD_WITHIN_BUDGET` и inspect не запускал.
 - Отказ cohort 330 (`e49ffc4f38f7`, receipt `f53793ab`, proof `b099014b`) остался записью. Этот cohort не вызывался.
 
+### Последующий результат Cursor
 - На старте этого захода горизонт 430–433 был 4895 с, четыре строки на месте. Новый cohort не создавался, строки не обновлялись.
 - Один successor-провод в `READ COMMITTED` принят: горизонт 4863 с, 670 мс, fastguard `WITHIN_BUDGET`, inspect не стартовал, один backend pid, CAS `applied` revision 1, режим `disabled`, rollback runtime `false`, фазы 3. Readback после COMMIT: runtime `false`, mode `disabled`, revision 1, строк 4. Cohort 330 не вызывался.
 - Production: свежий backup 6448310 байт в `/srv/letscube/backups/notification-coordinated-20261017`, архив читается. Миграция `20261017104253_coordinated_notification_release.sql` применена один раз. После неё topic runtime `false`, web runtime `false`, RLS обеих таблиц включён, setter есть.
 - `main` быстро перемотан `978617b9..aed60557`. Образ веба `l64kyyu1sysev2izzjjbizhe:aed605574697db46f5a101d2f1f664a1cd33cc94`, healthy, прежний контейнер снят. Публичный бандл `/assets/index-CW9ih_wQ.js` содержит `topic_notification_preference_set`. API-образ `fkd10qwlo4qod9e6gtyzzuwk:aed605574697db46f5a101d2f1f664a1cd33cc94`, healthy, прежний снят.
 - D-084: карточка обратной связи больше не складывает заголовок и пояснение в две строки. Тест `tests/unit/feedback-card-line.test.mjs` был красным на `items-start` и стал зелёным. Runtime не включались, Android 23 не публиковался, образ не менялся.
+### Более ранние отказы из main
+- На старте этого захода горизонт 430–433 был 5141 с, четыре строки на месте. Новый cohort не создавался, строки не обновлялись.
+- Successor-провод запускался на том же контейнере, не родительский прогон 330. Миграция уведомлений применена только внутри изолированной базы. В production она не применялась.
+- Первый прогон отказал за 616 мс: `chat_members.role` — enum, скрипт передал text. Причина исправлена явным приведением к `chat_member_role`.
+- Повторный прогон, один, отказал за 717 мс: `topic_delivery_source_isolation_unavailable`. `private.topic_alert_source_lock` требует `transaction_isolation = read committed`, а провод шёл в `REPEATABLE READ`. Транзакция откатилась. Fastguard оба раза: `WITHIN_BUDGET`, inspect не стартовал. Принятием это не записано.
+- D-084: карточка обратной связи сведена в одну строку и больше не закрывает верх листа пересылки. Тест `tests/unit/feedback-card-line.test.mjs` был красным на `items-start` и стал зелёным. Runtime уведомлений не включался, Android 23 в каталог не публиковался.
 
 ## Не сделано
 
