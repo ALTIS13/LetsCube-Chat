@@ -13,11 +13,20 @@ const playwright = req("@playwright/test");
 const user = "11111111-1111-4111-8111-000000000001";
 const session = "22222222-2222-4222-8222-000000000001";
 const subscription = "33333333-3333-4333-8333-000000000001";
-const ackWorker = `self.addEventListener('message', event => {
-  if (event.data?.type === 'LETSCUBE_WEB_PREVIEW_INSTALL') event.ports[0].postMessage({
-    type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,installed:true,web_push_protocol:1,
-    generation:event.data.generation,intent_id:event.data.intent_id
-  });
+const ackWorker = `let holdAck=false, heldReply, heldControl;
+self.addEventListener('message', event => {
+  if (event.data?.type === 'FIXTURE_HOLD_ACK') {
+    holdAck=true;heldControl=event.ports[0];heldControl.postMessage('ready');
+  }
+  if (event.data?.type === 'FIXTURE_RELEASE_ACK') {holdAck=false;heldReply?.();}
+  if (event.data?.type === 'LETSCUBE_WEB_PREVIEW_INSTALL') {
+    const reply=()=>event.ports[0].postMessage({
+      type:'LETSCUBE_WEB_PREVIEW_RESULT',ok:true,installed:true,web_push_protocol:1,
+      generation:event.data.generation,intent_id:event.data.intent_id
+    });
+    if (holdAck) event.waitUntil(new Promise(resolve=>{heldReply=()=>{reply();resolve();};heldControl.postMessage('held');}));
+    else reply();
+  }
 });`;
 let server, origin, bundle, buildOptions, ackProtocol = 1;
 const browsers = new Map();
@@ -41,7 +50,7 @@ test.before(async () => {
     plugins: [{ name: "fictional-auth-and-push", setup(plugin) {
       plugin.onLoad({ filter: /store[\\/]app\.store\.ts$/ }, () => ({ loader: "ts", contents: `
         import {create} from 'zustand'; export const useAppStore=create(()=>({currentUser:{id:'${user}'},
-          accountEpoch:1,authSessionIdentity:{userId:'${user}',sessionId:'${session}'}}));window.ownerStore=useAppStore;` }));
+          accountEpoch:window.initialEpoch,authSessionIdentity:{userId:'${user}',sessionId:'${session}'}}));window.ownerStore=useAppStore;` }));
       plugin.onLoad({ filter: /lib[\\/]supabase[\\/]client\.ts$/ }, () => ({ loader: "ts", contents: `
         export const createClient=()=>window.sdk;export const isSupabaseConfigured=()=>true;
         export const getSupabasePublishableKey=()=> 'sb_publishable_FICTIONAL_ONLY_PUBLIC_KEY';` }));
@@ -75,12 +84,15 @@ async function fixture(engine, { controlled = false, mode = "own", change } = {}
   await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration("/sw.js"))?.active?.state === "activated");
   assert.equal(await page.evaluate(() => navigator.serviceWorker.controller === null), true, "native fresh page must remain uncontrolled");
   if (controlled) { await page.reload(); await page.waitForFunction(() => navigator.serviceWorker.controller !== null); }
-  await page.evaluate(({ user, session, subscription, mode }) => {
+  const configure = async ({ accountEpoch = 1, grant = null } = {}) => page.evaluate(({ user, session, subscription, mode, accountEpoch, grant }) => {
     window.matchMedia = () => ({ matches: true });
     Object.defineProperty(Notification, "permission", { configurable: true, get: () => "granted" });
     const endpoint = "https://push.fixture.invalid/fictional", p256dh = "fictional-key", auth = "fictional-auth";
     window.pushSubscription = { endpoint, toJSON: () => ({ endpoint, keys: { p256dh, auth } }) };
-    window.granted = false; window.rev = 0; window.level = "none"; window.installLookup = false; window.foreignInstalls = 0; window.protocolWrites = [];
+    window.initialEpoch = accountEpoch;
+    window.granted = grant?.granted ?? false; window.rev = grant?.rev ?? 0; window.level = grant?.level ?? "none";
+    window.grantExpiresAt = grant?.expiresAt ?? null; window.enrollCalls = grant?.enrollCalls ?? 0;
+    window.installLookup = false; window.foreignInstalls = 0; window.protocolWrites = [];
     const getSubscription = async () => {
       if (window.granted && mode === "held-descriptor") await new Promise(resolve => { window.releaseDescriptor = resolve; });
       if (window.granted && mode === "descriptor-change") return { endpoint, toJSON: () => ({ endpoint, keys: { p256dh, auth: "replaced" } }) };
@@ -125,14 +137,17 @@ async function fixture(engine, { controlled = false, mode = "own", change } = {}
         upsert(row) { return { select: async () => { window.level = row.preview_level; window.granted = false; return { data: [row], error: null }; } }; },
       }; },
       async rpc(name) {
-        if (name === "web_message_preview_enroll") { window.granted = true; window.rev++; }
         const observed = Date.now();
+        if (name === "web_message_preview_enroll") {
+          window.granted = true; window.rev++; window.enrollCalls++; window.grantExpiresAt = observed + 60000;
+        }
         return { data: [{ preview_v: 1, recipient_id: user, session_id: session, subscription_id: subscription,
           subscription_fingerprint: window.fingerprint, revision: window.rev, preview_level: window.granted ? window.level : "none",
-          installation_consent: window.granted, observed_at_epoch_ms: observed, expires_at_epoch_ms: window.granted ? observed + 60000 : null }], error: null };
+          installation_consent: window.granted, observed_at_epoch_ms: observed, expires_at_epoch_ms: window.granted ? window.grantExpiresAt : null }], error: null };
       },
     };
-  }, { user, session, subscription, mode });
+  }, { user, session, subscription, mode, accountEpoch, grant });
+  await configure();
   let script = bundle;
   if (change) {
     const original = readFileSync(resolve(kub, "src/hooks/useWebMessagePreview.ts"), "utf8");
@@ -143,7 +158,14 @@ async function fixture(engine, { controlled = false, mode = "own", change } = {}
   }
   await page.addScriptTag({ content: script }); await page.evaluate(() => window.mount());
   await page.waitForFunction(() => window.view.status === "ready");
-  return { page, async close() {
+  return { page, async coldRestart(accountEpoch) {
+    const grant = await page.evaluate(() => ({ granted: window.granted, rev: window.rev, level: window.level,
+      expiresAt: window.grantExpiresAt, enrollCalls: window.enrollCalls }));
+    await page.reload();
+    await configure({ accountEpoch, grant });
+    await page.addScriptTag({ content: script }); await page.evaluate(() => window.mount());
+    await page.waitForFunction(() => window.view.status === "ready");
+  }, async close() {
     try { await page.evaluate(() => window.unmount()); } finally { await context.close(); }
     assert.deepEqual(errors, []); assert.deepEqual(unknown, []);
   } };
@@ -165,6 +187,52 @@ for (const engine of ["chromium", "webkit"]) {
     try {
       assert.equal(await f.page.evaluate(() => window.view.setChoice("sender")), true);
       assert.equal(await f.page.evaluate(() => window.protocolWrites.length), 1);
+    } finally { await f.close(); }
+  });
+  test(`${engine}: cold same-session epoch restore retains the persisted grant without enrollment`, async () => {
+    const f = await fixture(engine);
+    try {
+      assert.equal(await f.page.evaluate(() => window.view.setChoice("message")), true);
+      const before = await f.page.evaluate(async () => {
+        const state = await window.readState();
+        return { generation: state.generation, intent: state.intent_id, owner: state.owner,
+          revision: window.rev, expiresAt: window.grantExpiresAt, deadline: state.deadline_at_epoch_ms };
+      });
+      await f.coldRestart(2);
+      const after = await f.page.evaluate(async () => {
+        const state = await window.readState();
+        return { installed: window.view.installed, choice: window.view.effectiveChoice, state: state.state,
+          generation: state.generation, intent: state.intent_id, owner: state.owner, epoch: window.ownerStore.getState().accountEpoch,
+          revision: window.rev, expiresAt: window.grantExpiresAt, deadline: state.deadline_at_epoch_ms,
+          serverGrant: window.granted, enrollCalls: window.enrollCalls, protocolWrites: window.protocolWrites.length };
+      });
+      assert.deepEqual(after, { ...before, installed: true, choice: "message", state: "active", epoch: 2,
+        serverGrant: true, enrollCalls: 1, protocolWrites: 1 });
+      assert.deepEqual(after.owner, { userId: user, sessionId: session, accountEpoch: 1 });
+    } finally { await f.close(); }
+  });
+  test(`${engine}: stale epoch worker ACK is refused even with the same UID and session`, async () => {
+    const f = await fixture(engine);
+    try {
+      const result = await f.page.evaluate(async () => {
+        const worker = (await navigator.serviceWorker.getRegistration("/sw.js")).active, channel = new MessageChannel();
+        let ackHeld;
+        const held = new Promise(resolve => { ackHeld = resolve; });
+        await new Promise(resolve => {
+          channel.port1.onmessage = event => { if (event.data === "ready") resolve(); if (event.data === "held") ackHeld(); };
+          worker.postMessage({ type: "FIXTURE_HOLD_ACK" }, [channel.port2]);
+        });
+        const pending = window.view.setChoice("message");
+        await held;
+        const before = window.ownerStore.getState().authSessionIdentity;
+        window.ownerStore.setState({ accountEpoch: 2 });
+        worker.postMessage({ type: "FIXTURE_RELEASE_ACK" });
+        const accepted = await pending;
+        channel.port1.close();
+        return { accepted, state: (await window.readState())?.state, writes: window.protocolWrites.length,
+          sameSession: before === window.ownerStore.getState().authSessionIdentity, epoch: window.ownerStore.getState().accountEpoch };
+      });
+      assert.deepEqual(result, { accepted: false, state: "retired", writes: 0, sameSession: true, epoch: 2 });
     } finally { await f.close(); }
   });
   test(`${engine}: capability handshake writes literal protocol 1 only for the exact descriptor after new ACK`, async () => {

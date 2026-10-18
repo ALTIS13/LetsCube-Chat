@@ -89,7 +89,8 @@ function start() {
     rpc: (name, args) => preview.rpc(name, args),
     install: async (token, value, current) => {
       const who = owner();
-      if (!current() || !who || !equal(token.owner, who)) return false;
+      // Persisted grants survive document epochs; current() still fences this operation.
+      if (!current() || !who || token.owner?.userId !== who.userId || token.owner.sessionId !== who.sessionId) return false;
       let worker = navigator.serviceWorker.controller;
       if (!worker) {
         // A fresh SPA document stays uncontrolled until its next navigation.
