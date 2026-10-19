@@ -53,7 +53,10 @@ function actual(text = source) {
     {module: mergeModule, exports: mergeModule.exports, require: name => {
       assert.equal(name, './messageActor.ts'); return actorModule.exports;
     }});
-  const context = vm.createContext({console: {error() {}}, hiddenMessagesLive: {captureRead: () => () => true}, ...mergeModule.exports});
+  const sharingModule = {exports: {}};
+  vm.runInNewContext(javascript(readFileSync(new URL('lib/structuralSharing.ts', base), 'utf8')),
+    {module: sharingModule, exports: sharingModule.exports});
+  const context = vm.createContext({console: {error() {}}, hiddenMessagesLive: {captureRead: () => () => true}, ...mergeModule.exports, ...sharingModule.exports});
   const helpers = ['fetchHiddenMessageIdSet', 'captureMessageAccount', 'messageBelongsToTopic',
     'getMessageAndReplyIds', 'sanitizeHiddenReply', 'sanitizeHiddenReplies'].map(declaration).join('\n');
   vm.runInContext(javascript(`${helpers}\nconst ${variable('MESSAGE_PAGE_SIZE')};
@@ -101,7 +104,7 @@ function fixture(count, text = source) {
     useAppStore: {getState: () => state}, EMPTY_MESSAGES: [], MESSAGE_SELECT_WITH_JOINS: 'fictional-joins',
     hookLifetimeRef: {current: Symbol('fictional-lifetime')}, chatIdRef: {current: 'fictional-chat'},
     topicIdRef: {current: undefined}, historyRequestGenerationRef: {current: 0},
-    verifiedChatIdRef: {current: null}, verifiedAccountEpochRef: {current: null},
+    verifiedChatIdRef: {current: null}, verifiedAccountEpochRef: {current: null}, historyVerificationRef: {current: null},
     currentUserRef: {current: state.currentUser}, clearedAtRef: {current: null},
     hiddenMessageIdsRef: {current: new Set()}, hiddenMessageIds: new Set(), hasMoreOlderRef: {current: false},
     verifiedChatId: null, verifyingChatId: null, historyError: null, loading: false,

@@ -318,9 +318,11 @@ const omissions = [
     closedReplyHide, "closed-chat hide exposed"],
   ["held reply privacy read omitted", () => mutate("!cached.some((message) => message.reply_to) && ", ""),
     (text) => closedReplyHide(text, false), "reply previews need a current hidden answer"],
-  ["skip omitted", () => mutate(decision, "false"), trusted, "unchanged trusted IDs"],
-  ["new-ID trust bypassed", () => mutate(decision, `(heldWhenAsked.length > 0 || ${decision})`), newMessage, "held rows retained"],
-  ["reply IDs omitted", () => mutate(decision,
+  ["skip omitted", () => mutate(decision, "false"), synchronousSkip, "trust-change microtask"],
+  // The result-availability guard now independently blocks these two bypasses.
+  // Their original privacy oracles exercise a compound omission of both guards.
+  ["new-ID trust bypassed", () => mutate(`${decision} && pageResultsKnown`, `(heldWhenAsked.length > 0 || ${decision})`), newMessage, "held rows retained"],
+  ["reply IDs omitted", () => mutate(`${decision} && pageResultsKnown`,
     "hiddenMessagesLive.canSkip(chatId, [...fetched, ...existing].map((message) => message.id))"), newReply, "new reply ID"],
   ["existing IDs omitted", () => mutate(decision,
     "hiddenMessagesLive.canSkip(chatId, getMessageAndReplyIds(fetched))"), existingOnlyId, "existing-only IDs"],
@@ -334,7 +336,7 @@ const omissions = [
     "const addedHiddenIds = new Set<string>();"), concurrentAddition, "concurrent unknown IDs"],
   ["remember omitted", () => mutate(
     "rememberHiddenMessageIds(fetchedHiddenIds);\n        hiddenMessagesLive.markVerified(chatId, checkedIds, hiddenReadAt);",
-    "hiddenMessagesLive.markVerified(chatId, checkedIds, hiddenReadAt);"), concurrentAddition, "remain remembered"],
+    "hiddenMessagesLive.markVerified(chatId, checkedIds, hiddenReadAt);"), concurrentAddition, "verified additions can reuse live trust"],
   ...["lost", "joined", "unhide"].map((kind) => [
     `${kind} trust bypassed`, () => mutate(decision, `(heldWhenAsked.length > 0 || ${decision})`),
     (text) => trustGap(kind, text), "invalidated live trust",

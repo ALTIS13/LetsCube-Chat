@@ -445,11 +445,21 @@ export function useMessages(
         const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
         let existing = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
         const checkedIds = new Set(getMessageAndReplyIds([...fetched, ...existing]));
+        const fetchedIds = new Set(getMessageAndReplyIds(fetched));
+        const heldResultIds = new Set([...existing.map((message) => message.id), ...hiddenMessageIdsRef.current]);
+        const pageResultsKnown = [...fetchedIds].every((id) => heldResultIds.has(id));
         const hiddenReadAt = Date.now();
         const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
-        const fetchedHiddenIds = hiddenMessagesLive.canSkip(chatId, [...checkedIds])
+        // Live proof does not retain the hidden verdict after remount. Re-read
+        // the current page when its result is missing; omit only trusted held
+        // rows from a mixed non-reply read, never fresh page IDs.
+        const fetchedHiddenIds = hiddenMessagesLive.canSkip(chatId, [...checkedIds]) && pageResultsKnown
           ? new Set<string>()
-          : await fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent);
+          : fetched.some((message) => message.reply_to_id || message.reply_to) ||
+              existing.some((message) => message.reply_to_id || message.reply_to)
+            ? await fetchHiddenMessageIdSet(supabase, [...checkedIds], isCurrent)
+            : await fetchHiddenMessageIdSet(supabase,
+              [...checkedIds].filter((id) => fetchedIds.has(id) || !hiddenMessagesLive.canSkip(chatId, [id])), isCurrent);
         if (!isCurrent() || !privacyReadIsCurrent()) return;
         if (!fetchedHiddenIds) {
           refuseHistory("Не удалось проверить скрытые сообщения.");
@@ -458,8 +468,13 @@ export function useMessages(
         for (let attempt = 0; attempt < 4; attempt += 1) {
           const latest = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
           if (latest === existing) break;
+          const previousRows = new Set(existing);
           existing = latest;
-          const addedIds = getMessageAndReplyIds(existing).filter((id) => !checkedIds.has(id));
+          // A reply introduced during the await can point at an already
+          // checked row; do not carry non-reply trust into its joined preview.
+          const changedReplyIds = new Set(getMessageAndReplyIds(existing.filter((message) =>
+            !previousRows.has(message) && (message.reply_to_id || message.reply_to))));
+          const addedIds = getMessageAndReplyIds(existing).filter((id) => changedReplyIds.has(id) || !checkedIds.has(id));
           if (!addedIds.length) continue;
           const addedHiddenIds = await fetchHiddenMessageIdSet(supabase, addedIds, isCurrent);
           if (!isCurrent() || !privacyReadIsCurrent()) return;
