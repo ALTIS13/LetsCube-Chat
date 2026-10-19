@@ -165,7 +165,8 @@ async function outsideScope(t, factory = load()) {
   const body = response.text(); f.complete(); await body;
 }
 // Auth now owns its finite JSON body; actual SDK classification is covered by
-// auth-body-deadline-20261019.test.mjs. Storage must still remain unbuffered.
+// auth-body-deadline-20261019.test.mjs. File transfers remain unbuffered;
+// finite Storage signing JSON is covered by storage-signing-deadline-20261019.
 for (const endpoint of ['https://fixture.invalid/storage/v1/object/media/file']) {
   test(`non-PostgREST response contract is unchanged: ${new URL(endpoint).pathname}`, async t => {
     const f = fixture(t), response = await f.fetcher(endpoint, { method: 'POST' });
@@ -184,8 +185,8 @@ for (const [name, before, after, contract, expected] of [
     (t, factory) => bodyCut(t, 'deadline', factory), 'BODY_MUST_SETTLE'],
   ['forget EOF retirement', 'signal.removeEventListener("abort", abort);\n    settle();', 'signal.removeEventListener("abort", abort);', release, 'BODY_EOF_MUST_RELEASE'],
   ['eagerly drain', '{ highWaterMark: 0 }', '{ highWaterMark: 1 }', backpressure, 'BODY_MUST_NOT_PREFETCH'],
-  ['buffer Storage too', 'if (isAuth(input) && response.body && response.status !== 0)',
-    'if ((isAuth(input) || String(input).includes("/storage/v1/")) && response.body && response.status !== 0)',
+  ['buffer Storage too', 'if (finiteJson && response.body && response.status !== 0)',
+    'if ((finiteJson || String(input).includes("/storage/v1/")) && response.body && response.status !== 0)',
     outsideScope, 'BODY_STORAGE_MUST_STAY_STREAMING'],
 ]) {
   test(`compiled omission is rejected: ${name}`, async t => {

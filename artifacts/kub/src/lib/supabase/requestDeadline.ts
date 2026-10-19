@@ -20,11 +20,11 @@
  */
 
 export type RequestKind =
-  /** GET and HEAD: asking again costs nothing, so a change may cut one. */
+  /** GET/HEAD and URL-signing POSTs: a network change may cut a repeated read. */
   | "read"
   /** Anything that may change something: bounded, never cut mid-flight. */
   | "write"
-  /** Storage: a big file on a slow line legitimately takes minutes. */
+  /** File transfers on a slow line legitimately take minutes. */
   | "transfer";
 
 /**
@@ -53,7 +53,13 @@ function pathOf(url: string): string {
   }
 }
 
+/** Signing an existing object returns JSON, not file bytes or an upload grant. */
+export function isStorageSigningRead(url: string, method: string | undefined): boolean {
+  return method?.toUpperCase() === "POST" && /^\/storage\/v1\/object\/sign\/[^/]+(?:\/.*)?$/.test(pathOf(url));
+}
+
 export function requestKind(url: string, method: string | undefined): RequestKind {
+  if (isStorageSigningRead(url, method)) return "read";
   if (pathOf(url).includes("/storage/v1/")) return "transfer";
   const verb = (method ?? "GET").toUpperCase();
   return verb === "GET" || verb === "HEAD" ? "read" : "write";

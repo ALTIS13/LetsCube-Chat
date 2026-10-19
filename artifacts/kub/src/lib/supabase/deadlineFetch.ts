@@ -14,6 +14,7 @@
 import {
   cutError,
   deadlineFor,
+  isStorageSigningRead,
   requestKind,
   strandedByNetworkChange,
   type CutReason,
@@ -158,7 +159,9 @@ export function createDeadlineFetch(
   const waiting = new Set<Waiting>();
 
   const deadlineFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const kind = requestKind(urlOf(input), methodOf(input, init));
+    const url = urlOf(input), method = methodOf(input, init);
+    const kind = requestKind(url, method);
+    const finiteJson = isAuth(input) || isStorageSigningRead(url, method);
     const controller = new AbortController();
     let cutReason: CutReason | null = null;
 
@@ -198,10 +201,10 @@ export function createDeadlineFetch(
       async (response) => {
         const errorFor = (error: unknown) => cutReason ? cutError(cutReason)
           : controller.signal.aborted ? controller.signal.reason : error;
-        if (isAuth(input) && response.body && response.status !== 0) {
-          // Auth parses error bodies outside its fetch-error boundary. Receive
-          // its small JSON response here so a stalled 400/401 body is retryable
-          // transport failure, not an AuthUnknownError that retires the session.
+        if (finiteJson && response.body && response.status !== 0) {
+          // Both SDKs parse error bodies outside their fetch-error boundary.
+          // A stalled Auth/signing JSON body is transport failure, not a
+          // completed invalid session or Storage API refusal.
           try {
             const body = trackResponseBody(response, controller.signal, errorFor, settle);
             const bytes = await body.arrayBuffer();
@@ -213,7 +216,7 @@ export function createDeadlineFetch(
             throw error;
           }
         }
-        // Storage may stream for minutes. PostgREST stays streaming while its
+        // File transfers may stream for minutes. PostgREST stays streaming while its
         // original request deadline owns the body through EOF/cancel/error.
         if (isPostgrest(input) && response.body && response.status !== 0) {
           try {

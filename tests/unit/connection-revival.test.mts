@@ -35,6 +35,11 @@ test("reads, writes and transfers are told apart by path and verb", () => {
   // A file on a slow line may take minutes: no deadline, and never cut.
   assert.equal(requestKind(`${API}/storage/v1/object/media/a/b.webm`, "POST"), "transfer");
   assert.equal(requestKind(`${API}/storage/v1/object/sign/media/a.jpg`, "GET"), "transfer");
+  assert.equal(requestKind(`${API}/storage/v1/object/sign/media`, "POST"), "read");
+  assert.equal(requestKind(`${API}/storage/v1/object/sign/media/a.jpg`, "post"), "read");
+  assert.equal(requestKind(`${API}/storage/v1/object/sign/media/a.jpg`, "HEAD"), "transfer");
+  assert.equal(requestKind(`${API}/storage/v1/object/sign/media/a.jpg`, "PUT"), "transfer");
+  assert.equal(requestKind(`${API}/storage/v1/object/upload/sign/media/a.jpg`, "POST"), "transfer");
 });
 
 test("everything but a transfer has a deadline, and a transfer has none", () => {

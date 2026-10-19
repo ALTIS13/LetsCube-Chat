@@ -181,7 +181,7 @@ test('completed Auth JSON retains response metadata and clone semantics', async 
 });
 
 for (const [name, from, to, status, marker] of [
-  ['omit Auth completion', 'if (isAuth(input) && response.body && response.status !== 0)',
+  ['omit Auth completion', 'if (finiteJson && response.body && response.status !== 0)',
     'if (false && response.body && response.status !== 0)', 200, 'AUTH_BODY_DEADLINE_RELEASES_REFRESH'],
   ['settle Auth at headers', 'const body = trackResponseBody(response, controller.signal, errorFor, settle);',
     'settle(); const body = trackResponseBody(response, controller.signal, errorFor, settle);', 200, 'AUTH_BODY_DEADLINE_RELEASES_REFRESH'],
