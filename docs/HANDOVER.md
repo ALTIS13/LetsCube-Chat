@@ -3,6 +3,19 @@
 **Current State, 2026-10-19:** Owner: Codex coordinator, canonical branch
 `codex/search-continuity-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
+Active owner priority: progressive loading / connection and cache diagnosis,
+with permission to fix proved causes and apply safe necessary migrations.
+[Current investigation and next actions](operations/2026-10-19-connection-performance.md).
+Six reviewed repairs are committed locally: Auth `815f8009`, history `1096bd03`,
+retry ownership `62fbc102`, PWA navigation `0b79f63b`, mounted-avatar signing and
+metadata retry `9c106e94`, finite Storage signing JSON `921612f8`.
+History passes 101 affected +4 targeted checks; avatar passes 132; finite signing
+JSON passes 23 new +51 adjacent. Independent reviews are clean. Fresh frozen
+Chromium/WebKit consumer matrix passes 32/32 at 390/1440 in both themes; exact
+WebKit avatar/monogram pixels inspected. Final typecheck and diff checks pass.
+Android 0.1.30/build31 is metadata only, not built/published. Next: guarded signed
+build, Realme upgrade/data-retention smoke, publication and exact live content
+verification. No SQL mutation justified. Resume before AAC/media.
 Stage: product `a02be032` is RELEASED on sole-healthy web/build
 `a7d03335f07b562b` and Android Stable0.1.29/build30. D375 search continuity and
 pending-touch retirement pass18 checks, affected WebKit cases, final TSC/review
