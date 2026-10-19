@@ -19,6 +19,7 @@
 const BUILD = {"id":"dev","entry":null,"precache":[]}; // @kub-sw-build
 const CACHE_NAME = `kub-app-shell-${BUILD.id}`;
 const CACHES_BUILD_FILES = BUILD.id !== "dev";
+const NAVIGATION_TIMEOUT_MS = 2500;
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -166,8 +167,22 @@ self.addEventListener("fetch", (event) => {
 });
 
 async function networkFirstNavigation(request) {
+  const controller = new AbortController();
+  const outer = request.signal;
+  const forwardAbort = () => controller.abort(outer.reason);
+  if (outer?.aborted) forwardAbort();
+  else outer?.addEventListener("abort", forwardAbort, { once: true });
+  let timer;
   try {
-    return await fetch(request);
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("Navigation network deadline exceeded."));
+      }, NAVIGATION_TIMEOUT_MS);
+    });
+    // A changed route can leave fetch pending even while navigator is online.
+    // The complete saved build must still be able to boot in that state.
+    return await Promise.race([fetch(request, { signal: controller.signal }), timeout]);
   } catch {
     const cache = await caches.open(CACHE_NAME);
     // A built worker's `/` is complete: the document and the files it boots were
@@ -175,6 +190,9 @@ async function networkFirstNavigation(request) {
     // so an unbuilt worker goes straight to the offline page.
     const shell = BUILD.entry ? await cache.match("/") : undefined;
     return shell || (await cache.match("/offline.html")) || Response.error();
+  } finally {
+    clearTimeout(timer);
+    outer?.removeEventListener("abort", forwardAbort);
   }
 }
 

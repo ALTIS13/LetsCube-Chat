@@ -57,12 +57,12 @@ function createNetwork(routes) {
     routes,
     online: true,
     log: [],
-    async fetch(input) {
+    async fetch(input, init) {
       const url = absolute(input);
       network.log.push(url);
       if (!network.online) throw new TypeError("Failed to fetch");
       const route = network.routes[url] ?? network.routes[new URL(url).pathname];
-      if (typeof route === "function") return route(input);
+      if (typeof route === "function") return route(input, init);
       if (route) return route.clone();
       // nginx: `location /assets/` has no fallback; everything else falls back to index.html.
       if (new URL(url).pathname.startsWith("/assets/")) {
@@ -122,7 +122,7 @@ class WorkerRequest extends Request {
   }
 }
 
-function loadWorker({ build = BUILT, network = createNetwork(deployRoutes()), storage, windows = [] } = {}) {
+function loadWorker({ build = BUILT, network = createNetwork(deployRoutes()), storage, windows = [], timers = { setTimeout, clearTimeout } } = {}) {
   const listeners = new Map();
   const state = { skipWaitingCalls: 0 };
   const caches = storage ?? createCacheStorage(network);
@@ -131,8 +131,11 @@ function loadWorker({ build = BUILT, network = createNetwork(deployRoutes()), st
     Headers,
     Response,
     Request: WorkerRequest,
+    AbortController,
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
     caches,
-    fetch: (input) => network.fetch(input),
+    fetch: (input, init) => network.fetch(input, init),
     self: {
       addEventListener(type, listener) {
         listeners.set(type, listener);
@@ -156,8 +159,8 @@ async function lifecycle(worker, type) {
   await Promise.all(pending);
 }
 
-function request(path, { mode = "no-cors", method = "GET", headers = {}, cache = "default" } = {}) {
-  return { url: new URL(path, ORIGIN).href, mode, method, headers: new Headers(headers), cache };
+function request(path, { mode = "no-cors", method = "GET", headers = {}, cache = "default", signal } = {}) {
+  return { url: new URL(path, ORIGIN).href, mode, method, headers: new Headers(headers), cache, signal };
 }
 
 /** Dispatches a fetch event; `handled: false` means the browser goes to the network itself. */
@@ -311,6 +314,94 @@ test("a navigation online is the network's answer and leaves this build's shell 
 
   const kept = await (await worker.caches.open(worker.cacheName)).match("/");
   assert.match(await kept.text(), new RegExp(ENTRY), "a navigation overwrote the shell the build's files belong to");
+});
+
+function navigationClock() {
+  let time = 0, id = 0;
+  const pending = new Map();
+  return {
+    setTimeout(callback, delay) { const key = ++id; pending.set(key, { at: time + delay, callback }); return key; },
+    clearTimeout(key) { pending.delete(key); },
+    advance(ms) {
+      time += ms;
+      for (const [key, value] of [...pending]) if (value.at <= time) { pending.delete(key); value.callback(); }
+    },
+    get pending() { return pending.size; },
+  };
+}
+
+test("a navigation on a blackholed network boots the cached shell within 2500ms and aborts its read", async () => {
+  const timers = navigationClock();
+  const worker = await installed({ timers });
+  let networkSignal;
+  worker.network.routes["/chat"] = (_request, init) => {
+    networkSignal = init?.signal;
+    return new Promise(() => {});
+  };
+  let answer;
+  const reading = dispatchFetch(worker, request("/chat", { mode: "navigate" })).then(value => { answer = value; });
+  await new Promise(setImmediate);
+  timers.advance(2499);
+  await new Promise(setImmediate);
+  assert.equal(answer, undefined, "a usable network still gets its full budget");
+  timers.advance(1);
+  await new Promise(setImmediate);
+  assert.ok(answer, "a held network read must not hold a complete cached shell indefinitely");
+  await reading;
+  assert.match(await answer.response.text(), new RegExp(ENTRY));
+  assert.equal(networkSignal?.aborted, true, "the abandoned read must release its network resources");
+  assert.equal(timers.pending, 0);
+});
+
+test("a timed-out navigation without the build shell uses offline.html, never an incomplete build", async () => {
+  const timers = navigationClock();
+  const worker = await installed({ timers });
+  worker.caches.stores.get(worker.cacheName).delete(`${ORIGIN}/`);
+  worker.network.routes["/tasks"] = () => new Promise(() => {});
+  let answer;
+  const reading = dispatchFetch(worker, request("/tasks", { mode: "navigate" })).then(value => { answer = value; });
+  await new Promise(setImmediate);
+  timers.advance(2500);
+  await new Promise(setImmediate);
+  assert.ok(answer, "an offline page also needs a bounded navigation");
+  await reading;
+  assert.match(await answer.response.text(), new RegExp(OFFLINE_TEXT));
+  assert.equal(timers.pending, 0);
+});
+
+test("a fast navigation clears its timeout without cancelling a successful response", async () => {
+  const timers = navigationClock();
+  const worker = await installed({ timers });
+  let networkSignal;
+  worker.network.routes["/chat"] = (_request, init) => {
+    networkSignal = init?.signal;
+    return document("network wins");
+  };
+  const answer = await dispatchFetch(worker, request("/chat", { mode: "navigate" }));
+  assert.equal(await answer.response.text(), "<!doctype html>network wins");
+  assert.equal(timers.pending, 0);
+  timers.advance(2500);
+  assert.equal(networkSignal?.aborted, false);
+});
+
+test("a caller-cancelled navigation releases its read without waiting for the deadline", async () => {
+  const timers = navigationClock();
+  const worker = await installed({ timers });
+  let networkSignal;
+  worker.network.routes["/chat"] = (_request, init) => new Promise((_, reject) => {
+    networkSignal = init.signal;
+    networkSignal.addEventListener("abort", () => reject(networkSignal.reason), { once: true });
+  });
+  const caller = new AbortController();
+  let answer;
+  const reading = dispatchFetch(worker, request("/chat", { mode: "navigate", signal: caller.signal })).then(value => { answer = value; });
+  await new Promise(setImmediate);
+  caller.abort(new Error("caller left"));
+  await new Promise(setImmediate);
+  assert.ok(answer, "the navigation deadline must not detach the caller's cancellation");
+  await reading;
+  assert.equal(networkSignal.aborted, true);
+  assert.equal(timers.pending, 0);
 });
 
 test("only a complete, first-hand, successful answer is kept", async () => {

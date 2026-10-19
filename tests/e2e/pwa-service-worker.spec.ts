@@ -74,6 +74,8 @@ type Deploys = {
 let deploys: Deploys;
 let app: FixtureServer;
 let storage: FixtureServer;
+let blackholedNavigations = 0;
+let abortedNavigations = 0;
 
 test.describe.configure({ timeout: 120_000 });
 
@@ -99,6 +101,21 @@ test.beforeAll(async ({}, testInfo) => {
 test.afterAll(async () => {
   await app?.close();
   await storage?.close();
+});
+
+test("a controlled PWA boots its saved build when navigation is blackholed, and releases that read", async ({ page }) => {
+  app.root = deploys.current;
+  await page.goto(`${APP}/`, { waitUntil: "domcontentloaded" });
+  await becomeControlled(page);
+  expect(await probeController(page)).toBe(deploys.currentBuild.id);
+  const before = { held: blackholedNavigations, aborted: abortedNavigations };
+  const started = Date.now();
+  await page.goto(`${APP}/__hang_navigation__`, { waitUntil: "domcontentloaded", timeout: 10_000 });
+  expect(Date.now() - started).toBeLessThan(7500);
+  expect((await pageState(page)).entry).toBe(deploys.currentBuild.entry);
+  expect(blackholedNavigations - before.held).toBe(1);
+  await expect.poll(() => abortedNavigations - before.aborted).toBe(1);
+  expect(await probeController(page)).toBe(deploys.currentBuild.id);
 });
 
 test("a first launch after a deploy is taken over by the new worker without a prompt or a reload, and the old cache is gone", async ({
@@ -587,6 +604,11 @@ const CONTENT_TYPES: Record<string, string> = {
 function appHandler(root: () => string): http.RequestListener {
   return (request, response) => {
     const uri = new URL(request.url ?? "/", APP).pathname;
+    if (uri === "/__hang_navigation__") {
+      blackholedNavigations += 1;
+      response.once("close", () => { abortedNavigations += 1; });
+      return;
+    }
     // A connection that drops before any answer: a lost network, as a fetch sees it.
     if (uri.includes("__drop__")) {
       request.socket.destroy();
