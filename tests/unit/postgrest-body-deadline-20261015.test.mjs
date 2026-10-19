@@ -157,11 +157,16 @@ test('malformed JSON keeps its parser error after transport EOF', async t => {
   assert.equal(body.error.kubCut, undefined); assert.equal(f.fetcher.waiting(), 0);
 });
 async function outsideScope(t, factory = load()) {
-  const f = fixture(t, { factory }), response = await f.fetcher('https://fixture.invalid/auth/v1/token', { method: 'POST' });
-  assert.equal(response, f.original, 'BODY_SCOPE_MUST_STAY_REST');
+  const f = fixture(t, { factory }), pending = f.fetcher('https://fixture.invalid/storage/v1/object/media/file', { method: 'POST' });
+  const state = observe(pending); await drain();
+  assert.equal(state.status, 'fulfilled', 'BODY_STORAGE_MUST_STAY_STREAMING');
+  const response = await pending;
+  assert.equal(response, f.original, 'BODY_STORAGE_MUST_STAY_STREAMING');
   const body = response.text(); f.complete(); await body;
 }
-for (const endpoint of ['https://fixture.invalid/auth/v1/token', 'https://fixture.invalid/storage/v1/object/media/file']) {
+// Auth now owns its finite JSON body; actual SDK classification is covered by
+// auth-body-deadline-20261019.test.mjs. Storage must still remain unbuffered.
+for (const endpoint of ['https://fixture.invalid/storage/v1/object/media/file']) {
   test(`non-PostgREST response contract is unchanged: ${new URL(endpoint).pathname}`, async t => {
     const f = fixture(t), response = await f.fetcher(endpoint, { method: 'POST' });
     assert.equal(response, f.original); assert.equal(f.fetcher.waiting(), 0); assert.equal(f.timers.size, 0);
@@ -179,7 +184,9 @@ for (const [name, before, after, contract, expected] of [
     (t, factory) => bodyCut(t, 'deadline', factory), 'BODY_MUST_SETTLE'],
   ['forget EOF retirement', 'signal.removeEventListener("abort", abort);\n    settle();', 'signal.removeEventListener("abort", abort);', release, 'BODY_EOF_MUST_RELEASE'],
   ['eagerly drain', '{ highWaterMark: 0 }', '{ highWaterMark: 1 }', backpressure, 'BODY_MUST_NOT_PREFETCH'],
-  ['wrap Auth too', 'if (isPostgrest(input) && response.body && response.status !== 0)', 'if (response.body && response.status !== 0)', outsideScope, 'BODY_SCOPE_MUST_STAY_REST'],
+  ['buffer Storage too', 'if (isAuth(input) && response.body && response.status !== 0)',
+    'if ((isAuth(input) || String(input).includes("/storage/v1/")) && response.body && response.status !== 0)',
+    outsideScope, 'BODY_STORAGE_MUST_STAY_STREAMING'],
 ]) {
   test(`compiled omission is rejected: ${name}`, async t => {
     await assert.rejects(contract(t, mutate(before, after)), error =>

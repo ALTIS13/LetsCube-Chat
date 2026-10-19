@@ -53,6 +53,14 @@ function isPostgrest(input: RequestInfo | URL): boolean {
   }
 }
 
+function isAuth(input: RequestInfo | URL): boolean {
+  try {
+    return new URL(urlOf(input), "http://localhost").pathname.startsWith("/auth/v1/");
+  } catch {
+    return false;
+  }
+}
+
 function withResponseMetadata(response: Response, original: Response, errorFor: (error: unknown) => unknown): Response {
   Object.defineProperties(response, {
     url: { value: original.url },
@@ -187,14 +195,29 @@ export function createDeadlineFetch(
     };
 
     return base(input, { ...init, signal: controller.signal }).then(
-      (response) => {
-        // Auth has its own error-body classification; Storage may stream for
-        // minutes. Only finite PostgREST responses take this completion boundary.
+      async (response) => {
+        const errorFor = (error: unknown) => cutReason ? cutError(cutReason)
+          : controller.signal.aborted ? controller.signal.reason : error;
+        if (isAuth(input) && response.body && response.status !== 0) {
+          // Auth parses error bodies outside its fetch-error boundary. Receive
+          // its small JSON response here so a stalled 400/401 body is retryable
+          // transport failure, not an AuthUnknownError that retires the session.
+          try {
+            const body = trackResponseBody(response, controller.signal, errorFor, settle);
+            const bytes = await body.arrayBuffer();
+            return withResponseMetadata(new Response(bytes, {
+              status: response.status, statusText: response.statusText, headers: response.headers,
+            }), response, error => error);
+          } catch (error) {
+            settle();
+            throw error;
+          }
+        }
+        // Storage may stream for minutes. PostgREST stays streaming while its
+        // original request deadline owns the body through EOF/cancel/error.
         if (isPostgrest(input) && response.body && response.status !== 0) {
           try {
-            return trackResponseBody(response, controller.signal,
-              error => cutReason ? cutError(cutReason) : controller.signal.aborted ? controller.signal.reason : error,
-              settle);
+            return trackResponseBody(response, controller.signal, errorFor, settle);
           } catch (error) {
             settle();
             throw error;
