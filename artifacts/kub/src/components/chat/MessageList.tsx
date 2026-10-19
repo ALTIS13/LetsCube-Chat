@@ -86,7 +86,9 @@ import {
 } from "@/lib/blockedRuns";
 import type { MediaAlbumGroup } from "@/lib/mediaAlbum";
 import {
+  adjustVisibleMessageAnchorForPendingScroll,
   captureVisibleMessageAnchor,
+  matchesAnchoredScrollTop,
   restoreVisibleMessageAnchor,
   type VisibleMessageAnchor,
 } from "@/lib/messageScrollAnchor";
@@ -654,6 +656,7 @@ export function MessageList({
    * taken over; input before it lands is what started the load.
    */
   const olderHoldActiveRef = useRef(false);
+  const olderObservedScrollTopRef = useRef<number | null>(null);
   const initialScrollAppliedRef = useRef<string | null>(null);
   const initialScrollPendingRef = useRef(false);
   const initialScrollPendingKeyRef = useRef<string | null>(null);
@@ -1192,11 +1195,15 @@ export function MessageList({
       olderSafetyTimeoutRef.current = null;
     }
     olderHoldActiveRef.current = false;
+    olderOwnedScrollTopRef.current = null;
+    olderObservedScrollTopRef.current = null;
     olderScrollAnchorRef.current = null;
     olderStartFirstMessageIdRef.current = null;
     olderStartMessageCountRef.current = 0;
     preservingOlderScrollRef.current = false;
   }, []);
+
+  const olderOwnedScrollTopRef = useRef<number | null>(null);
 
   const loadOlderAtTop = useCallback(async () => {
     const el = containerRef.current;
@@ -1212,6 +1219,7 @@ export function MessageList({
     ) return;
     preservingOlderScrollRef.current = true;
     olderScrollAnchorRef.current = captureVisibleMessageAnchor(el);
+    olderObservedScrollTopRef.current = el.scrollTop;
     olderStartFirstMessageIdRef.current = sortedMessages[0]?.id ?? null;
     olderStartMessageCountRef.current = sortedMessages.length;
     try {
@@ -1259,8 +1267,11 @@ export function MessageList({
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    if (preservingOlderScrollRef.current) {
+    if (olderHoldActiveRef.current && olderOwnedScrollTopRef.current !== null) {
+      if (!matchesAnchoredScrollTop(el, olderOwnedScrollTopRef.current)) releaseOlderScrollPreservation();
+    } else if (preservingOlderScrollRef.current) {
       olderScrollAnchorRef.current = captureVisibleMessageAnchor(el) ?? olderScrollAnchorRef.current;
+      olderObservedScrollTopRef.current = el.scrollTop;
     }
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (isInitialBottomLocked()) {
@@ -1290,7 +1301,7 @@ export function MessageList({
       hasScrollableHistory &&
       el.scrollTop < 160
     ) void loadOlderAtTop();
-  }, [initialScrollKey, isInitialBottomLocked, loadOlderAtTop]);
+  }, [initialScrollKey, isInitialBottomLocked, loadOlderAtTop, releaseOlderScrollPreservation]);
 
   // The history band pays for its own room.
   //
@@ -1313,8 +1324,16 @@ export function MessageList({
     const change = height - historyBandHeightRef.current;
     historyBandHeightRef.current = height;
     if (!el || Math.abs(change) < 0.5 || isAtBottomRef.current || isInitialBottomLocked()) return;
+    if (olderHoldActiveRef.current && olderOwnedScrollTopRef.current !== null && !matchesAnchoredScrollTop(el, olderOwnedScrollTopRef.current)) {
+      releaseOlderScrollPreservation();
+    }
+    if (preservingOlderScrollRef.current && !olderHoldActiveRef.current && olderScrollAnchorRef.current && olderObservedScrollTopRef.current !== null) {
+      olderScrollAnchorRef.current = adjustVisibleMessageAnchorForPendingScroll(el, olderScrollAnchorRef.current, olderObservedScrollTopRef.current);
+    }
     el.scrollTop += change;
-  }, [isInitialBottomLocked, loadingOlder, olderError]);
+    if (olderHoldActiveRef.current) olderOwnedScrollTopRef.current = el.scrollTop;
+    else if (preservingOlderScrollRef.current) olderObservedScrollTopRef.current = el.scrollTop;
+  }, [isInitialBottomLocked, loadingOlder, olderError, releaseOlderScrollPreservation]);
 
   useLayoutEffect(() => {
     if (!preservingOlderScrollRef.current || !olderScrollAnchorRef.current) return;
@@ -1324,6 +1343,11 @@ export function MessageList({
 
     const container = containerRef.current;
     if (!container) {
+      releaseOlderScrollPreservation();
+      return;
+    }
+    // A commit may arrive before the reader's pending scroll event or RAF guard.
+    if (olderHoldActiveRef.current && olderOwnedScrollTopRef.current !== null && !matchesAnchoredScrollTop(container, olderOwnedScrollTopRef.current)) {
       releaseOlderScrollPreservation();
       return;
     }
@@ -1338,8 +1362,13 @@ export function MessageList({
     //
     // The restore is idempotent: it recomputes the correction from where the
     // anchor is now, so repeating it converges rather than accumulating.
-    const anchor = olderScrollAnchorRef.current;
+    const anchor = !olderHoldActiveRef.current && olderObservedScrollTopRef.current !== null
+      ? adjustVisibleMessageAnchorForPendingScroll(container, olderScrollAnchorRef.current, olderObservedScrollTopRef.current)
+      : olderScrollAnchorRef.current;
+    olderScrollAnchorRef.current = anchor;
     restoreVisibleMessageAnchor(container, anchor);
+    olderOwnedScrollTopRef.current = container.scrollTop;
+    olderObservedScrollTopRef.current = null;
 
     let settledFrames = 0;
     olderHoldActiveRef.current = true;
@@ -1351,8 +1380,15 @@ export function MessageList({
         releaseOlderScrollPreservation();
         return;
       }
+      // Momentum can continue without another touchstart/wheel. Check before
+      // each correction as well as in scroll events, which may arrive later.
+      if (olderOwnedScrollTopRef.current !== null && !matchesAnchoredScrollTop(el, olderOwnedScrollTopRef.current)) {
+        releaseOlderScrollPreservation();
+        return;
+      }
       const before = el.scrollTop;
       restoreVisibleMessageAnchor(el, anchor);
+      olderOwnedScrollTopRef.current = el.scrollTop;
       // Two consecutive frames that needed no correction mean the layout has
       // stopped moving; the safety timeout ends it either way.
       settledFrames = Math.abs(el.scrollTop - before) <= 1 ? settledFrames + 1 : 0;

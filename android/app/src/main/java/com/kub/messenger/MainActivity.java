@@ -21,6 +21,7 @@ public class MainActivity extends BridgeActivity {
         MessagePreviewQaUserChoice.bootstrap(getApplication());
         registerPlugin(VoiceCallsPlugin.class);
         registerPlugin(MediaExportPlugin.class);
+        registerPlugin(AndroidUpdatesPlugin.class);
         registerPlugin(ChatNotificationsPlugin.class);
         registerPlugin(MessagePreviewsPlugin.class);
         Intent intent = getIntent();

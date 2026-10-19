@@ -7,6 +7,7 @@ import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
 import { getVisibleReleaseVersion } from "@/lib/releaseVersionLabel";
+import { AndroidUpdateStatus } from "@/components/AndroidUpdateStatus";
 
 const STATE_COPY: Record<ReleaseCatalogUiState, string> = {
   checking: "Проверяем доступность приложения",
@@ -18,15 +19,19 @@ const STATE_COPY: Record<ReleaseCatalogUiState, string> = {
   unavailable: "Не удалось проверить доступность",
 };
 
-export function ReleaseDistributionSection() {
+export function ReleaseDistributionSection({ onBeforeInstall }: {
+  onBeforeInstall?: () => boolean | void | Promise<boolean | void>;
+} = {}) {
   const target = getCurrentDistributionTarget();
+  const androidNative = target === "android_native";
   const {
     installCopy,
     instructionsOpen,
     showInstallButton,
     promptInstall,
   } = usePwaInstall();
-  const release = useReleaseCatalog(target);
+  // Android's native bridge owns its catalog and resumes; do not poll twice.
+  const release = useReleaseCatalog(androidNative ? "web_only" : target);
   const desktopUpdate = useDesktopUpdate();
   const buildMetadata = getBuildMetadata();
   const [handoff, setHandoff] = useState(false);
@@ -266,7 +271,8 @@ export function ReleaseDistributionSection() {
               </div>
             </div>
           )}
-          {nativePackage && !windowsNative && (
+          {androidNative && <AndroidUpdateStatus onBeforeInstall={onBeforeInstall} />}
+          {nativePackage && !windowsNative && !androidNative && (
             <div
               className="release-status-enter mt-3 rounded-lg px-3 py-2 kub-raise"
               data-testid="release-catalog-state"
@@ -299,7 +305,7 @@ export function ReleaseDistributionSection() {
             {installCopy.buttonLabel}
           </KubButton>
         )}
-        {artifact && release.state !== "current" && !windowsNative && (
+        {artifact && release.state !== "current" && !windowsNative && !androidNative && (
           <a
             href={artifact.url}
             download
@@ -313,7 +319,7 @@ export function ReleaseDistributionSection() {
             Скачать
           </a>
         )}
-        {release.state === "unavailable" && !windowsNative && (
+        {release.state === "unavailable" && !windowsNative && !androidNative && (
           <KubButton
             size="sm"
             variant="secondary"

@@ -2,6 +2,13 @@
 
 Status: active production-hardening tracker, updated 2026-10-19.
 
+**Current owner-priority stage:** D383 prepend/continued-scroll ownership,
+D384 visible native Android/PWA updates and signed-in "Что нового"/D385 finite
+catalog body. Source repairs and focused/browser acceptance are in progress;
+Android candidate0.1.31/build32 is not yet built or published. Reuse the accepted
+Stable31 connection/cache baseline rather than repeating unrelated QA.
+[Ownership, evidence and release state](operations/2026-10-19-ui-motion-and-updates.md).
+
 **Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** D375 search
 continuity is FIXED/RELEASED at `a02be032` on sole-healthy web/build
 `a7d03335f07b562b` and Android Stable0.1.29/build30. Main-list DOM/scroll, hidden

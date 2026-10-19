@@ -203,20 +203,43 @@ function dispatchUpdateReady(registration: ServiceWorkerRegistration) {
  * replaced; the reload follows either on `controllerchange` or on a timer,
  * because a page whose worker never answers still has to get its new build.
  */
-export function restartOntoWaitingBuild(registration: ServiceWorkerRegistration | null): void {
-  if (!registration?.waiting) {
-    window.location.reload();
-    return;
-  }
+export function restartOntoWaitingBuild(registration: ServiceWorkerRegistration | null, options?: {
+  beforeReload: () => boolean;
+  onFailure: () => void;
+}): () => void {
+  let timer: number | undefined;
   let reloaded = false;
+  const cleanup = () => {
+    reloaded = true;
+    if (timer !== undefined) window.clearTimeout(timer);
+    navigator.serviceWorker?.removeEventListener("controllerchange", reload);
+  };
   const reload = () => {
     if (reloaded) return;
     reloaded = true;
-    window.location.reload();
+    cleanup();
+    try {
+      if (options && !options.beforeReload()) return;
+      window.location.reload();
+    } catch (error) {
+      if (!options) throw error;
+      options.onFailure();
+    }
   };
-  navigator.serviceWorker?.addEventListener("controllerchange", reload, { once: true });
-  requestPwaServiceWorkerUpdate(registration);
-  window.setTimeout(reload, 1500);
+  if (!registration?.waiting) {
+    reload();
+  } else {
+    navigator.serviceWorker?.addEventListener("controllerchange", reload, { once: true });
+    try {
+      requestPwaServiceWorkerUpdate(registration);
+      if (!reloaded) timer = window.setTimeout(reload, 1500);
+    } catch (error) {
+      cleanup();
+      if (!options) throw error;
+      options.onFailure();
+    }
+  }
+  return cleanup;
 }
 
 function isStandaloneDisplay() {

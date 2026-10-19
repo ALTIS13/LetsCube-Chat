@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KubButton, KubIcon } from "@/components/kub";
-import { useVoiceCall, voiceCallSnapshot } from "@/hooks/useVoiceCall";
+import { voiceCallSnapshot } from "@/hooks/useVoiceCall";
 import { voiceRingsSnapshot } from "@/hooks/useVoiceRing";
 import {
   KUB_SW_UPDATE_READY_EVENT,
@@ -9,6 +8,9 @@ import {
 import { reloadWouldLose } from "@/lib/reloadGuard";
 import { markVoiceResumeInterrupted } from "@/lib/voiceResumeStorage";
 import { isDesktopApp } from "@/lib/platform/desktop";
+import { isNativeApp } from "@/lib/platform/capabilities";
+import { usePwaUpdate, type PwaUpdateController } from "@/hooks/usePwaUpdate";
+import { PwaUpdateStatusControl } from "./PwaUpdateStatusControl";
 import { offerWebUpdate } from "@/lib/pwa/webUpdateOffer";
 import {
   APP_UPDATE_NOTICE_SHOWN_KEY,
@@ -16,7 +18,6 @@ import {
   parseLastShownAt,
   shouldRestartQuietly,
   shouldShowUpdateNotice,
-  updateAction,
 } from "@/lib/pwa/appUpdateNotice";
 
 /**
@@ -57,6 +58,19 @@ const CHECK_INTERVAL_MS = 5 * 60_000;
 const QUIET_PROBE_INTERVAL_MS = 15_000;
 
 export function AppUpdateBanner() {
+  if (isNativeApp()) return null;
+  return isDesktopApp() ? <DesktopWebUpdateBanner /> : <PwaUpdateBanner />;
+}
+
+function PwaUpdateBanner() {
+  const update = usePwaUpdate();
+  const stillness = useStillness();
+  if (!update || (!update.available && !update.notice)) return null;
+  return <PendingUpdate registration={update.registration} stillness={stillness} update={update}/>;
+}
+
+// The accepted Windows detector/caption offer stays independent of PWA state.
+function DesktopWebUpdateBanner() {
   const [pending, setPending] = useState(false);
   const [waitingRegistration, setWaitingRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const currentBundle = useMemo(() => getCurrentBundlePath(), []);
@@ -121,9 +135,11 @@ export function AppUpdateBanner() {
 function PendingUpdate({
   registration,
   stillness,
+  update,
 }: {
   registration: ServiceWorkerRegistration | null;
   stillness: Stillness;
+  update?: PwaUpdateController;
 }) {
   const [showing, setShowing] = useState(false);
   const restarting = useRef(false);
@@ -131,6 +147,7 @@ function PendingUpdate({
   // The quiet path, tried first and then again while it stays unavailable.
   useEffect(() => {
     const attempt = () => {
+      if (update && update.phase !== "ready") return;
       if (restarting.current) return;
       const now = Date.now();
       const call = voiceCallSnapshot();
@@ -169,8 +186,11 @@ function PendingUpdate({
       // the product's to put back (`lib/voiceResume.ts`). Nothing here can be
       // in a call — `callBusy` is a veto — but the same line belongs on both
       // restart paths, and the one below can.
-      markVoiceResumeInterrupted();
-      restartOntoWaitingBuild(registration);
+      if (update) update.apply({ quiet: true });
+      else {
+        markVoiceResumeInterrupted();
+        restartOntoWaitingBuild(registration);
+      }
     };
     attempt();
     const timer = window.setInterval(attempt, QUIET_PROBE_INTERVAL_MS);
@@ -180,7 +200,9 @@ function PendingUpdate({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [registration, stillness]);
+  }, [registration, stillness, update?.phase, update?.apply]);
+
+  useEffect(() => { if (update?.phase === "failed") restarting.current = false; }, [update?.phase]);
 
   // Decided once and latched, not recomputed per render. The moment the notice
   // is shown it records the time, and a second reading of that record would
@@ -210,69 +232,8 @@ function PendingUpdate({
     if (showing && desktop) offerWebUpdate(registration);
   }, [desktop, registration, showing]);
 
-  if (!showing || desktop) return null;
-  return <UpdateNotice registration={registration} />;
-}
-
-/**
- * Split out so the call is only subscribed to while the offer is on screen.
- * Everything above this reads the call from a snapshot, which costs no render.
- */
-function UpdateNotice({ registration }: { registration: ServiceWorkerRegistration | null }) {
-  const [acknowledged, setAcknowledged] = useState(false);
-  const call = useVoiceCall();
-  const callActive = call.phase === "connected" || call.phase === "joining" || call.phase === "reconnecting";
-  const action = updateAction({ callActive, acknowledged });
-
-  const press = () => {
-    if (action === "confirm") {
-      setAcknowledged(true);
-      return;
-    }
-    // «Всё равно», pressed with a call connected: this is the second of the two
-    // cases the owner named — «обновления которые происходят насильно» — and
-    // the reload is about to end a call he agreed to end, not to abandon.
-    markVoiceResumeInterrupted();
-    restartOntoWaitingBuild(registration);
-  };
-
-  return (
-    <div
-      // The band the product already floats a notice in, below the chrome and
-      // over content. `KubFeedbackViewport` reads the same offset; D-264 says
-      // what the previous position cost.
-      className="kub-glass-strong kub-menu-in fixed left-1/2 top-[calc(var(--kub-safe-top)+6.75rem)] z-[80] flex w-[calc(100vw-1.5rem)] max-w-sm -translate-x-1/2 items-center gap-3 rounded-2xl border border-[color:var(--kub-border-color)] py-2 pl-3 pr-2"
-      role="status"
-      aria-live="polite"
-      data-testid="app-update-notice"
-      data-action={action}
-    >
-      <span className="shrink-0 text-[color:var(--kub-cyan)]" aria-hidden="true">
-        <KubIcon name="rotate" size={18} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-[color:var(--kub-text)]">
-          {action === "confirm" ? "Звонок прервётся" : "Готова новая версия"}
-        </span>
-        {/* Not `truncate`: measured at 390 and at 1440, both sentences were cut
-            mid-word inside `max-w-sm`. A notice whose own sentence does not fit
-            is the defect it exists to avoid, so the line wraps instead. */}
-        <span className="block text-xs leading-snug text-[color:var(--kub-muted)]">
-          {action === "confirm"
-            ? "Обновление отключит вас от разговора"
-            : "Применится при перезапуске"}
-        </span>
-      </span>
-      <KubButton
-        size="sm"
-        variant={action === "confirm" ? "danger" : "primary"}
-        onClick={press}
-        data-testid="app-update-restart"
-      >
-        {action === "confirm" ? "Всё равно" : "Обновить"}
-      </KubButton>
-    </div>
-  );
+  if ((!showing && !update?.notice) || desktop) return null;
+  return update ? <PwaUpdateStatusControl surface="banner" /> : null;
 }
 
 type Stillness = {

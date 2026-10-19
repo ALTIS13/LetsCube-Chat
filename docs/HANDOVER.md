@@ -1,11 +1,25 @@
 # LETSCUBE — handover
 
 **Current State, 2026-10-19:** Owner: Codex coordinator, canonical branch
-`codex/search-continuity-20261019`; follows the approved
+`codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Active owner priority: progressive loading / connection and cache diagnosis,
-with permission to fix proved causes and apply safe necessary migrations.
-[Current investigation and next actions](operations/2026-10-19-connection-performance.md).
+Latest owner priority: fluid navigation/message scrolling, understandable native
+Android/PWA updates and signed-in changelog access.
+[Current work, ownership and acceptance](operations/2026-10-19-ui-motion-and-updates.md).
+Stage: final source frozen; Android0.1.31/build32 build/device/release next.
+Continued/first-prepend reader intent is repaired; helper24, new/active browser8,
+pane4, catalog/settings86, final PWA31 and native UI28 checks pass. Native total
+headers/body deadline16 passes. Actual combined settings8, notice14 and final
+native fixed-banner geometry8 pass; exact width/theme pixels viewed. Typecheck,
+actual Vite build and mechanical UI detect pass. One older WebKit growth check
+remains inconclusive (combined9/10 then separate1/1; raw failure artifact lost),
+not a clean10/10 or an established product cause. No SQL needed.
+Next: signed build32, original Firebase/signer/assets/new-plugin verification,
+Realme31 ->32 guest/data retention and guarded publication/live parity. Positive
+native in-app32 -> next33 is a natural-next-release gate, not already proven.
+Do not replay previous accepted cohorts or touch A063.
+
+**Released baseline:** [connection/cache release](operations/2026-10-19-connection-performance.md).
 Six reviewed repairs are RELEASED at product `1ef85b8f`: Auth `815f8009`, history `1096bd03`,
 retry ownership `62fbc102`, PWA navigation `0b79f63b`, mounted-avatar signing and
 metadata retry `9c106e94`, finite Storage signing JSON `921612f8`.

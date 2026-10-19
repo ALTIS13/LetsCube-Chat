@@ -26155,3 +26155,34 @@ peer review pass; pins match and no P1/P2. Released on web/product `1ef85b8f` an
 Android Stable31. Controlled Node transport/stream proof is not live Storage/RLS or
 physical route-change acceptance.
 [Cause, pins and verification](operations/2026-10-19-connection-performance.md#storage-signing-json-d-382--r6).
+
+## D-383 `[ ]` Prepend settling takes ownership back from continuing scroll
+
+**Cause:** the older-history hold repeatedly restores its anchor while momentum
+continues without another touchstart. A message commit before the native scroll
+event can also overwrite the ownership token. Actual browser RED shows twelve
+scroll steps making zero progress and a separate24px commit rollback.
+Both layout writes, scroll delivery and RAF correction now check ownership first;
+legitimate layout growth/clamping still corrects. Helper17 (four loaded mutants),
+affected Chromium/WebKit6 and prior entry/retry checks pass. Release pending.
+[Current work](operations/2026-10-19-ui-motion-and-updates.md).
+
+## D-384 `[ ]` Android APK download is handed to a browser without completion state
+
+**Cause:** an external artifact anchor and2500ms handoff message cannot know
+download completion or offer installation. Native private streaming, persisted
+partial/ready state, strict source/hash/identity checks and explicit system
+installation replace this handoff. PWA also gains visible checking/restarting/
+retry and a consumed new-document success receipt. Native safety/integration and
+physical acceptance are in progress; no silent-install or completed device claim.
+[Current work](operations/2026-10-19-ui-motion-and-updates.md).
+
+## D-385 `[ ]` Release catalog JSON can hold the new changelog loading forever
+
+**Cause:** the old5s deadline ended at headers, before the body. A held200 JSON
+response left the consumer loading and Retry disabled. The same deadline now
+owns the full JSON read, preserving stale fallback, cancellation and retry.
+Actual RED and86 affected checks pass; independent review is clean. Signed-in
+Settings now exposes lazy searchable "Что нового" with real latest-release data,
+without inventing an archive. Release pending.
+[Current work](operations/2026-10-19-ui-motion-and-updates.md).

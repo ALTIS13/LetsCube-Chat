@@ -208,6 +208,142 @@ test.describe("the anchor through an older-history load", () => {
     ).toBeLessThanOrEqual(3);
   });
 
+  test("continued scrolling after a prepend is not taken back by its settling hold", async ({ page }) => {
+    const container = await openConversation(page);
+    await container.dispatchEvent("wheel", { deltaY: -1 });
+    await delayOlderPages(page, 300);
+    await container.evaluate((node) => {
+      const el = node as HTMLElement;
+      el.scrollTop = 120;
+      const state = { started: false, finished: false, steps: 0, start: 0, final: 0 };
+      (window as unknown as { __prependMotion: typeof state }).__prependMotion = state;
+      let target: HTMLElement | null = null;
+      const offset = () => target!.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      const step = () => {
+        if (!state.started && el.dataset.loadingOlder === "false" && el.querySelectorAll("[data-message-id]").length > 100) {
+          const top = el.getBoundingClientRect().top;
+          target = [...el.querySelectorAll<HTMLElement>("[data-message-id]")]
+            .find(row => row.getBoundingClientRect().bottom > top + 1) ?? null;
+          if (!target) throw Error("synthetic motion anchor missing");
+          state.started = true;
+          state.start = offset();
+        }
+        if (state.started) {
+          if (state.steps === 12) {
+            state.final = offset();
+            state.finished = true;
+            return;
+          }
+          // A continuing inertial scroll emits scroll events, not a new touchstart.
+          el.scrollTop -= 12;
+          state.steps++;
+        }
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+    await container.dispatchEvent("scroll");
+    await expect.poll(() => page.evaluate(() =>
+      (window as unknown as { __prependMotion: { finished: boolean } }).__prependMotion.finished,
+    )).toBe(true);
+    const result = await page.evaluate(() =>
+      (window as unknown as { __prependMotion: { start: number; final: number; steps: number } }).__prependMotion,
+    );
+    expect(result.steps).toBe(12);
+    expect(result.final - result.start, "the user's continuing scroll must keep its movement, not be pinned to the prepend anchor").toBeGreaterThanOrEqual(120);
+  });
+
+  test("a message commit before scroll delivery does not reclaim prepend momentum", async ({ page }) => {
+    const container = await openConversation(page);
+    await container.dispatchEvent("wheel", { deltaY: -1 });
+    await delayOlderPages(page, 300);
+    await container.evaluate(async (node) => {
+      const modulePath = "/src/store/app.store.ts";
+      const { useAppStore } = await import(modulePath);
+      const el = node as HTMLElement;
+      const state = { finished: false, committed: false, scrollDelivered: false, requested: 0, actual: 0 };
+      (window as unknown as { __prependCommit: typeof state }).__prependCommit = state;
+      const step = () => {
+        if (el.dataset.loadingOlder !== "false" || el.querySelectorAll("[data-message-id]").length <= 100) {
+          requestAnimationFrame(step);
+          return;
+        }
+        const store = useAppStore.getState();
+        const chatId = store.selectedChatId!;
+        const last = store.messages[chatId].at(-1)!;
+        const onScroll = () => { state.scrollDelivered = true; };
+        el.addEventListener("scroll", onScroll, { once: true });
+        el.scrollTop -= 24;
+        state.requested = el.scrollTop;
+        const content = "Synthetic commit during prepend momentum";
+        store.updateMessage(chatId, { ...last, content });
+        queueMicrotask(() => {
+          state.committed = el.querySelector(`[data-message-id="${last.id}"]`)?.textContent?.includes(content) ?? false;
+          state.actual = el.scrollTop;
+          el.removeEventListener("scroll", onScroll);
+          state.finished = true;
+        });
+      };
+      el.scrollTop = 120;
+      requestAnimationFrame(step);
+    });
+    await container.dispatchEvent("scroll");
+    await expect.poll(() => page.evaluate(() =>
+      (window as unknown as { __prependCommit: { finished: boolean } }).__prependCommit.finished,
+    )).toBe(true);
+    const result = await page.evaluate(() =>
+      (window as unknown as { __prependCommit: { committed: boolean; scrollDelivered: boolean; requested: number; actual: number } }).__prependCommit,
+    );
+    expect(result.committed, "actual message-list commit must precede the measured result").toBe(true);
+    expect(result.scrollDelivered, "fixture must measure before native scroll delivery").toBe(false);
+    expect(Math.abs(result.actual - result.requested), "the commit must leave the reader's momentum in place").toBeLessThanOrEqual(1);
+  });
+
+  for (const movement of [0, -24]) test(`first prepend preserves pending scroll=${movement} before its first commit`, async ({ page }) => {
+    const container = await openConversation(page);
+    await container.dispatchEvent("wheel", { deltaY: -1 });
+    await delayOlderPages(page, 300);
+    await container.evaluate(async (node, movement) => {
+      const modulePath = "/src/store/app.store.ts";
+      const { useAppStore } = await import(modulePath);
+      const el = node as HTMLElement;
+      const original = useAppStore.getState().setMessages;
+      const state = { finished: false, committed: false, scrollDelivered: false, publications: 0, expected: 0, actual: 0 };
+      (window as unknown as { __firstPrepend: typeof state }).__firstPrepend = state;
+      useAppStore.setState({ setMessages(chatId, rows) {
+        const current = useAppStore.getState().messages[chatId] ?? [];
+        if (state.publications || rows.length <= current.length || rows[0]?.id === current[0]?.id) return original(chatId, rows);
+        state.publications++;
+        const top = el.getBoundingClientRect().top;
+        const target = [...el.querySelectorAll<HTMLElement>("[data-message-id]")].find(row => row.getBoundingClientRect().bottom > top + 1)!;
+        const offset = () => target.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        const onScroll = () => { state.scrollDelivered = true; };
+        el.addEventListener("scroll", onScroll, { once: true });
+        el.scrollTop += movement;
+        state.expected = offset();
+        original(chatId, rows); // Actual store/React publication; only the scheduling input is instrumented.
+        queueMicrotask(() => {
+          state.committed = el.querySelectorAll("[data-message-id]").length > 100;
+          state.actual = offset();
+          el.removeEventListener("scroll", onScroll);
+          state.finished = true;
+        });
+      } });
+    }, movement);
+    await container.evaluate(node => { (node as HTMLElement).scrollTop = 120; });
+    await container.dispatchEvent("scroll");
+    await expect.poll(() => page.evaluate(() =>
+      (window as unknown as { __firstPrepend: { finished: boolean } }).__firstPrepend.finished,
+    )).toBe(true);
+    const result = await page.evaluate(() =>
+      (window as unknown as { __firstPrepend: { committed: boolean; scrollDelivered: boolean; publications: number; expected: number; actual: number } }).__firstPrepend,
+    );
+    expect(result.publications).toBe(1);
+    expect(result.committed, "actual first prepend must commit before measurement").toBe(true);
+    expect(result.scrollDelivered, "pending movement must not have reached the scroll handler").toBe(false);
+    expect(Math.abs(result.actual - result.expected), "first prepend must restore growth without erasing pending reader movement").toBeLessThanOrEqual(1);
+  });
+
   test("a settle pass of the entry does not take a reader to the bottom after their wheel let go", async ({
     page,
   }) => {

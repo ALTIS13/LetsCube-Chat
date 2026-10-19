@@ -171,7 +171,9 @@ async function stampTheme(page: Page, theme: "light" | "dark") {
 /** Announce a waiting worker the way `usePwa` does, with no worker present. */
 async function announceUpdate(page: Page) {
   await page.evaluate((name) => {
-    window.dispatchEvent(new CustomEvent(name, { detail: {} }));
+    window.dispatchEvent(new CustomEvent(name, {
+      detail: { registration: { scope: new URL("/", location.origin).href, waiting: null } },
+    }));
   }, UPDATE_READY_EVENT);
   await page.waitForTimeout(600);
 }

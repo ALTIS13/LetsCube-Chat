@@ -23,6 +23,8 @@ import { BotsPage } from "@/pages/bots/BotsPage";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import { chatAddressPath } from "@/lib/chatRoute";
 import { shellSection } from "@/lib/shellSection";
+import { usePaneArrival } from "@/hooks/usePaneArrival";
+import { AndroidUpdateBanner } from "@/components/AndroidUpdateBanner";
 
 /**
  * Top-level shell. On <md, the layout is a one-pane drawer:
@@ -45,6 +47,8 @@ export function MainLayout() {
   // section takes it the way a conversation does.
   const [location, setLocation] = useLocation();
   const section = shellSection(location);
+  const contentPane = useRef<HTMLDivElement>(null);
+  usePaneArrival(contentPane, section ?? selectedChatId ?? "welcome");
   const isMobileChatOpen = !!selectedChatId || section !== null;
   // A conversation chosen from anywhere — a row, a search result, a
   // notification — leaves the section for the conversation's own address.
@@ -137,6 +141,7 @@ export function MainLayout() {
     <AppMediaPlaybackProvider>
       <div className="flex flex-col h-app w-screen overflow-hidden px-safe" data-ios-app-shell="">
         <DesktopUpdatePill />
+        <AndroidUpdateBanner />
         {/* Somebody calling, or being called. Outside the shell below rather than
             inside a pane, because it belongs to no conversation: a ring reaches
             every device the person is signed in on and has to be answerable from
@@ -252,6 +257,7 @@ export function MainLayout() {
             <ChatListResizer />
 
             <div
+              ref={contentPane}
               className={cn(
                 "flex-1 h-full overflow-hidden",
                 isMobileChatOpen ? "flex" : "hidden md:flex",

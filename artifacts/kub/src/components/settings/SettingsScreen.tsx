@@ -33,6 +33,8 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { getCurrentDistributionTarget, isNativeAndroid } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
+import { SettingsChangelog } from "@/components/settings/SettingsChangelog";
+import { PwaUpdateStatusControl } from "@/components/PwaUpdateStatusControl";
 import { StorageSection } from "@/components/settings/StorageSection";
 import { WindowsStartupSection } from "@/components/settings/WindowsStartupSection";
 import { IosCallsSection } from "@/components/settings/IosCallsSection";
@@ -122,7 +124,7 @@ const MESSAGE_PREVIEW_OPTIONS: ReadonlyArray<{ value: MessagePreviewChoice; labe
 ];
 
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application" | "blocked" | "devices" | "status" | "phone-search" | "message-preview";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "changelog" | "blocked" | "devices" | "status" | "phone-search" | "message-preview";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -1110,7 +1112,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               onToggle={toggleSection}
             >
               <div className="space-y-3">
-                <ReleaseDistributionSection />
+                <ReleaseDistributionSection onBeforeInstall={requestClose} />
+                <PwaUpdateStatusControl onBeforeApply={requestClose} />
                 <a
                   href={`${import.meta.env.BASE_URL || "/"}open-source.html`}
                   target="_blank"
@@ -1136,6 +1139,18 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
                     sentence rather than a setting. */}
                 <IosCallsSection />
               </div>
+            </DisclosureRow>
+          )}
+          {shows("changelog") && (
+            <DisclosureRow
+              id="changelog"
+              icon="clock"
+              title="Что нового"
+              value="Последний выпуск"
+              open={openSections.has("changelog")}
+              onToggle={toggleSection}
+            >
+              <SettingsChangelog />
             </DisclosureRow>
           )}
         </SettingsGroup>
@@ -1172,7 +1187,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
       profile: ["name", "username", "bio", "phone", "decoration"].some((id) => shows(id as SettingsRowId)),
       notifications: ["push", "push-messages", "push-tasks", "push-invites"].some((id) => shows(id as SettingsRowId)),
       privacy: ["presence", "blocked", "devices"].some((id) => shows(id as SettingsRowId)),
-      application: ["theme", "message-text-size", "audio", "updates"].some((id) => shows(id as SettingsRowId)),
+      application: ["theme", "message-text-size", "audio", "updates", "changelog"].some((id) => shows(id as SettingsRowId)),
       service: shows("admin"),
     };
 

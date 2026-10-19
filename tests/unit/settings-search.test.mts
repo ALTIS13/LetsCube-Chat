@@ -33,13 +33,20 @@ const STAFF = { isStaff: true };
 
 const idsOf = (rows: readonly { id: SettingsRowId }[]) => rows.map((row) => row.id);
 
+test("signed-in release notes are reachable by their name and history vocabulary", () => {
+  for (const query of ["что нового", "история обновлений", "журнал изменений", "changelog"]) {
+    assert.deepEqual(idsOf(matchSettingsRows(query, EVERYONE)), ["changelog"], query);
+  }
+  assert.equal(settingsSearchResult("что нового", EVERYONE).sections[0], "application");
+});
+
 test("an empty query is the whole screen, in the order the screen draws it", () => {
   const all = matchSettingsRows("", EVERYONE);
   assert.deepEqual(idsOf(all), [
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
     "status", "phone-search", "presence", "forward-origin", "blocked", "devices",
-    "theme", "message-text-size", "audio", "updates",
+    "theme", "message-text-size", "audio", "updates", "changelog",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
   // screen it is meant to narrow.
@@ -200,7 +207,7 @@ test("the catalogue is not handed out for mutation", () => {
   // joined it (tracker item 74). The number is the point of
   // this line — a row that vanishes is invisible — so it is moved
   // deliberately rather than widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 20);
+  assert.equal(SETTINGS_ROWS.length, 21);
 });
 
 test("phone findability is reachable by the question a person brings to settings", () => {

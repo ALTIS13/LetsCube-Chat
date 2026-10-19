@@ -182,13 +182,12 @@ export function createReleaseCatalogClient(options: ReleaseCatalogClientOptions 
       }
 
       try {
-        const response = await fetchWithTimeout(
+        const payload = await fetchJsonWithTimeout(
           fetchImpl,
           getReleaseManifestUrl(platform, channel, baseUrl),
           timeoutMs,
         );
-        if (!response.ok) throw new ReleaseCatalogError("network_status");
-        const manifest = parseReleaseManifest(await response.json(), platform, channel);
+        const manifest = parseReleaseManifest(payload, platform, channel);
         const snapshot = { manifest, fetchedAt: currentTime };
         writeCache(storage, cacheKey, snapshot);
         return { ...snapshot, source: "network", stale: false };
@@ -320,24 +319,35 @@ function writeCache(
   }
 }
 
-async function fetchWithTimeout(fetchImpl: FetchLike, url: string, timeoutMs: number) {
+async function fetchJsonWithTimeout(fetchImpl: FetchLike, url: string, timeoutMs: number): Promise<unknown> {
   const controller = new AbortController();
+  let response: Response | null = null;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timeoutId = setTimeout(() => {
-      controller.abort();
       reject(new ReleaseCatalogError("network_timeout"));
+      controller.abort();
     }, timeoutMs);
   });
   try {
     return await Promise.race([
-      fetchImpl(url, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      }),
+      (async () => {
+        response = await fetchImpl(url, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+        if (!response.ok) throw new ReleaseCatalogError("network_status");
+        // Headers alone do not complete a manifest: the same budget owns JSON.
+        return await response.json();
+      })(),
       timeout,
     ]);
+  } catch (error) {
+    controller.abort();
+    const unread = response as Response | null;
+    if (unread?.body && !unread.bodyUsed) void unread.body.cancel().catch(() => undefined);
+    throw error;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
