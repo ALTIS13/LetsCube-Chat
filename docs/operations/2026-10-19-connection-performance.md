@@ -1,22 +1,11 @@
 # Connection And Cache Performance
 
 Owner: Codex coordinator. Branch `codex/search-continuity-20261019`, source
-parent `563a2532`. Stage: source frozen, independent reviews accepted; unpushed,
-unbuilt and not released.
-Review caught a new mixed-history privacy regression before rollout; the safe
-current-page result repair now passes101 affected checks and final peer review.
-Avatar/signing capacity plus the review-discovered metadata-failure retry repair
-passes132 affected checks and final peer review. R6/D-382 finite Storage signing
-JSON passes23 new plus51 adjacent checks and clean peer review. A WebKit fixture
-also mounted before Auth initialization; its generation0 ->1 control is separate
-from a product Auth defect. Four selected cases pass after its initialization
-barrier. The fresh frozen consumer matrix passes 32/32 in Chromium and WebKit,
-390/1440, dark/light, including signing refusal and broken variants. Exact
-WebKit avatar/monogram pixels were inspected. Final typecheck/diff checks pass.
-The owner explicitly authorizes
-implementation and safe necessary migrations. No SQL mutation is currently
-justified. Next: guarded signed Android build, Realme upgrade/data-retention
-smoke, publication and exact live verification; reuse accepted bounded evidence.
+parent `563a2532`. Stage: six reviewed repairs RELEASED as product `1ef85b8f`,
+web build `9e82c0d67b28ed43` and Android Stable 0.1.30/build31.
+[Exact release evidence and limits](#release).
+No SQL mutation was justified or applied. This closes the proved D-377--D-382
+defects, not every possible daily slowdown or the whole synchronization stage.
 
 ## Separate Causes From Hypotheses
 
@@ -57,7 +46,7 @@ followed by the additional caller-cancellation RED/GREEN and final worker22/22;
 real built controlled PWA with a local blackholed navigation and server-observed
 read cancellation passes Chromium and WebKit2/2. All fixture servers/contexts
 close; no Auth, backend mutations, device or rental involved. New behavior is
-source-tested, not yet production acceptance or the sole explanation of the
+source-tested; deployment is verified below, not a sole explanation of the
 owner's daily slowdown.
 
 ## Trusted History Verification
@@ -120,8 +109,8 @@ checks pass. Final independent review finds no P1/P2 and pins match:
 `deadlineFetch.ts` SHA256 `577ad9b83aa149c7d782906f1751c241e24f8c29edc787d7822159565bb682b5`.
 [Focused SDK tests](../../tests/unit/storage-signing-deadline-20261019.test.mjs).
 This is actual SDK with controlled Node fetch/stream/clock leaves, not live
-Storage/RLS, browser route-change or media-transfer acceptance. Source frozen;
-not built, pushed or released.
+Storage/RLS, browser route-change or media-transfer acceptance. Deployment is
+verified below.
 
 ## Retry Ownership
 
@@ -161,8 +150,62 @@ mounted React/source checks with controlled SDK/transport/clock, not live
 failure-rate/latency. The final frozen browser consumer matrix passes 32/32 in
 Chromium/WebKit at 390/1440, both themes; one metadata read and zero forbidden
 public requests remain literal assertions. WebKit ready/refusal pixels were
-inspected. Earlier111 readiness is superseded by132; source frozen,
-unbuilt/unpushed/unreleased.
+inspected. Earlier111 readiness is superseded by132. The fixture now waits for
+the synthetic account/profile/signing generation before mounting its independent
+avatar consumer; its former generation0 ->1 duplicate query was not an Auth bug.
+A stale Vite HMR run remains a failed fixture run, not accepted evidence. Final
+32/32 acceptance uses a fresh loopback-only Vite on frozen source; it is stopped.
+
+## Release
+
+Product source `1ef85b8fdf47b1e68b1c2acebeae205eac358e25` follows the seven reviewed
+commits from `563a2532`; all own-tree aliases resolve. Final typecheck and diff
+checks pass. No dependency, production configuration, SQL or RLS change.
+
+The signed Android build reports `sw.js build b653e86183abf91c`, Vite11.74s,
+Gradle31s. Original signer, four Firebase resources, release flags, secret scan,
+42 web files, APK/AAB asset and native DEX parity pass. APK7,792,777 bytes,
+SHA256 `880651f5c3c94da44d63314ac4d2d9986ec737b765fdbbb5aec2a6598922e7b9`;
+AAB7,425,495 bytes, SHA256
+`330050f8254f10f0ff7dbe0d0614a17d1a4af81fce1dc9d8c74f9e29cce12907`.
+Actual Realme 0.1.29/30 ->0.1.30/31 in-place retains UID/data/firstInstall,
+opens the guest UI and reports zero fatal crashes. The first guarded invocation
+refused the locked screen before installation; normal nonsecure keyguard dismiss
+then permits the single upgrade. No PIN, clear/uninstall or A063 access.
+
+The existing publisher stages and activates Stable31 under its lock with exact
+old-catalog/artifact CAS and byte-checked rollback. Separate HTTPS streaming at
+05:16:40Z confirms the entire public APK length/SHA above, mandatory=false and
+previous Stable30 retained. Guest startup is not signed-in long-session,
+transient-network, FCM/provider or all-platform physical acceptance.
+
+Web deployment finishes at05:18:57Z. At05:19:27Z sole-healthy image is
+`l64kyyu1sysev2izzjjbizhe:1ef85b8fdf47b1e68b1c2acebeae205eac358e25`, build
+`9e82c0d67b28ed43`, entry `/assets/index-BMWVkHuq.js`. Public/container SHA256
+parity passes for HTML/JS/SW; JS SHA256
+`150cde901fe8bf875b6d2625364d105e53891aa065b98916a172ddc993f4c812`, SW
+`d33a4e2f106a1b89a8e8b9b5473d43c0982415a6357d5283d78c3fccfe1f9fde`.
+The new navigation deadline marker is absent from old563 source, present in the
+release source and the actual public worker. Windows remote renderer and shared
+iPhone PWA receive the web change; Windows shell0.2.14 remains unchanged/unsigned,
+and this is not a native Apple release or physical iPhone latency claim.
+
+One natural production HTTPS canary uses the actual installed SDK and the
+unmodified final deadline adapter: owned QA login HTTP200/299ms, same-SID refresh
+HTTP200/200ms, SDK getSession success, exact own-profile read HTTP200/56ms. The
+server confirms the new SID active; no pre-cleanup SIGNED_OUT/false logout occurs.
+One local-only logout returns204 and exact read-only reconciliation confirms
+the new SID absent, older sessions/target unchanged. No tokens persisted,
+message queries, Storage requests, personal captures or Auth session held.
+
+The immutable strict receipt is nevertheless `FAIL_CANARY_CLEANUP_PASS`:
+a process-wide console.error counter saw one call whose arguments were discarded
+for privacy, and the separate adapter waiting count was not captured. Thus
+natural Auth/read completion and cleanup are established, but diagnostic-clean
+overall PASS is NOT. No failure source is identified; do not attribute it to the
+SDK/product, rewrite the receipt, rerun login merely for green, or silently drop
+the oracle. Final reconciliation is retained at ignored
+`performance-20261019/natural-auth-1ef85b8f-9d61/final-review.md`.
 
 ## Other Candidates And Evidence
 
@@ -176,6 +219,9 @@ unbuilt/unpushed/unreleased.
   preserve RLS, current verdicts and read-deadline semantics, with migration
   backup/rehearsal if needed; increasing parallelism or dropping checks is not
   accepted as a substitute. This release does not claim that cost is removed.
+- A future changed-input diagnostic should safely classify that one console
+  signal and independently record adapter waiting state, without retaining raw
+  SDK arguments or treating successful operations as an overall clean run.
 
 Ignored aggregate receipts and bounded worker notes:
 `.ops-private/performance-20261019/`. Public source/test changes are reviewed

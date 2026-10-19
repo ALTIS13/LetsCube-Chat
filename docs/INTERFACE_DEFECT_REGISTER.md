@@ -26072,49 +26072,52 @@ Subsequent one-shot Web Audio complete-input decode returns correct mono48k /
 bounded PCM-bridge candidate, not successful trimming, safe arbitrary-file
 memory bounds or a shipped fallback. Context/port/server/browser cleanup pass.
 
-## D-377 `[~]` Cached PWA launch waits indefinitely for blackholed navigation
+## D-377 `[x]` Cached PWA launch waits indefinitely for blackholed navigation
 
 **Cause:** network-first navigation falls back only on fetch rejection. An
 online-but-stranded request never permits the complete saved build to boot.
 The source repair bounds the header wait at2500ms, aborts the abandoned fetch,
 preserves caller cancellation and the fast-network/build-identity paths. Actual
 worker RED/GREEN,22 worker checks and built Chromium/WebKit navigation pass.
-Not yet released; streaming-body stalls are outside this claim.
+Released on web/product `1ef85b8f` and Android Stable31. Streaming-body stalls
+are outside this claim.
 [Current performance work](operations/2026-10-19-connection-performance.md).
 
-## D-378 `[~]` One fresh message rechecks all live-verified held privacy IDs
+## D-378 `[x]` One fresh message rechecks all live-verified held privacy IDs
 
 **Cause:** all-or-nothing privacy proof expands a1000-held/one-new case to11
 hidden-table requests. Review catches a known-hidden/remount regression in the
 first candidate before release. Proof alone is not a cached hidden verdict.
 The revised repair rechecks the current page plus untrusted held IDs: still1
 request, no new hidden-state cache. Remount/reply/refusal controls,101 affected
-checks and4 targeted omissions pass; final peer re-review passes. Release pending.
+checks and4 targeted omissions pass; final peer re-review passes. Released on
+web/product `1ef85b8f` and Android Stable31.
 Lost trust and reply uncertainty still obtain authoritative answers.
 This is compiled-hook executor evidence, not actual tester traffic/latency.
 [Current performance work](operations/2026-10-19-connection-performance.md).
 
-## D-379 `[~]` Auth headers retire the deadline while its JSON body holds the queue
+## D-379 `[x]` Auth headers retire the deadline while its JSON body holds the queue
 
 **Cause:** the SDK consumes Auth JSON after the adapter has already retired its
 deadline. A held200/400/401 refresh body retains queued session/API work.
 The source repair receives finite Auth JSON inside the original30s fetch budget,
 so timeout stays retryable without artificial logout. Complete invalid-token
 handling, PostgREST and file transfers remain unchanged. Actual SDK51 affected checks,
-Chromium/WebKit8 HTTP cases and independent source review pass; not released.
+Chromium/WebKit8 HTTP cases and independent source review pass. Released on
+web/product `1ef85b8f` and Android Stable31.
 [Current performance work](operations/2026-10-19-connection-performance.md).
 
-## D-380 `[~]` Retry timers survive replaced sanction reads and hook retirement
+## D-380 `[x]` Retry timers survive replaced sanction reads and hook retirement
 
 **Cause:** failed Ban/Mute reads overwrite the last retry handle without clearing
 the previous timer. A later success/unmount leaves orphan reads; bursts also
 start overlapping requests. Four mounted REDs precede one owned timer/read lane
 plus trailing refresh repair.33 mounted/omission and8 pure checks pass; two peer
-source reviews find no new P1/P2. Release pending; no change to sanctions, RLS or
-database contents.
+source reviews find no new P1/P2. Released on web/product `1ef85b8f` and Android
+Stable31; no change to sanctions, RLS or database contents.
 [Current performance work](operations/2026-10-19-connection-performance.md).
 
-## D-381 `[~]` Historical avatar projection feeds signed-cache eviction back into demand
+## D-381 `[x]` Historical avatar projection feeds signed-cache eviction back into demand
 
 **Cause:** every signature emission projects all historical avatar rows and
 requests missing URLs, even with no mounted consumers. Above512 signed objects,
@@ -26130,11 +26133,11 @@ erase a known avatar. Final metadata source SHA256
 `fc9e24f280fc48ec6daf1ba37525691bdc4043584afdc59487cdd1fe9b07c95d`.
 Final132/132 affected checks and Nash peer review pass, no P1/P2. This is mounted
 React/source evidence with controlled transport, not tester latency. Source
-frozen, unpushed/unbuilt/unreleased. Fresh final Chromium/WebKit consumer matrix
+released on web/product `1ef85b8f` and Android Stable31. Fresh Chromium/WebKit consumer matrix
 passes 32/32 at 390/1440 in both themes; exact WebKit pixels inspected.
 [Cause, pins and verification](operations/2026-10-19-connection-performance.md#avatar-signing-and-metadata-retry-d-381).
 
-## D-382 `[~]` A signing POST is treated as an unbounded Storage file transfer
+## D-382 `[x]` A signing POST is treated as an unbounded Storage file transfer
 
 **Cause:** `createSignedUrl(s)` POSTs finite JSON, but every `/storage/v1/` route
 was unbounded and body ownership retired at headers. Actual installed Storage
@@ -26148,7 +26151,7 @@ Completed403 status/code/message and per-path refusal remain distinct from
 transport failure; metadata/clones and caller abort remain intact. Signed GET,
 upload and upload-sign retain unbounded streaming, with no transfer deadline.
 Actual SDK23 new checks plus51 adjacent checks, typecheck and final independent
-peer review pass; pins match and no P1/P2. Source frozen, unpushed/unbuilt and not
-released. Controlled Node transport/stream proof is not live Storage/RLS or
+peer review pass; pins match and no P1/P2. Released on web/product `1ef85b8f` and
+Android Stable31. Controlled Node transport/stream proof is not live Storage/RLS or
 physical route-change acceptance.
 [Cause, pins and verification](operations/2026-10-19-connection-performance.md#storage-signing-json-d-382--r6).

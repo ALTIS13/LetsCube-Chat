@@ -6,35 +6,38 @@
 Active owner priority: progressive loading / connection and cache diagnosis,
 with permission to fix proved causes and apply safe necessary migrations.
 [Current investigation and next actions](operations/2026-10-19-connection-performance.md).
-Six reviewed repairs are committed locally: Auth `815f8009`, history `1096bd03`,
+Six reviewed repairs are RELEASED at product `1ef85b8f`: Auth `815f8009`, history `1096bd03`,
 retry ownership `62fbc102`, PWA navigation `0b79f63b`, mounted-avatar signing and
 metadata retry `9c106e94`, finite Storage signing JSON `921612f8`.
 History passes 101 affected +4 targeted checks; avatar passes 132; finite signing
 JSON passes 23 new +51 adjacent. Independent reviews are clean. Fresh frozen
 Chromium/WebKit consumer matrix passes 32/32 at 390/1440 in both themes; exact
 WebKit avatar/monogram pixels inspected. Final typecheck and diff checks pass.
-Android 0.1.30/build31 is metadata only, not built/published. Next: guarded signed
-build, Realme upgrade/data-retention smoke, publication and exact live content
-verification. No SQL mutation justified. Resume before AAC/media.
-Stage: product `a02be032` is RELEASED on sole-healthy web/build
-`a7d03335f07b562b` and Android Stable0.1.29/build30. D375 search continuity and
-pending-touch retirement pass18 checks, affected WebKit cases, final TSC/review
-and exact pixels. Public/container boot/editor assets and changed search markers
-pass. Original signer/Firebase/assets, Realme29 ->30 guest/UID/data/firstInstall
-and full public APK hash pass at21:30:24Z; mandatory=false, rollback29 retained.
-[Release](operations/2026-10-19-search-continuity.md#release).
-Prior pre-send editors/D374 are also released; no raw original fallback after a
-failed edit. Topic enforcement remains ON at its accepted18:55:56Z checkpoint;
-no SQL change in these releases. Windows remote renderer/shared iPhone PWA are
-updated; Windows shell0.2.14 unchanged, native Apple release ownership separate.
+Sole-healthy web/build `9e82c0d67b28ed43`, public/container HTML/JS/SW parity and
+new/old navigation marker pass at05:19:27Z. Android Stable0.1.30/build31 original
+signer/Firebase/assets, Realme30 ->31 guest/UID/data/firstInstall and full public
+APK hash pass at05:16:40Z; mandatory=false, rollback30 retained. No SQL change.
+The synthetic capacity/history cases do not establish every tester's daily
+latency cause. Full lost-trust privacy verification still scales with history;
+long-session/physical adverse-network acceptance is not claimed complete.
+The earlier [D375 search release](operations/2026-10-19-search-continuity.md#release)
+and pre-send editors/D374 remain accepted. Topic enforcement remains ON at its
+accepted18:55:56Z checkpoint. Windows remote renderer/shared iPhone PWA receive
+the web change; Windows shell0.2.14 stays unsigned/unchanged, native Apple separate.
+Natural HTTPS owned Auth/login/refresh/own-profile reads and exact SID cleanup
+pass; strict diagnostic cleanliness is INCONCLUSIVE (one unclassified console
+signal, waiting count not recorded). Original FAIL receipt is preserved; no
+product failure established or login replay. Keep this bounded diagnostic and
+lost-trust scaling open, not a reason to repeat accepted cohorts.
 Next: Task3 physical receive/open/native-save/hash, whose existing pieces and
 safe boundaries are mapped; D376 bounded AAC compatibility bridge design.
 Realme browser WebCodecs AAC fails from zero and trim-start, while one complete-
 input Web Audio decode actually returns correct PCM/three tones. This is a
 feasibility result, NOT an implemented safe fallback or Capacitor trim proof.
 [Media scope and limits](operations/2026-10-18-media-editor.md#remaining-media-workflows).
-All owned browsers/contexts/port mappings are cleaned up, phone HOME; no QA
-Auth/group/controller/rental held. D356 remaining actions, Nikita intake and the
+Owned fixture browsers/contexts/port5187 are cleaned up, phone HOME; no Auth,
+group, controller or rental held.
+D356 remaining actions, Nikita intake and the
 other completion streams stay open. Reuse accepted evidence; do not replay old
 cohorts or rebuild native artifacts for documentation-only commits.
 

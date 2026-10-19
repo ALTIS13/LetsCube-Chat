@@ -43,7 +43,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK30 and rollback29 are immutable; use the next version/build
+  parity. Published APK31 and rollback30 are immutable; use the next version/build
   for new code.
 
 ## Review Focus
@@ -60,6 +60,15 @@ this document coordinates their remaining deliverables, not a replacement design
    duplicate effects or misleading delivery/read state (Tasks2/7/10).
 
 ## Accepted Baseline (Reuse)
+
+- [x] D-377--D-382 connection/cache repairs released on product `1ef85b8f`, sole-
+  healthy web/build `9e82c0d67b28ed43` and Android Stable0.1.30/build31. History
+  101+4, avatars132, finite signing23+51, fresh Chromium/WebKit32/32 and peer
+  reviews pass. Original signer/Firebase/assets, Realme30 ->31 guest/data
+  retention, public/container web parity and entire public APK hash pass.
+  Mandatory=false; rollback30 retained. No SQL change, physical iPhone latency
+  or complete long-session acceptance claimed.
+  [Current performance release and remaining costs](../../operations/2026-10-19-connection-performance.md#release).
 
 - [x] Web sender/text, sender-only, none and exact activation on installed iPhone
   PWA; ordinary Android23 FCM/read/tap/logout; owned QA resources retired.

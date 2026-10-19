@@ -696,14 +696,20 @@ rollback and device/provider acceptance gates remain mandatory.
    storage tests, do not treat the complete synchronization stage as closed.
    New owner-priority performance work D-377--D-382 separates finite navigation/
    Auth/signing waits, mixed-history privacy amplification, orphan retry work and
-   signed avatar-cache feedback. Source is frozen and peer-reviewed, not yet
-   built, pushed or released. D-381 `[~]` final132 affected checks include the
+   signed avatar-cache feedback. These six defects are `[x]` RELEASED at product
+   `1ef85b8f`, web build `9e82c0d67b28ed43`, Android Stable0.1.30/build31.
+   D-381 final132 affected checks include the
    pinned30000ms metadata cooldown and owned retry/cleanup repair; final peer
-   review is clean. D-382 `[~]` newly proves finite signing POST waits:23 new plus
+   review is clean. D-382 proves finite signing POST waits:23 new plus
    51 adjacent SDK/transport checks and clean peer review, with file transfers
    still unbounded. Fresh final Chromium/WebKit consumer matrix passes 32/32 at
    390/1440 in both themes; exact WebKit pixels inspected. No blanket daily
-   slowdown attribution or SQL tuning.
+   slowdown attribution or SQL tuning. Realme30 ->31 retains data and opens guest;
+   sole-healthy web/public parity and full public APK hash pass. The complete
+   synchronization/long-session stage and lost-trust bulk privacy read stay open.
+   Natural actual HTTPS Auth/refresh/profile and exact new-SID retirement pass;
+   the strict diagnostic receipt remains FAIL for one unattributed console signal
+   and an unrecorded waiting count. Preserve it; no product failure established.
    [Checkpoint, pins and limits](operations/2026-10-19-connection-performance.md).
 3. `[~]` Notifications76-77,95: iPhone PWA sender/text modes and exact tap are
    accepted and enabled; fresh Android23 useful FCM/none/tap/logout is accepted.
