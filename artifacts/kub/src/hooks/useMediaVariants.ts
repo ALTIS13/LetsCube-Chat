@@ -24,6 +24,8 @@ import { readOriginalPreview } from "@/lib/mediaCompression";
 import { variantMediaObjectRef } from "@/lib/media/mediaObjectRef";
 import {
   mediaObjectUrl,
+  mediaUrlMode,
+  publicMediaObjectUrl,
   requestMediaObjectUrl,
   signedMediaUrls,
   variantMediaUrl,
@@ -452,77 +454,24 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
     () => profileIdKey ? profileIdKey.split("|") : [],
     [profileIdKey],
   );
-  const [variantsByProfileId, setVariantsByProfileId] = useState<Record<string, AvatarVariantUrls>>({});
-  /** The last answer's rows, so a renewed signature needs no second query (D-208). */
-  const rowsRef = useRef<MediaVariant[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (normalizedProfileIds.length === 0) {
-      rowsRef.current = [];
-      setVariantsByProfileId({});
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const supabase = createClient();
-
-    const loadVariants = async () => {
-      const { data, error } = await supabase
-        .from("media_variants")
-        .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status,updated_at")
-        .eq("status", "ready")
-        .in("variant_kind", [...AVATAR_VARIANT_KINDS])
-        .in("profile_id", normalizedProfileIds);
-
-      if (cancelled) return;
-      if (error) {
-        console.warn("Avatar variants fetch failed.");
-        rowsRef.current = [];
-        setVariantsByProfileId({});
-        return;
-      }
-
-      rowsRef.current = (data ?? []) as unknown as MediaVariant[];
-      setVariantsByProfileId(projectAvatarVariantRowsByProfile(rowsRef.current));
-    };
-
-    void loadVariants();
+  const subscribe = useCallback((listener: () => void) => {
+    const releases = normalizedProfileIds.map((id) => avatarVariants.retain(id));
+    const unsubscribe = avatarVariants.subscribe(listener);
     return () => {
-      cancelled = true;
+      unsubscribe();
+      for (const release of releases) release();
     };
-  }, [profileIdKey]);
-
-  // This hook asks once per set of ids and then stops, so without this a
-  // renewed signature would never reach the chat list, the chat header or the
-  // sender avatars beside a message. Same rule as the shared store's
-  // `reproject`: re-derive from rows already held, and keep the previous object
-  // when nothing changed so React can bail out.
-  useEffect(() => signedMediaUrls().subscribe(() => {
-    const next = projectAvatarVariantRowsByProfile(rowsRef.current);
-    setVariantsByProfileId((current) =>
-      sameAvatarVariantRecord(current, next) ? current : next
-    );
-  }), []);
-
-  return variantsByProfileId;
-}
-
-function projectAvatarVariantRowsByProfile(rows: MediaVariant[]): Record<string, AvatarVariantUrls> {
-  const byProfile = new Map<string, MediaVariant[]>();
-  for (const row of rows) {
-    if (!row.profile_id) continue;
-    const bucket = byProfile.get(row.profile_id);
-    if (bucket) bucket.push(row);
-    else byProfile.set(row.profile_id, [row]);
-  }
+  }, [normalizedProfileIds]);
+  for (const id of normalizedProfileIds) avatarVariants.request(id);
+  useSyncExternalStore(subscribe, avatarVariants.getRevision, () => 0);
+  const previous = useRef<Record<string, AvatarVariantUrls>>({});
   const next: Record<string, AvatarVariantUrls> = {};
-  for (const [profileId, profileRows] of byProfile) {
-    const projected = projectAvatarVariantRows(profileRows);
-    if (projected) next[profileId] = projected;
+  for (const id of normalizedProfileIds) {
+    const answer = avatarVariants.get(id);
+    if (answer && avatarVariantRowsByProfileId.has(id)) next[id] = answer;
   }
-  return next;
+  if (!sameAvatarVariantRecord(previous.current, next)) previous.current = next;
+  return previous.current;
 }
 
 function sameAvatarVariantRecord(
@@ -537,17 +486,48 @@ function sameAvatarVariantRecord(
 /**
  * The shared avatar-variant store, wired to Supabase.
  *
- * `useAvatarVariantUrls` above still exists for the surfaces that already know
- * their whole list of profiles up front. This store is for the avatars that do
- * not: it lets each one ask for itself, and turns a screenful of asking into a
- * single query. See `lib/avatarVariantStore`.
+ * Bulk and individual hooks share rows, answers and mounted signing demand.
  */
 const avatarVariantRowsByProfileId = new Map<string, MediaVariant[]>();
 const avatarVariantRowsByChatId = new Map<string, MediaVariant[]>();
 
-const avatarVariants = createAvatarVariantStore((profileIds) =>
-  fetchAvatarVariantsBy("profile_id", profileIds, avatarVariantRowsByProfileId),
-);
+let avatarSigningGeneration = signedMediaUrls().getGeneration();
+
+function createSharedAvatarVariantStore(
+  column: "profile_id" | "chat_id",
+  rowsByOwnerId: Map<string, MediaVariant[]>,
+) {
+  const signingReleases = new Map<string, (() => void)[]>();
+  function releaseUrls(id: string): void {
+    for (const release of signingReleases.get(id) ?? []) release();
+    signingReleases.delete(id);
+  }
+  function retainUrls(id: string): void {
+    if (!store.isRetained(id) || mediaUrlMode() === "public") return;
+    const releases: (() => void)[] = [];
+    for (const row of rowsByOwnerId.get(id) ?? []) {
+      const ref = variantMediaObjectRef(row);
+      if (ref) releases.push(signedMediaUrls().retain(ref));
+    }
+    releaseUrls(id);
+    signingReleases.set(id, releases);
+  }
+  const store = createAvatarVariantStore(
+    (ids) => fetchAvatarVariantsBy(column, ids, rowsByOwnerId, retainUrls),
+    {
+      onRetain: retainUrls,
+      onRelease: releaseUrls,
+      onEvict(id) {
+        rowsByOwnerId.delete(id);
+        releaseUrls(id);
+      },
+      project: (id) => projectAvatarVariantRows(rowsByOwnerId.get(id)),
+    },
+  );
+  return store;
+}
+
+const avatarVariants = createSharedAvatarVariantStore("profile_id", avatarVariantRowsByProfileId);
 
 /**
  * The same store, for a chat's own picture.
@@ -558,21 +538,24 @@ const avatarVariants = createAvatarVariantStore((profileIds) =>
  * A private chat is not asked about here: the client shows the other person's
  * profile picture, which the store above already answers for.
  */
-const chatAvatarVariants = createAvatarVariantStore((chatIds) =>
-  fetchAvatarVariantsBy("chat_id", chatIds, avatarVariantRowsByChatId),
-);
+const chatAvatarVariants = createSharedAvatarVariantStore("chat_id", avatarVariantRowsByChatId);
 
 /**
  * Both avatar stores follow a renewed signature (D-208).
  *
- * Subscribed once, at module scope, because the stores are module scope: an
- * avatar that has scrolled away is still in the cache and is still the thing a
- * later render will be handed. The re-derivation is cheap and emits only when
- * an address actually changed, so in the shipped `"public"` mode — where
- * nothing is ever signed and the store below never notifies — this costs one
- * closure and nothing else.
+ * Projection is passive: only mounted leases request/renew signatures. Idle
+ * rows cannot repopulate evicted signing answers during this notification.
  */
 signedMediaUrls().subscribe(() => {
+  const generation = signedMediaUrls().getGeneration();
+  if (generation !== avatarSigningGeneration) {
+    avatarSigningGeneration = generation;
+    avatarVariantRowsByProfileId.clear();
+    avatarVariantRowsByChatId.clear();
+    avatarVariants.reset();
+    chatAvatarVariants.reset();
+    return;
+  }
   avatarVariants.reproject((id) => projectAvatarVariantRows(avatarVariantRowsByProfileId.get(id)));
   chatAvatarVariants.reproject((id) => projectAvatarVariantRows(avatarVariantRowsByChatId.get(id)));
 });
@@ -593,7 +576,11 @@ function projectAvatarVariantRows(rows: MediaVariant[] | undefined): AvatarVaria
     // An avatar variant keeps its path when the picture changes, so the URL
     // carries the moment it was written. Without that token the object could
     // not be cached for longer than it takes someone to change the picture.
-    const publicUrl = withVersionToken(getVariantUrl(row), row.updated_at);
+    const ref = variantMediaObjectRef(row);
+    const mode = mediaUrlMode();
+    const url = mode === "public" ? publicMediaObjectUrl(ref)
+      : signedMediaUrls().peek(ref) ?? (mode === "signed" ? publicMediaObjectUrl(ref) : null);
+    const publicUrl = withVersionToken(url, row.updated_at);
     if (!publicUrl) continue;
     if (row.variant_kind === "avatar_128") {
       current.avatar128Url = publicUrl;
@@ -612,7 +599,9 @@ async function fetchAvatarVariantsBy(
   column: "profile_id" | "chat_id",
   ids: string[],
   rowsByOwnerId: Map<string, MediaVariant[]>,
+  retainUrls: (id: string) => void,
 ): Promise<Record<string, AvatarVariantUrls>> {
+  const generation = avatarSigningGeneration;
   const supabase = createClient();
   let query = supabase
     .from("media_variants")
@@ -626,6 +615,7 @@ async function fetchAvatarVariantsBy(
   if (column === "chat_id") query = query.is("message_id", null);
 
   const { data, error } = await query;
+  if (generation !== avatarSigningGeneration) return {};
   if (error) throw new Error(error.message);
 
   const rows = new Map<string, MediaVariant[]>();
@@ -643,6 +633,7 @@ async function fetchAvatarVariantsBy(
     // owner with none is remembered as `NONE` by the store itself, and a
     // renewal has nothing to say about it.
     rowsByOwnerId.set(ownerId, ownerRows);
+    retainUrls(ownerId);
     const projected = projectAvatarVariantRows(ownerRows);
     if (projected) next[ownerId] = projected;
   }
@@ -680,7 +671,14 @@ function useVariantFromStore(
   store: typeof avatarVariants,
   id: string | null | undefined,
 ): { variant: AvatarVariantUrls | undefined; settled: boolean } {
-  const subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
+  const subscribe = useCallback((listener: () => void) => {
+    const release = store.retain(id);
+    const unsubscribe = store.subscribe(listener);
+    return () => {
+      unsubscribe();
+      release();
+    };
+  }, [store, id]);
   // Requested during render rather than in an effect: an effect runs after the
   // first paint, by which time an <img> falling back to the original has
   // already started downloading it, which is the whole thing being avoided.

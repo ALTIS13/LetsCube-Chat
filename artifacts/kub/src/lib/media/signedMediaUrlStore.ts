@@ -59,7 +59,7 @@ export const SIGN_FAILURE_COOLDOWN_MS = 30_000;
 /** Paths per POST. The service takes a JSON array; this keeps the body sane. */
 export const SIGN_BATCH_SIZE = 100;
 
-/** Objects remembered at once. Past this the least recently read is dropped. */
+/** Idle answers retained, in addition to the currently leased working set. */
 export const SIGN_CACHE_LIMIT = 512;
 
 export interface SignedPathResult {
@@ -108,6 +108,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
   const known = new Map<string, CacheEntry>();
   const pending = new Map<string, MediaObjectRef>();
   const inFlight = new Set<string>();
+  const retained = new Map<string, { ref: MediaObjectRef; count: number }>();
   const listeners = new Set<() => void>();
   let flushScheduled = false;
   let generation = 0;
@@ -139,6 +140,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
   }
 
   function checkClock(): void {
+    for (const { ref } of retained.values()) enqueue(ref);
     emit();
   }
 
@@ -172,8 +174,9 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
 
   function evictIfNeeded(): void {
     if (known.size <= cacheLimit) return;
-    const byAge = [...known.entries()].sort((a, b) => a[1].touchedAtMs - b[1].touchedAtMs);
-    const drop = known.size - cacheLimit;
+    const byAge = [...known.entries()].filter(([key]) => !retained.has(key))
+      .sort((a, b) => a[1].touchedAtMs - b[1].touchedAtMs);
+    const drop = byAge.length - cacheLimit;
     for (let i = 0; i < drop; i += 1) known.delete(byAge[i][0]);
   }
 
@@ -295,11 +298,44 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
     known.clear();
     pending.clear();
     inFlight.clear();
+    retained.clear();
     flushScheduled = false;
     emit();
   }
 
   return {
+    /** Passive projection must not turn historical rows into signing demand. */
+    peek(ref: MediaObjectRef | null | undefined): string | null {
+      if (!ref) return null;
+      const entry = known.get(mediaObjectRefKey(ref));
+      return entry?.url && entry.lifetime && isSignedUrlUsable(entry.lifetime, now()) ? entry.url : null;
+    },
+
+    /** A mounted consumer owns renewal and protects its answer from idle eviction. */
+    retain(ref: MediaObjectRef): () => void {
+      const key = mediaObjectRefKey(ref);
+      const retainedGeneration = generation;
+      const current = retained.get(key);
+      if (current) current.count += 1;
+      else retained.set(key, { ref, count: 1 });
+      enqueue(ref);
+      armClock();
+      let released = false;
+      return () => {
+        if (released || retainedGeneration !== generation) return;
+        released = true;
+        const entry = retained.get(key);
+        if (entry && --entry.count === 0) retained.delete(key);
+        evictIfNeeded();
+        armClock();
+      };
+    },
+
+    /** Account/reset boundary for row caches projecting this store's answers. */
+    getGeneration(): number {
+      return generation;
+    },
+
     /** A refreshed token for this account keeps its URLs; another account does not. */
     setAccount(nextAccountId: string | null): void {
       if (accountId === nextAccountId) return;

@@ -158,6 +158,18 @@ async function mountAvatar(page: Page, scenario: Scenario, theme: "dark" | "ligh
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("html")).toHaveClass(new RegExp(`\\b${theme}\\b`));
+  // DOMContentLoaded is not the app's Auth gate. Mounting an independent
+  // consumer before INITIAL_SESSION makes the later account reset invalidate
+  // its first metadata read, unlike an avatar behind the real profile gate.
+  await expect.poll(() => page.evaluate(async (userId) => {
+    const [{ useAppStore }, { signedMediaUrls }] = await Promise.all([
+      import("/src/store/app.store.ts"),
+      import("/src/lib/media/mediaUrl.ts"),
+    ]);
+    const state = useAppStore.getState();
+    return state.authSessionIdentity?.userId === userId && state.currentUser?.id === userId
+      && signedMediaUrls().getGeneration() > 0;
+  }, ME.id), { message: "the synthetic account, profile and signing generation must be initialized" }).toBe(true);
   await page.evaluate(async ({ group, original }) => {
     const main = await fetch("/src/main.tsx").then((response) => response.text());
     const imports = [...main.matchAll(/from "([^"]+)"/g)].map((match) => match[1]);

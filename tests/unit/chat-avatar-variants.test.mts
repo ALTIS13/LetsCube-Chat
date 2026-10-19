@@ -158,7 +158,8 @@ test("the avatar on screen actually asks, rather than deciding for itself", () =
     "the hook a chat avatar depends on is gone",
   );
   assert.ok(
-    /createAvatarVariantStore\(\s*\(chatIds\)/.test(hook),
+    hook.includes('createSharedAvatarVariantStore("chat_id", avatarVariantRowsByChatId)')
+      && /createAvatarVariantStore\(\s*\(ids\) => fetchAvatarVariantsBy\(column, ids, rowsByOwnerId, retainUrls\)/.test(hook),
     "chat ids are no longer batched through the shared store",
   );
 });

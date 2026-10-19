@@ -35,7 +35,18 @@ export interface AvatarVariantStoreOptions {
   schedule?: (run: () => void) => void;
   /** Ids per query. Postgrest has a URL length limit; this keeps well under it. */
   batchSize?: number;
+  /** Idle ids, in addition to the mounted working set. */
+  cacheLimit?: number;
+  now?: () => number;
+  onEvict?: (id: string) => void;
+  onRetain?: (id: string) => void;
+  onRelease?: (id: string) => void;
+  /** Passive, lifetime-aware projection of retained raw rows. */
+  project?: (id: string) => AvatarVariantUrls | undefined;
 }
+
+export const AVATAR_VARIANT_CACHE_LIMIT = 512;
+export const AVATAR_VARIANT_RETRY_MS = 30_000;
 
 /** Nothing known for this profile. Frozen so a caller cannot poison the cache. */
 const NONE: Readonly<AvatarVariantUrls> = Object.freeze({});
@@ -67,18 +78,78 @@ export function createAvatarVariantStore(
 ) {
   const schedule = options.schedule ?? ((run: () => void) => void Promise.resolve().then(run));
   const batchSize = Math.max(1, options.batchSize ?? 100);
+  const cacheLimit = Math.max(1, options.cacheLimit ?? AVATAR_VARIANT_CACHE_LIMIT);
+  const now = options.now ?? (() => Date.now());
+  const retryWindow = typeof window === "undefined" ? null : window;
 
   const known = new Map<string, AvatarVariantUrls>();
   const pending = new Set<string>();
   const inFlight = new Set<string>();
   const listeners = new Set<() => void>();
+  const retained = new Map<string, number>();
+  const failed = new Map<string, number>();
+  let retryTimer: number | null = null;
   let flushScheduled = false;
+  let generation = 0;
+  let revision = 0;
 
   function emit(): void {
+    revision += 1;
     for (const listener of [...listeners]) listener();
   }
 
-  async function flush(): Promise<void> {
+  function evictIfNeeded(): void {
+    let idle = known.size - [...retained.keys()].filter((id) => known.has(id)).length;
+    for (const id of known.keys()) {
+      if (idle <= cacheLimit) break;
+      if (retained.has(id)) continue;
+      known.delete(id);
+      options.onEvict?.(id);
+      idle -= 1;
+    }
+    let idleFailures = failed.size - [...retained.keys()].filter((id) => failed.has(id)).length;
+    for (const id of failed.keys()) {
+      if (idleFailures <= cacheLimit) break;
+      if (retained.has(id)) continue;
+      failed.delete(id);
+      idleFailures -= 1;
+    }
+  }
+
+  function clearRetry(): void {
+    if (retryTimer !== null) retryWindow?.clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+
+  function armRetry(): void {
+    clearRetry();
+    if (!retryWindow) return;
+    let nextAt = Infinity;
+    for (const [id, retryAt] of failed) {
+      if (retained.has(id)) nextAt = Math.min(nextAt, retryAt);
+    }
+    if (nextAt === Infinity) return;
+    const retryGeneration = generation;
+    const timer = retryWindow.setTimeout(() => {
+      if (retryGeneration !== generation || retryTimer !== timer) return;
+      retryTimer = null;
+      for (const [id, retryAt] of failed) {
+        if (retained.has(id) && retryAt <= now()) request(id);
+      }
+      armRetry();
+    }, Math.max(1, nextAt - now()));
+    retryTimer = timer;
+  }
+
+  function request(id: string | null | undefined): void {
+    if (!id || known.has(id) || inFlight.has(id) || pending.has(id)) return;
+    if ((failed.get(id) ?? 0) > now()) return;
+    failed.delete(id);
+    pending.add(id);
+    scheduleFlush();
+  }
+
+  async function flush(flushGeneration: number): Promise<void> {
     flushScheduled = false;
     const batch = [...pending].slice(0, batchSize);
     if (batch.length === 0) return;
@@ -89,19 +160,26 @@ export function createAvatarVariantStore(
 
     try {
       const answer = await fetcher(batch);
+      if (flushGeneration !== generation) return;
       for (const id of batch) {
+        failed.delete(id);
         // An id the answer does not mention has no variant. Recording that is
         // what stops it being asked about on every subsequent render.
         known.set(id, Object.hasOwn(answer, id) ? answer[id] : NONE);
       }
+      evictIfNeeded();
     } catch {
-      // A failure is not an answer: the ids are simply forgotten, so a later
-      // render may ask again. What must not happen is caching "none" for a
-      // network blip and serving originals for the rest of the session.
+      if (flushGeneration !== generation) return;
+      // Not NONE: keep any answer and throttle retry before notifying readers.
+      // One timer retries mounted demand; historical ids only retain a cooldown.
+      for (const id of batch) failed.set(id, now() + AVATAR_VARIANT_RETRY_MS);
+      evictIfNeeded();
     } finally {
-      for (const id of batch) inFlight.delete(id);
+      if (flushGeneration === generation) for (const id of batch) inFlight.delete(id);
     }
 
+    if (flushGeneration !== generation) return;
+    armRetry();
     emit();
     if (pending.size > 0) scheduleFlush();
   }
@@ -109,22 +187,56 @@ export function createAvatarVariantStore(
   function scheduleFlush(): void {
     if (flushScheduled) return;
     flushScheduled = true;
-    schedule(() => void flush());
+    const scheduledGeneration = generation;
+    schedule(() => {
+      if (scheduledGeneration === generation) void flush(scheduledGeneration);
+    });
   }
 
   return {
     /** Ask about a profile. Cheap and idempotent; safe to call every render. */
-    request(profileId: string | null | undefined): void {
-      if (!profileId) return;
-      if (known.has(profileId) || inFlight.has(profileId) || pending.has(profileId)) return;
-      pending.add(profileId);
-      scheduleFlush();
+    request,
+
+    retain(id: string | null | undefined): () => void {
+      if (!id) return () => {};
+      retained.set(id, (retained.get(id) ?? 0) + 1);
+      if (retained.get(id) === 1) options.onRetain?.(id);
+      request(id);
+      armRetry();
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        const count = retained.get(id);
+        if (count && count > 1) retained.set(id, count - 1);
+        else {
+          retained.delete(id);
+          pending.delete(id);
+          options.onRelease?.(id);
+          evictIfNeeded();
+          armRetry();
+        }
+      };
+    },
+
+    isRetained(id: string): boolean {
+      return retained.has(id);
+    },
+
+    getRevision(): number {
+      return revision;
     },
 
     /** What is known now. `undefined` means "not answered yet". */
     get(profileId: string | null | undefined): AvatarVariantUrls | undefined {
       if (!profileId) return undefined;
-      return known.get(profileId);
+      let current = known.get(profileId);
+      if (!current) return undefined;
+      const projected = options.project?.(profileId);
+      if (projected && !sameAvatarVariantUrls(current, projected)) current = projected;
+      known.delete(profileId);
+      known.set(profileId, current);
+      return current;
     },
 
     /**
@@ -185,13 +297,30 @@ export function createAvatarVariantStore(
       };
     },
 
-    /** Test seam. */
-    __reset(): void {
+    /** Retire old-account answers without dropping current mounted subscriptions. */
+    reset(): void {
+      generation += 1;
+      clearRetry();
+      failed.clear();
+      for (const id of known.keys()) options.onEvict?.(id);
       known.clear();
       pending.clear();
       inFlight.clear();
-      listeners.clear();
       flushScheduled = false;
+      for (const id of retained.keys()) request(id);
+      emit();
+    },
+
+    /** Test seams. */
+    __debug() {
+      return { known: known.size, retained: retained.size, pending: pending.size, inFlight: inFlight.size,
+        failed: failed.size, retryScheduled: retryTimer !== null };
+    },
+    __reset(): void {
+      for (const id of retained.keys()) options.onRelease?.(id);
+      retained.clear();
+      listeners.clear();
+      this.reset();
     },
   };
 }

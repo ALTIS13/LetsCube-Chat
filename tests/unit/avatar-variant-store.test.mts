@@ -85,18 +85,19 @@ test("a profile with no variant is remembered as having none", async () => {
   assert.equal(calls.length, 1);
 });
 
-test("a failed query is forgotten rather than cached as 'no variant'", async () => {
+test("a failed query cools down rather than being cached as 'no variant'", async () => {
   // Caching a network blip would serve 734 kB originals for the rest of the
   // session, which is exactly the defect this store exists to remove.
   const scheduler = manualScheduler();
   let attempt = 0;
+  let now = 0;
   const store = createAvatarVariantStore(
     async (ids) => {
       attempt += 1;
       if (attempt === 1) throw new Error("network");
       return Object.fromEntries(ids.map((id) => [id, { avatar128Url: `${id}-128` }]));
     },
-    { schedule: scheduler.schedule },
+    { schedule: scheduler.schedule, now: () => now },
   );
 
   store.request("a");
@@ -105,7 +106,11 @@ test("a failed query is forgotten rather than cached as 'no variant'", async () 
 
   store.request("a");
   await scheduler.run();
-  assert.deepEqual(store.get("a"), { avatar128Url: "a-128" }, "and it can be asked again");
+  assert.equal(attempt, 1, "rerender cannot retry immediately");
+  now = 30_000;
+  store.request("a");
+  await scheduler.run();
+  assert.deepEqual(store.get("a"), { avatar128Url: "a-128" }, "and it can be asked again after cooldown");
 });
 
 test("an id in flight is not queued a second time", async () => {
@@ -282,6 +287,28 @@ test("asking again while the answer is in flight does not start a second query",
 
   assert.equal(calls.length, 1, "and no second query was started for the same id");
   assert.deepEqual(store.get("a"), { avatar128Url: "a-128" });
+});
+
+test("a retired metadata rejection cannot add a cooldown to the current generation", async () => {
+  const scheduler = manualScheduler();
+  const reads: Array<{ resolve: (value: Record<string, AvatarVariantUrls>) => void; reject: (reason: Error) => void }> = [];
+  const store = createAvatarVariantStore(() => new Promise<Record<string, AvatarVariantUrls>>((resolve, reject) => {
+    reads.push({ resolve, reject });
+  }), { schedule: scheduler.schedule });
+  const release = store.retain("a");
+  await scheduler.run();
+  store.reset();
+  await scheduler.run();
+  assert.equal(reads.length, 2);
+  reads[0].reject(new Error("retired transport refusal"));
+  await scheduler.run();
+  assert.equal(store.__debug().failed, 0);
+  assert.equal(store.isSettled("a"), false, "old finally cannot clear current in-flight state");
+  reads[1].resolve({ a: { avatar128Url: "current-owner-128" } });
+  await scheduler.run();
+  assert.equal(store.get("a")?.avatar128Url, "current-owner-128");
+  assert.equal(store.__debug().failed, 0);
+  release();
 });
 
 /* --------------------------------------------------------------------------- *
