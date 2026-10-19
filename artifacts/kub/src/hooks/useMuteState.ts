@@ -62,45 +62,75 @@ export function useMuteState(chatId: string | null | undefined): MuteState {
     let cancelled = false;
     let attempt = 0;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    let inFlight = false;
+    let refreshPending = false;
 
-    const refresh = async () => {
-      bumpFetch("useMuteState");
-      let q = supabase
-        .from("mutes")
-        .select("*")
-        .eq("user_id", userId);
-      // Either a global mute (chat_id IS NULL) or a mute scoped to this chat.
-      q = chatId
-        ? q.or(`chat_id.is.null,chat_id.eq.${chatId}`)
-        : q.is("chat_id", null);
-      const { data, error } = await q;
+    const clearRetry = () => {
+      if (retry !== null) clearTimeout(retry);
+      retry = null;
+    };
+
+    const refuseRead = (message: string) => {
       if (cancelled) return;
+      // A refusal never clears the last known sanction.
+      setState((previous) => stateAfterRefusedRead(previous, {
+        loadedOnce: loadedOnce.current,
+        message,
+      }));
+      clearRetry();
+      retry = setTimeout(() => {
+        retry = null;
+        void refresh();
+      }, sanctionRetryDelayMs(attempt));
+      attempt += 1;
+    };
 
-      if (error) {
-        // Never answer «not muted» here. Keep the last known truth, say the
-        // reading is stale or missing, and ask again.
-        setState((previous) =>
-          stateAfterRefusedRead(previous, {
-            loadedOnce: loadedOnce.current,
-            message: error.message ?? "read refused",
-          }),
-        );
-        retry = setTimeout(refresh, sanctionRetryDelayMs(attempt));
-        attempt += 1;
+    const refresh = async (): Promise<void> => {
+      if (cancelled) return;
+      clearRetry();
+      if (inFlight) {
+        refreshPending = true;
         return;
       }
+      inFlight = true;
+      try {
+        bumpFetch("useMuteState");
+        let q = supabase
+          .from("mutes")
+          .select("*")
+          .eq("user_id", userId);
+        // Either a global mute (chat_id IS NULL) or a mute scoped to this chat.
+        q = chatId
+          ? q.or(`chat_id.is.null,chat_id.eq.${chatId}`)
+          : q.is("chat_id", null);
+        const { data, error } = await q;
+        if (cancelled) return;
+        if (error) {
+          refuseRead(error.message ?? "read refused");
+          return;
+        }
 
-      attempt = 0;
-      loadedOnce.current = true;
-      const rows = (data ?? []) as Mute[];
-      const active = activeSanctionAt(rows, Date.now());
-      setState({
-        loading: false,
-        muted: !!active,
-        scope: active ? (active.chat_id ? "chat" : "global") : null,
-        mute: active,
-        view: "ready",
-      });
+        attempt = 0;
+        loadedOnce.current = true;
+        const rows = (data ?? []) as Mute[];
+        const active = activeSanctionAt(rows, Date.now());
+        setState({
+          loading: false,
+          muted: !!active,
+          scope: active ? (active.chat_id ? "chat" : "global") : null,
+          mute: active,
+          view: "ready",
+        });
+      } catch {
+        refuseRead("read refused");
+      } finally {
+        inFlight = false;
+        // A newer row event owes one read after the current snapshot settles.
+        if (!cancelled && refreshPending) {
+          refreshPending = false;
+          void refresh();
+        }
+      }
     };
 
     refresh();
@@ -123,7 +153,7 @@ export function useMuteState(chatId: string | null | undefined): MuteState {
 
     return () => {
       cancelled = true;
-      if (retry) clearTimeout(retry);
+      clearRetry();
       supabase.removeChannel(channel);
       unregisterChannel(channelName);
     };

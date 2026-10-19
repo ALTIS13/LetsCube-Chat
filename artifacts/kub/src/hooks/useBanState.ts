@@ -60,37 +60,67 @@ export function useBanState(): BanState {
     let cancelled = false;
     let attempt = 0;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    let inFlight = false;
+    let refreshPending = false;
 
-    const refresh = async () => {
-      bumpFetch("useBanState");
-      const { data, error } = await supabase
-        .from("bans")
-        .select("*, issuer:profiles!bans_issued_by_fkey(full_name,username)")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+    const clearRetry = () => {
+      if (retry !== null) clearTimeout(retry);
+      retry = null;
+    };
+
+    const refuseRead = (message: string) => {
       if (cancelled) return;
+      // A refusal never clears the last known sanction.
+      setState((previous) => stateAfterRefusedRead(previous, {
+        loadedOnce: loadedOnce.current,
+        message,
+      }));
+      clearRetry();
+      retry = setTimeout(() => {
+        retry = null;
+        void refresh();
+      }, sanctionRetryDelayMs(attempt));
+      attempt += 1;
+    };
 
-      if (error) {
-        // Never answer «not banned» here. Keep whatever was last known true,
-        // say the reading is stale or missing, and ask again.
-        setState((previous) =>
-          stateAfterRefusedRead(previous, {
-            loadedOnce: loadedOnce.current,
-            message: error.message ?? "read refused",
-          }),
-        );
-        retry = setTimeout(refresh, sanctionRetryDelayMs(attempt));
-        attempt += 1;
+    const refresh = async (): Promise<void> => {
+      if (cancelled) return;
+      clearRetry();
+      if (inFlight) {
+        refreshPending = true;
         return;
       }
+      inFlight = true;
+      try {
+        bumpFetch("useBanState");
+        const { data, error } = await supabase
+          .from("bans")
+          .select("*, issuer:profiles!bans_issued_by_fkey(full_name,username)")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false });
+        if (cancelled) return;
+        if (error) {
+          refuseRead(error.message ?? "read refused");
+          return;
+        }
 
-      attempt = 0;
-      loadedOnce.current = true;
-      const rows = ((data ?? []) as unknown) as (Ban & {
-        issuer?: { full_name: string | null; username: string | null } | null;
-      })[];
-      const active = activeSanctionAt(rows, Date.now());
-      setState({ loading: false, banned: !!active, ban: active, view: "ready" });
+        attempt = 0;
+        loadedOnce.current = true;
+        const rows = ((data ?? []) as unknown) as (Ban & {
+          issuer?: { full_name: string | null; username: string | null } | null;
+        })[];
+        const active = activeSanctionAt(rows, Date.now());
+        setState({ loading: false, banned: !!active, ban: active, view: "ready" });
+      } catch {
+        refuseRead("read refused");
+      } finally {
+        inFlight = false;
+        // A newer row event owes one read after the current snapshot settles.
+        if (!cancelled && refreshPending) {
+          refreshPending = false;
+          void refresh();
+        }
+      }
     };
 
     refresh();
@@ -113,7 +143,7 @@ export function useBanState(): BanState {
 
     return () => {
       cancelled = true;
-      if (retry) clearTimeout(retry);
+      clearRetry();
       supabase.removeChannel(channel);
       unregisterChannel(channelName);
     };
