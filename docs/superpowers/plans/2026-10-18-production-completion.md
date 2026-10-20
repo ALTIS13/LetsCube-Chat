@@ -32,7 +32,8 @@ this document coordinates their remaining deliverables, not a replacement design
   content. QA screenshots/traces/video stay off when signed in; browser tests use
   `KUB_QA_ALLOW_MUTATIONS=0`. Synthetic owned QA mutations require exact cleanup.
 - Realme and bounded paid iPhone/Android rentals are authorized. Latest direct
-  owner authority on2026-10-20 also includes A063/ADB for the reported VPN failure,
+  owner authority on2026-10-20 also includes A063/ADB for implementation/QA,
+  including the reported VPN failure,
   superseding the old Apollo exclusion. Preserve PC Happ/routing and personal
   content. Allocate a rental only for a prepared finite checklist;
   release it in cleanup. Do not install over a release for incidental QA.
@@ -45,7 +46,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published artifacts are immutable; current Stable33 and rollback32 are
+  parity. Published artifacts are immutable; current Stable34 and rollback33 are
   retained. Use the next version/build for new embedded-client code.
 
 ## Review Focus
@@ -63,11 +64,18 @@ this document coordinates their remaining deliverables, not a replacement design
 
 ## Accepted Baseline (Reuse)
 
+- [x] D384 bridge/finalization source3a73975f is Stable0.1.33/build34:87/87 and
+  review, original signer/Firebase/assets, Realme33 ->34 guest, A06332 ->34 manual
+  data-retaining bootstrap and actual signed-in main/exact entry/native bridge/
+  catalog-current. Full public APK hash/rollback33 and healthy shared-web parity
+  pass; old in-app32 ->33 stays REFUSED, higher-build installation remains open.
+  [Release and limits](../../operations/2026-10-21-android-update-bridge-thread.md).
+
 - [x] D388/source `b50dda0f` released on shared web/build `affacc90ed0418d6`
   and Android Stable0.1.32/build33. Final affected155/155/review, signer/Firebase/
   assets, Realme32 ->33 data retention and public APK hash pass; rollback32.
   The actual A063 built-in update case is REFUSED before catalog by a distinct
-  native bridge thread bug, currently being repaired for Native34. Do not equate
+  native bridge thread bug, subsequently repaired for Native34 above. Do not equate
   the guest ADB upgrade with a successful in-app installation.
   [Current native repair](../../operations/2026-10-21-android-update-bridge-thread.md).
 
@@ -491,10 +499,13 @@ remain broader QA coverage, not known remaining product bugs. Topic remains part
 signer/package identity and verified in-place upgrade with retained user data.
 
 - [ ] Build a delta-only OEM/locked/long-session matrix reusing accepted23/24
-  evidence and current Stable32. Realme/rentals and newly authorized A063 are
+  evidence and current Stable34. Realme/rentals and newly authorized A063 are
   available; its bounded VPN case is accepted separately, not a full matrix.
 - [ ] Coordinate installed iPhone PWA keyboard/safe-area/scale checks on a bounded
   rented iPhone; do not claim native iOS/macOS release from web evidence.
+- [ ] On the next legitimate higher-build release, finish actual fixed34 updater
+  download/ready/permission/system-install and data retention. Reuse accepted
+  bridge/current cases; no dummy release, same-version bypass or fake APK source.
 - [ ] Finish Windows killed-process WNS and available Win10/11/offline/long-session
   cases while retaining owner-accepted unsigned EXE distribution.
 - [x] For the prior embedded-client delta, build immutable25 and verify

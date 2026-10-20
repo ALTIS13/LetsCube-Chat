@@ -3,13 +3,12 @@
 ## Resume
 
 - Owner: Codex coordinator; canonical `android-current-20261015`, branch
-  `codex/ui-motion-updates-20261019`, released product `b50dda0f` / Stable33.
+  `codex/ui-motion-updates-20261019`, released repair `3a73975f` / Stable34.
 - Stage: physical D-384 failure and thread cause confirmed; final source repair,
-  integration87/87 and independent review pass. Candidate metadata is0.1.33/build34;
-  Native34 artifact/device acceptance and release remain next.
-- Next: compiled-plugin RED/GREEN and review, original-signer/Firebase build,
-  data-preserving device bootstrap, actual bridge/catalog success and release.
-  Keep complete in-app installation as a separate natural-next-release boundary.
+  integration87/87 and independent review pass. Released metadata is0.1.33/build34;
+  Native34 artifact/device/publication proof now passes below.
+- Next: persistent received-text history admission. Keep complete in-app
+  installation as a separate natural-next-legitimate-release boundary.
 
 ## Physical Failure and Diagnosis
 
@@ -82,6 +81,38 @@ notes must say manual bootstrap is needed for0.1.31/0.1.32, not claim automatic
 update success. Do not issue a dummy release or bypass same-version/source/
 signature checks solely to manufacture a positive installer case.
 
-Native34 artifact, actual bridge success and release remain pending here.
-Source acceptance must not close the complete future in-app download/ready/
-permission/install path or the entire cross-vendor matrix.
+Source acceptance/manual bootstrap must not close the complete future in-app
+download/ready/permission/install path or the entire cross-vendor matrix.
+
+## Stable34 Release
+
+Product `3a73975fea5f831d7e29ba8f8aa970527f3215d0` built freshly:
+`sw.js build 4e663c88db3db74b`, `built in 11.37s`, `BUILD SUCCESSFUL in 12s`.
+APK7,816,329B SHA256
+`fffd1b238aa3237cbb9df0c0b6ca18a987fc317c4fc89e4bf7861a7729eaa8ce`;
+AAB7,444,124B SHA256
+`3a6b0d1695973fd89fb606ae64bd0340736dd64970686ab0faf56629a1886fb5`.
+Original sole signer/APKv2, exact Firebase4, false QA flags,42-file web/config/
+DEX parity and updater5 class definitions/registration/provider pass. AAB manifest
+was not independently protobuf-decoded; no broader AAB claim follows.
+
+Realme33 ->34 guest upgrade preserves UID/data/firstInstall, fatal0. A06332 ->34
+is a manual bootstrap without clear/uninstall: those identities persist and the
+installed APK's full bytes match the candidate. Actual signed-in main and
+`/assets/index-BujnSSVJ.js` match the Native34 bundle. Real JS/native status is
+RESOLVED/current, native runtime current, failed banner absent and app-UID public
+catalog/core health200/401. This precedes publication and uses the valid prior
+Stable33 catalog, exercising no-newer/no-downgrade, not a higher-build download.
+The worker WebView-read negative control still throws; owning-UI read succeeds.
+
+Probe package removed, normal LETSCUBE relaunched, no personal screens/bodies/
+URL paths/tokens captured, VPN/profile/PC routing unchanged. Stable0.1.33/build34
+is published at2026-10-20 21:40:34Z, mandatory=false: prior-catalog CAS, rollback33
+and complete public APK bytes/hash pass. Notes explicitly require one-time manual
+bootstrap for0.1.31/0.1.32. No SQL, Windows shell/identity or native Apple change.
+Sole-healthy shared image3a73975f/build `affacc90ed0418d6` has public/container
+parity at21:42:34Z; HTML/JS/SW are byte-identical to verifiedb50 (native-only code).
+
+Remaining: full fixed34 ->next real-release updater UI/system acceptance, wider
+OEM/lifecycle, persistent received history and generic-only Windows WNS. Do not
+repeat accepted cohorts or manufacture a release solely for QA.

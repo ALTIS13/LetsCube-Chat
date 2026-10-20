@@ -3,13 +3,14 @@
 ## Resume
 
 - Owner: Codex coordinator; canonical `android-current-20261015`, branch
-  `codex/ui-motion-updates-20261019`, released baseline `41b775c7` / Stable32.
+  `codex/ui-motion-updates-20261019`, initial baseline `41b775c7` / Stable32.
 - Stage: D-388 RELEASED at `b50dda0f`; Android0.1.32/build33 Stable.
 - Source boundary: `useMessages.loadOlderMessages`, its actual-hook/installed-SDK
   tests and the affected lifetime/account fixtures. No SQL, history retention,
   media body, native updater or notification-privacy contract change.
-- Next: fix the distinct actual updater-bridge thread failure found by the
-  A06332 ->33 canary. Do not claim this implements persistent received history.
+- The distinct updater-bridge failure found by A06332 ->33 is now repaired in
+  [Native34](2026-10-21-android-update-bridge-thread.md). Next is persistent-history
+  admission; neither repair implements disk history itself.
 
 ## Confirmed Failure
 

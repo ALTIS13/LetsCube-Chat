@@ -3,26 +3,27 @@
 **Current State, 2026-10-21:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Stage: D-388 RELEASED at `b50dda0f`; Android Stable0.1.32/build33,
-mandatory=false, rollback32 retained. Original signer/Firebase/assets,
-Realme32 ->33 guest/data/UID/firstInstall retention and full public APK hash pass.
-Final affected155/155, typecheck and independent review pass. Sole-healthy shared
-web/build `affacc90ed0418d6`, public/container parity and new/old history marker
-pass at2026-10-20 21:06:39Z. [Release](operations/2026-10-20-history-tuple-pagination.md).
+Stage: D-384 bridge-thread/finalization repair RELEASED at `3a73975f`, Android
+Stable0.1.33/build34, mandatory=false, rollback33 retained. Original signer/
+Firebase/assets and complete public APK hash pass at2026-10-20 21:40:34Z.
+Realme33 ->34 guest and A06332 ->34 manual bootstrap retain UID/data/firstInstall.
+Actual A063 signed-in main, exact embedded entry, JS/native bridge RESOLVED and
+catalog/no-newer state pass; temporary probe removed. Final87/87 and review pass.
+Sole-healthy shared image3a73975f/build `affacc90ed0418d6`, public/container parity
+and unchangedb50 assets pass at21:42:34Z. [Release and limits](operations/2026-10-21-android-update-bridge-thread.md).
+D-388 remains released with155/155/review/typecheck and the time/UUID cursor in
+both shared web and Native34. [History repair](operations/2026-10-20-history-tuple-pagination.md).
 
-Current task: D-384 actual A06332 ->33 updater canary REFUSED, not accepted.
-Actual UI/native bridge rejects before catalog while app-UID public catalog is
-reachable; WebView URL read succeeds on UI and throws on a worker. Installed
-Capacitor8.3.4 invokes PluginMethods on its worker; the updater reads getUrl there.
-Native34 source passes final87/87 and review; build/device acceptance is next.
-Existing32/33 need a one-time manual bootstrap,
-not a bypass of source/signature/hash/version checks. [Current repair](operations/2026-10-21-android-update-bridge-thread.md).
+Existing32/33 need a one-time manual APK upgrade. Their actual in-app32 ->33 case
+remains REFUSED; full fixed34 ->next legitimate release download/ready/permission/
+installer acceptance stays open, not inferred from manual bootstrap/current.
+Do not create a dummy release or weaken source/signature/hash/version checks.
 
 Latest owner authority includes A063/ADB, superseding its earlier Apollo
 exclusion. The separate adverse-VPN case32 recovers the list automatically when
 the failed route returns; original phone VPN/tile configuration is restored.
 No personal capture, account clear or PC Happ/routing change. [VPN evidence](operations/2026-10-20-a063-vpn-recovery.md).
-Next after Native34: bounded persistent received-text history with fresh access/
+Next: bounded persistent received-text history with fresh access/
 revision admission; current history is RAM and outbox is separate. The minimum
 conditional-page candidate is source/catalog-mapped, not implemented/measured.
 Generic-only background/killed Windows WNS and broader device QA remain open.
@@ -30,6 +31,11 @@ Ordinary Windows toasts and Android/iPhone sender/text already exist; retain
 privacy/install consent. [Cache/release scope](operations/2026-10-20-reconnection-cache-release.md).
 Retain [motion/update evidence and its WebKit limit](operations/2026-10-19-ui-motion-and-updates.md);
 do not replay accepted cohorts or call native class presence API acceptance.
+
+## Historical Release Checkpoints
+
+These dated records preserve operational history, not current next actions or
+new authority. The short record above and its linked reports own the checkpoint.
 
 **Released baseline:** [connection/cache release](operations/2026-10-19-connection-performance.md).
 Six reviewed repairs are RELEASED at product `1ef85b8f`: Auth `815f8009`, history `1096bd03`,
@@ -66,12 +72,6 @@ group, controller or rental held.
 D356 remaining actions, Nikita intake and the
 other completion streams stay open. Reuse accepted evidence; do not replay old
 cohorts or rebuild native artifacts for documentation-only commits.
-
-## Historical Release Checkpoints
-
-The dated records below preserve operational history, not current status or new
-execution authority. Latest sources, evidence, blockers and next action are only
-in the short record above and its linked report.
 
 **Historical resume, 2026-10-18:** Codex; item52/D-367 FIFO/discard repair is
 released on shared web and Android Stable0.1.23/build24, mandatory=false. Start with

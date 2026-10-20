@@ -26169,7 +26169,7 @@ Android Stable32 at `d9991760`; the older inconclusive WebKit growth case stays
 explicitly recorded, not relabelled as a clean full matrix.
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
-## D-384 `[ ]` Android APK download is handed to a browser without completion state
+## D-384 `[~]` Android APK download is handed to a browser without completion state
 
 **Cause:** an external artifact anchor and2500ms handoff message cannot know
 download completion or offer installation. Native private streaming, persisted
@@ -26179,8 +26179,11 @@ retry and a consumed new-document success receipt. Reviewed native source and
 safety checks are released on web/Stable32, with guest upgrade/data retention.
 Actual in-app32 ->33 is REFUSED: updater calls WebView.getUrl from Capacitor's
 worker and rejects before catalog. Physical same-view UI/worker proof and healthy
-app-UID public catalog isolate this from VPN failure. Native34 repair/manual
-bootstrap is current; no successful full updater or silent-install claim.
+app-UID public catalog isolate this from VPN failure. Native34 bridge/finalization
+repair is RELEASED at3a73975f with87/87/review, data-preserving manual bootstrap,
+exact embedded entry and actual native bridge/current-state proof on A063.
+Full fixed34 ->next legitimate release updater remains open; no completed in-app
+or silent-install claim.
 [Current physical finding](operations/2026-10-21-android-update-bridge-thread.md).
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 

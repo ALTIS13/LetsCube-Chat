@@ -1,5 +1,23 @@
 # QA Results
 
+## 2026-10-21 - Native34 Stable and Actual Bridge Repair Acceptance
+
+Source3a73975f, Native0.1.33/build34: final native cohort87/87, zero skips, clean
+review after real closed-Bridge finalization RED. Fresh original signer/Firebase/
+assets, updater5 definitions, APK/AAB parity and Realme33 ->34 guest retention
+pass. A06332 ->34 is manual, with UID/data/firstInstall and exact installed bytes
+retained. Actual signed-in main/exact embedded entry and JS/native RESOLVED/
+current pass before publication against valid Stable33/no-newer. Full higher-
+build updater is not claimed. Original old32 ->33 refusal remains retained.
+
+Stable34/public complete APK7,816,329B SHA256
+`fffd1b238aa3237cbb9df0c0b6ca18a987fc317c4fc89e4bf7861a7729eaa8ce`
+passes at21:40:34Z; mandatory=false, rollback33. Sole-healthy image3a/build
+`affacc90ed0418d6`, public/container parity and unchangedb50 web bytes pass
+at21:42:34Z. Test-only package removed, normal app foreground; no personal
+capture, host-network/profile, SQL or Apple/Windows binary change.
+[Detailed source, physical boundaries and release](operations/2026-10-21-android-update-bridge-thread.md).
+
 ## 2026-10-21 - History Stable33 and Native Updater Bridge Failure
 
 D388/source `b50dda0f`: final affected155/155, zero skips, typecheck and peer

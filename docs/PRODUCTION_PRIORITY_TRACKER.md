@@ -2,16 +2,17 @@
 
 Status: active production-hardening tracker, updated 2026-10-20.
 
-**Current released checkpoint:** D388 is RELEASED at `b50dda0f` on Android
-Stable0.1.32/build33, mandatory=false, original signer/Firebase/assets,
-Realme32 ->33 data retention and complete public APK hash; sole-healthy shared
-web/build `affacc90ed0418d6`, public/container parity and bidirectional cursor
-marker pass at21:06:39Z. Prior Stable32 is retained. Affected155/155 and final
-review/typecheck pass; D383/D385/D386/D387 remain released from `d9991760`.
-Actual D384 A06332 ->33 is REFUSED before download: the native origin guard
-reads WebView on Capacitor's worker. Current work is Native34 repair/manual
-bootstrap, not a claim that built-in installation passed. [Current repair](operations/2026-10-21-android-update-bridge-thread.md).
-Then persistent received-text history, not yet implemented; RAM warm cache and
+**Current released checkpoint:** Native34/source `3a73975f` repairs D384's bridge
+thread/finalization fault. Stable0.1.33/build34, mandatory=false, rollback33,
+original signer/Firebase/assets and full public APK hash pass at21:40:34Z.
+Realme33 ->34 guest and A06332 ->34 manual upgrade retain data identities; actual
+A063 signed-in main/exact bundle/JS-native status/catalog-current pass. Final87/87
+and review pass. Shared sole-healthy image3a/build `affacc90ed0418d6` and public/
+container parity pass at21:42:34Z; web bytes retain verifiedb50/D388. Its155/155
+and earlier D383/D385/D386/D387 acceptance remain reused. [Release and limits](operations/2026-10-21-android-update-bridge-thread.md).
+Actual old in-app32 ->33 stays REFUSED. One-time manual bootstrap is needed;
+full fixed34 ->next legitimate release updater is still open, not inferred.
+Next: persistent received-text history, not yet implemented; RAM warm cache and
 durable outbox are different boundaries. Sender/text on iPhone PWA/Android and
 ordinary Windows toasts already exist; privacy/install consent still applies.
 Generic-only background/killed Windows WNS remains separate. No SQL change.
