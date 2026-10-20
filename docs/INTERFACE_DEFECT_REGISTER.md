@@ -26217,3 +26217,16 @@ pass; reviewed/released on shared web/Stable32 at `d9991760`. This fixes warm RA
 history, not persistent received-message history or every reported progressive
 slowdown.
 [Current evidence](operations/2026-10-20-reconnection-cache-release.md).
+
+## D-388 `[~]` Equal-time messages disappear across an older-page boundary
+
+**Severity:** high. The query sorts by time/UUID but filters the next page only
+by strictly earlier time. The actual-hook/installed-SDK controlled shipped case
+retains100 tied rows instead of200 after the second read. Use the same exclusive
+tuple as the server order, preserving microseconds and normal topic/privacy
+filters. Confirmed-only cursor selection keeps old local failed/pending rows and
+uses the actual minimum server tuple, not millisecond-rounded display order.
+Final affected155/155 and independent review/typecheck pass. Candidate33 is not
+yet built/published; device/release acceptance remains. This does not implement
+persistent disk history.
+[Current repair and evidence](operations/2026-10-20-history-tuple-pagination.md).

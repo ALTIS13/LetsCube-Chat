@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-10-20 - A063 Adverse VPN and Automatic List Recovery
+
+Latest owner authority includes A063/ADB. Actual installed Stable0.1.31/build32
+and the target UID/first-install identity remain unchanged. A same-signer,
+test-only Instrumentation reads only loading booleans, counts and resource-time
+categories in the owned app UID; no conversations/screens/bodies/tokens captured.
+Instrumentation restarts the process, so this is not an old hot-process capture.
+
+Initial working-VPN cold start succeeds. A later bad route gives an app-UID
+five-second SocketTimeoutException; independent shell DNS/TCP also fails.
+During the next bounded observation, OS-confirmed VPN disconnect restores the
+route and the same process automatically shows the nonempty list within a few
+seconds, without reload/login/data clear. Device clock calibration is later and
+samples are one second apart: earlier uncalibrated1.696s is not a valid latency
+claim. A tile click with unproven OFF is retained as an inconclusive transition,
+not an accepted ON/OFF/ON case.
+
+Original VPN foreground service and exact tile list restored; temporary test
+package absent and normal LETSCUBE foreground. No product patch, target
+reinstall, host-network change or paid rental. This accepts bounded route-return
+recovery, not every VPN/ISP or offline cold-history behavior.
+[Detailed evidence and limits](operations/2026-10-20-a063-vpn-recovery.md).
+
 ## 2026-10-20 - Reconnection, Warm Cache and Update Release
 
 Product `d9991760`, Android Stable0.1.31/build32, mandatory=false. Actual SDK

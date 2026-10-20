@@ -15,6 +15,18 @@ Next priority: persistent received-text history, not yet implemented; RAM warm
 cache and durable outbox are different boundaries. No SQL change in this release.
 [Ownership, evidence and release state](operations/2026-10-20-reconnection-cache-release.md).
 
+Latest A063 authority supersedes its old exclusion. On installed Stable32 the
+bounded bad-VPN case establishes failed DNS/TCP outside LETSCUBE and automatic
+same-process chat-list recovery within a few seconds after OS-confirmed VPN OFF.
+Original VPN/tile state restored, test-only probe removed, target data retained.
+No new product defect or all-route acceptance is inferred. PC network untouched.
+[A063 evidence, clock correction and remaining work](operations/2026-10-20-a063-vpn-recovery.md).
+
+D-388 source is accepted: older reads use the same exclusive time/UUID tuple as
+the page order, selected from confirmed rows at full microsecond precision.
+Final affected155/155 and review/typecheck pass; candidate0.1.32/build33 is not
+yet built/published. [Current release task](operations/2026-10-20-history-tuple-pagination.md).
+
 **Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** D375 search
 continuity is FIXED/RELEASED at `a02be032` on sole-healthy web/build
 `a7d03335f07b562b` and Android Stable0.1.29/build30. Main-list DOM/scroll, hidden

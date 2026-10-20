@@ -150,12 +150,17 @@ function harness(options: Options = {}) {
   const appOutbox = options.realOutbox ? load("lib/outbox/appOutbox.ts").appOutbox : null;
   store.getState().setCurrentUser({ id: A, full_name: "Synthetic A" });
   const currentUserRef = { current: store.getState().currentUser, accountEpoch: store.getState().accountEpoch };
+  const recoveryTimers = new Map<number, () => void>();
+  let nextRecoveryTimer = 0;
   const refs = { chatIdRef: { current: CHAT }, topicIdRef: { current: undefined },
     hookLifetimeRef: { current: Symbol("fixture-hook-lifetime") },
     generalTopicIdsRef: { current: [] }, clearedAtRef: { current: null }, hiddenMessageIdsRef: { current: new Set() },
     historyRequestGenerationRef: { current: 0 }, verifiedChatIdRef: { current: CHAT },
     verifiedAccountEpochRef: { current: null },
     subscribedChatIdRef: { current: null },
+    recoveryOwnerRef: { current: Symbol("mounted-fixture-owner") },
+    recoveryTimerRef: { current: null }, recoveryTimerDueRef: { current: null },
+    fetchMessagesRef: { current: null as any },
     loadingOlderRef: { current: false }, olderRequestOwnerRef: { current: null }, hasMoreOlderRef: { current: true } };
   const set = (name: string) => (..._args: any[]) => effects.push(name);
   const env: Record<string, any> = { useAppStore: store, currentUserRef, ...refs, chatId: CHAT, userId: A,
@@ -177,8 +182,11 @@ function harness(options: Options = {}) {
     appOutbox: appOutbox ?? { enqueue: async (entry: any) => { sends.push(structuredClone(entry)); return options.enqueue ?? { kind: "waiting" }; } },
     ...load("lib/memberMentions.ts"), ...load("lib/optimisticMessage.ts"),
     ...load("lib/messageActor.ts"), ...load("lib/messageMerge.ts"), ...load("lib/deletedMessages.ts"),
+    ...load("lib/readMarkWatermark.ts"),
     ...load("lib/listReadState.ts"), ...load("lib/realtimeMessage.ts"),
     emitChannelActivity: noop, registerChannel: noop, unregisterChannel: noop,
+    setTimeout: (run: () => void) => { recoveryTimers.set(++nextRecoveryTimer, run); return nextRecoveryTimer; },
+    clearTimeout: (id: number) => recoveryTimers.delete(id),
   };
   for (const name of ["getPinnedKey", "messageBelongsToTopic", "applyGeneralTopicFilter", "getMessageAndReplyIds",
     "sanitizeHiddenReply", "sanitizeHiddenReplies", "sortPinnedMessages", "buildRealtimeMessage", "needsJoinedRow", "upsertPinnedMessage"]) {
@@ -190,6 +198,8 @@ function harness(options: Options = {}) {
   const callback = (name: string, extra: Record<string, any> = {}) => expression("hooks/useMessages.ts", name, {
     ...env, accountEpoch: store.getState().accountEpoch, ...extra,
   });
+  env.scheduleRecoveryReconcile = callback("scheduleRecoveryReconcile");
+  refs.fetchMessagesRef.current = callback("fetchMessages");
   const realtime = () => {
     const handlers: Record<string, any> = {};
     const channel: any = { on: (_kind: string, filter: any, handle: any) => {
@@ -203,9 +213,10 @@ function harness(options: Options = {}) {
     if (render) {
       currentUserRef.current = store.getState().currentUser;
       currentUserRef.accountEpoch = store.getState().accountEpoch;
+      refs.fetchMessagesRef.current = callback("fetchMessages");
     }
   };
-  return { store, refs, env, callback, currentUserRef, reads, sends, effects, switchTo, appOutbox, queued, realtime };
+  return { store, refs, env, callback, currentUserRef, reads, sends, effects, switchTo, appOutbox, queued, realtime, recoveryTimers };
 }
 
 function readClient(read: Promise<any>) {
@@ -221,7 +232,7 @@ function readClient(read: Promise<any>) {
 
 function page(prefix: string, userId = A, topicId: string | null = null) {
   return Array.from({ length: 101 }, (_, index) => message(userId, {
-    id: `${prefix}:${index}`, client_message_id: null, failed: false, pending: false, topic_id: topicId,
+    id: `66666666-6666-4666-8666-${String(index + 1).padStart(12, "0")}`, client_message_id: null, failed: false, pending: false, topic_id: topicId,
     created_at: `2026-10-01T11:00:${String(index % 60).padStart(2, "0")}.000Z`, content: prefix,
   }));
 }
@@ -562,11 +573,28 @@ test("batched same-account relogin reopens reads and realtime for the new epoch"
   rt.dispose();
 });
 
+test("actual recovery scheduler dispatches current reads but retires a queued pre-relogin read", async () => {
+  const h = harness();
+  const run = async () => {
+    assert.equal(h.recoveryTimers.size, 1, "actual callback owns one finite timer");
+    const [id, callback] = h.recoveryTimers.entries().next().value!;
+    h.recoveryTimers.delete(id); callback(); await flush();
+  };
+  h.env.scheduleRecoveryReconcile(600); await run();
+  assert.equal(h.reads.length, 1, "real fetchMessages callback must dispatch the current provider read");
+  h.env.scheduleRecoveryReconcile(600);
+  h.switchTo(null); h.switchTo(A);
+  await run();
+  assert.equal(h.reads.length, 1, "timer captured before relogin cannot dispatch into its successor epoch");
+  h.env.scheduleRecoveryReconcile(600); await run();
+  assert.equal(h.reads.length, 2, "new epoch's actual fetch ref remains usable");
+});
+
 for (const callbackName of ["fetchMessages", "fetchMessageById", "refreshMessageById", "loadOlderMessages", "fetchPinnedMessages"]) {
   test(`${callbackName} same-account positive control still accepts the real read`, async () => {
     const row = message(A, { id: ID, pending: false, failed: false, content: "fresh" });
     const h = harness({ read: Promise.resolve({ data: ["fetchMessages", "loadOlderMessages", "fetchPinnedMessages"].includes(callbackName) ? [row] : row, error: null }) });
-    h.store.getState().setMessages(CHAT, [message(A, { id: ID })]);
+    h.store.getState().setMessages(CHAT, [message(A, { id: ID, failed: false, pending: false })]);
     await h.callback(callbackName)(ID);
     assert.ok(h.reads.length > 0);
     if (callbackName === "fetchPinnedMessages") assert.ok(h.effects.includes("pinned"));

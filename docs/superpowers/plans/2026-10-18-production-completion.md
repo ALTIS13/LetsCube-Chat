@@ -31,8 +31,10 @@ this document coordinates their remaining deliverables, not a replacement design
 - Keep RLS and account/session/privacy fences; never expose secrets or personal
   content. QA screenshots/traces/video stay off when signed in; browser tests use
   `KUB_QA_ALLOW_MUTATIONS=0`. Synthetic owned QA mutations require exact cleanup.
-- Realme and bounded paid iPhone/Android rentals are authorized. A063 belongs to
-  Apollo and is excluded. Allocate a rental only for a prepared finite checklist;
+- Realme and bounded paid iPhone/Android rentals are authorized. Latest direct
+  owner authority on2026-10-20 also includes A063/ADB for the reported VPN failure,
+  superseding the old Apollo exclusion. Preserve PC Happ/routing and personal
+  content. Allocate a rental only for a prepared finite checklist;
   release it in cleanup. Do not install over a release for incidental QA.
 - Windows EXE remains unsigned by the owner's explicit decision. Do not change
   Publisher/PFN/MSIX identity or submit to stores. Native Apple release ownership
@@ -43,8 +45,8 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published APK31 and rollback30 are immutable; use the next version/build
-  for new code.
+  parity. Published artifacts are immutable; current Stable32 and rollback31 are
+  retained. Use the next version/build for new embedded-client code.
 
 ## Review Focus
 
@@ -60,6 +62,14 @@ this document coordinates their remaining deliverables, not a replacement design
    duplicate effects or misleading delivery/read state (Tasks2/7/10).
 
 ## Accepted Baseline (Reuse)
+
+- [x] D383/D385/D386/D387 released at product `d9991760`, shared web/build
+  `2b74d0d5f9bac197` and Android Stable0.1.31/build32. Final affected88/88,
+  reviewed source, signer/Firebase/assets, Realme31 ->32 data preservation and
+  full public APK hash pass. A063's separate bounded adverse-VPN case establishes
+  system-wide route failure and automatic same-process list recovery once the
+  route returns; it does not close persistent received history or all VPN QA.
+  [Physical acceptance and limits](../../operations/2026-10-20-a063-vpn-recovery.md).
 
 - [x] D-377--D-382 connection/cache repairs released on product `1ef85b8f`, sole-
   healthy web/build `9e82c0d67b28ed43` and Android Stable0.1.30/build31. History
@@ -473,7 +483,8 @@ remain broader QA coverage, not known remaining product bugs. Topic remains part
 signer/package identity and verified in-place upgrade with retained user data.
 
 - [ ] Build a delta-only OEM/locked/long-session matrix reusing accepted23/24
-  evidence; Realme/rental only, no A063.
+  evidence and current Stable32. Realme/rentals and newly authorized A063 are
+  available; its bounded VPN case is accepted separately, not a full matrix.
 - [ ] Coordinate installed iPhone PWA keyboard/safe-area/scale checks on a bounded
   rented iPhone; do not claim native iOS/macOS release from web evidence.
 - [ ] Finish Windows killed-process WNS and available Win10/11/offline/long-session

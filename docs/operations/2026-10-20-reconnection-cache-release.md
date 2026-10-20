@@ -193,3 +193,46 @@ held network responses and owner/session retirement. Include same-chat clear,
 hide/delete/edit, stale writes after logout, reply privacy, quota/abort/unavailable
 IDB and literal owner/revision/admission omissions. Reuse the existing outbox
 transaction helper but keep received snapshots and pending sends separate.
+
+### Admission Investigation, Not Implementation
+
+Source review finds no existing received-history digest/conditional-page RPC.
+The separate current-production read-only catalog observation agrees: calibrated
+known functions `chat_list_summaries` and `search_chat_messages` are present;
+the scoped history/cache/hash/digest/page/revision name search returns no
+candidate. This is not a claim that every possible function name was searched.
+The exact expected database/runtime matches before/after and no data rows are
+exported. Messages, chats, memberships and own-message hides retain RLS.
+
+Current catalog has the ordered partial active-message index on
+`(chat_id, created_at DESC, id DESC) WHERE deleted_at IS NULL`, the older full
+`(chat_id, created_at DESC)` index and a topic-only index. Membership and hide
+primary keys support their exact composite lookups. No new index is justified
+merely from this inventory; query plans/costs remain unmeasured.
+
+The minimum candidate to measure next is one read-only conditional bounded-page
+RPC, not a new chat-wide counter or trigger journal. It must positively admit
+the current caller/scope, select the actual ordered message page, apply current
+clear/hide/deletion rules and produce the safe payload plus its digest in one
+statement snapshot. On an unchanged digest it can omit text bodies. Hashing
+still reads the selected text/TOAST: this saves response bytes, not O(1) database
+work or already-proven startup latency. Measure ordinary-role plans/buffers and
+complete match/miss response costs before choosing/applying this contract.
+
+The digest must cover the canonical persisted content/mentions and page selection,
+not just IDs/counts/edited timestamps. Local payload bytes must match their saved
+digest before an unchanged server answer can admit them. A newly downloaded head
+does not validate old cached windows. Each older window needs an exclusive full
+`(created_at,id)` cursor and its own admission; changed middle pages reset the
+continuity chain. Unsupported/mixed-media pages initially use the normal path,
+never a text-only filter scanning arbitrarily far or silently dropping media.
+Reply/profile blobs and media URLs stay out of the initial stored projection.
+
+Normal statement-snapshot consistency is not a permission lease until rendering;
+account/privacy/known-revocation fences remain essential. This follows the
+[PostgreSQL17 snapshot contract](https://www.postgresql.org/docs/17/transaction-iso.html),
+not a claim of linearizable revocation across separate requests. No cold-offline
+access is granted here. There is no new function/table/migration, client history
+store or accepted performance result yet. Next measurable boundary: isolated
+ordinary-role conditional-page match/miss plus revoked/hidden/clear/equal-time
+controls, then real two-document IndexedDB restoration.

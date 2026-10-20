@@ -79,7 +79,8 @@ function fixture({ text = source, holdInitially, visibility = "visible", history
     from(table) {
       const predicates = [], query = {
         select() { return query; }, eq(key, value) { predicates.push([key, value]); return query; },
-        in() { return query; }, is() { return query; }, gt() { return query; }, or() { return query; }, order() { return query; },
+        in() { return query; }, is() { return query; }, gt() { return query; },
+        or(filters) { if (filters.includes("created_at.lt.")) query.older = true; return query; }, order() { return query; },
         lt() { query.older = true; return query; }, limit() { return query; },
         maybeSingle() { query.single = true; return query; }, single() { query.single = true; return query; },
         then(done, fail) {
@@ -268,6 +269,7 @@ async function lateOlder(options) {
   const f = fixture({ ...options, historyRows: Array.from({ length: 101 }, (_, n) => row(n + 1)) });
   await f.drain(); await f.fireTimers(); assert.equal(f.view.hasMoreOlder, true);
   const held = f.hold("older"), pending = f.view.loadOlderMessages(); await f.drain();
+  assert.ok(f.pending.includes(held), "actual older read reaches the held provider boundary");
   f.unmount(); f.clear(); held.resolve({ data: [row(102)], error: null }); await pending; await f.drain();
   assert.equal(f.calls.length, 0, "retired older page cannot ask for hidden rows");
   assert.equal(f.publications.length, 0);

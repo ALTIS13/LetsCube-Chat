@@ -45,7 +45,8 @@ import {
 } from "@/lib/resumeRevalidation";
 import { canUseHumanMessageControls, isIncomingMessage } from "@/lib/messageActor";
 import { blockedSendRefusal } from "@/lib/personalModeration";
-import { heldRowsGoneFromPage, mergeMessagesById } from "@/lib/messageMerge";
+import { heldRowsGoneFromPage, isLocalOnlyMessage, mergeMessagesById } from "@/lib/messageMerge";
+import { timestampMicros } from "@/lib/readMarkWatermark";
 import { sameData } from "@/lib/structuralSharing";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import { clearedAtCache } from "@/lib/clearedAtCache";
@@ -766,12 +767,14 @@ export function useMessages(
       if (!localClearedAt) return true;
       return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
     });
-    const oldest = visibleCurrent[0];
-    if (!oldest) {
+    if (!visibleCurrent.length) {
       hasMoreOlderRef.current = false;
       setHasMoreOlder(false);
       return { loaded: 0 };
     }
+    const confirmedCurrent = visibleCurrent.filter((message) =>
+      typeof message.id !== "string" || !isLocalOnlyMessage(message));
+    if (!confirmedCurrent.length) return { loaded: 0 };
 
     const requestOwner = Symbol();
     olderRequestOwnerRef.current = requestOwner;
@@ -779,6 +782,19 @@ export function useMessages(
     setLoadingOlder(true);
     setOlderError(null);
     try {
+      let cursorId = "", cursorTime = "", cursorMicros = Number.POSITIVE_INFINITY;
+      // Held arrays use millisecond ordering; the server's cursor retains microseconds.
+      for (const candidate of confirmedCurrent) {
+        const candidateId = candidate.id;
+        const candidateTime = candidate.created_at;
+        const candidateMicros = typeof candidateTime === "string" ? timestampMicros(candidateTime) : null;
+        if (typeof candidateId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateId) ||
+            candidateMicros === null) throw new Error("invalid_history_cursor");
+        if (candidateMicros < cursorMicros ||
+            (candidateMicros === cursorMicros && candidateId.toLowerCase() < cursorId.toLowerCase())) {
+          cursorId = candidateId; cursorTime = candidateTime; cursorMicros = candidateMicros;
+        }
+      }
       let query = supabase
         .from("messages")
         .select(MESSAGE_SELECT_WITH_JOINS)
@@ -794,7 +810,7 @@ export function useMessages(
       if (localClearedAt) query = query.gt("created_at", localClearedAt);
 
       const { data, error } = await query
-        .lt("created_at", oldest.created_at)
+        .or(`created_at.lt."${cursorTime}",and(created_at.eq."${cursorTime}",id.lt.${cursorId})`)
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(MESSAGE_PAGE_SIZE + 1);

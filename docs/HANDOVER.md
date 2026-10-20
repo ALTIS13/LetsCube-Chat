@@ -26,7 +26,19 @@ remaining actual network/device cases and generic-only Windows WNS. Ordinary
 Windows toasts and Android/iPhone sender/text are already implemented/accepted;
 privacy/installation consent remains required. Positive native in-app32 -> next33
 is a natural-next-release gate, not already proven.
-Do not replay previous accepted cohorts or touch A063.
+Latest direct owner authority now includes A063/ADB, superseding its earlier
+Apollo exclusion. The bounded physical VPN case on installed Stable32 is
+complete: bad-route DNS/TCP fails outside LETSCUBE too; after OS-confirmed VPN
+disconnect the same process automatically shows its nonempty chat list within
+a few seconds. Original phone VPN/tile configuration restored, test-only probe
+removed, no target reinstall/data clear or personal capture. This is not a new
+product fix or proof of every VPN route. [Physical evidence and limits](operations/2026-10-20-a063-vpn-recovery.md).
+Do not replay previous accepted cohorts; PC Happ/routing remains untouched.
+Admission investigation has exposed a concrete older-pagination mismatch;
+D-388 is repaired before adding disk history: confirmed/local cursor and exact
+minimum-microsecond/UUID cases pass, final affected155/155 and review/typecheck
+are accepted. Candidate33 is not yet built/published; next is native/web release
+and actual in-app32 ->33 acceptance. [Current scoped task](operations/2026-10-20-history-tuple-pagination.md).
 
 **Released baseline:** [connection/cache release](operations/2026-10-19-connection-performance.md).
 Six reviewed repairs are RELEASED at product `1ef85b8f`: Auth `815f8009`, history `1096bd03`,
