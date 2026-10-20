@@ -6,8 +6,11 @@
 Latest owner priority: network/VPN recovery, message history cache and readable
 sender/text notifications, retaining the pending motion/update/changelog release.
 [Current scope, ownership and next action](operations/2026-10-20-reconnection-cache-release.md).
-Stage: scoped network/cache/notification diagnosis; candidate32 verifier repaired.
-The old signed build is expired and was never published; build fresh after review.
+Stage: D383/D385/D386/D387 and updater/changelog source RELEASED at `d9991760`.
+Android Stable0.1.31/build32, mandatory=false: fresh original signer/Firebase/
+assets, Realme31 ->32 guest/UID/data/firstInstall and full public APK hash pass.
+Web sole-healthy image/build `2b74d0d5f9bac197`, public/container HTML/JS/SW parity
+and four bidirectional markers pass at19:54:05Z. Previous Stable31 retained.
 [Retained motion/update source acceptance](operations/2026-10-19-ui-motion-and-updates.md).
 Continued/first-prepend reader intent is repaired; helper24, new/active browser8,
 pane4, catalog/settings86, final PWA31 and native UI28 checks pass. Native total
@@ -16,9 +19,13 @@ native fixed-banner geometry8 pass; exact width/theme pixels viewed. Typecheck,
 actual Vite build and mechanical UI detect pass. One older WebKit growth check
 remains inconclusive (combined9/10 then separate1/1; raw failure artifact lost),
 not a clean10/10 or an established product cause. No SQL needed.
-Next: signed build32, original Firebase/signer/assets/new-plugin verification,
-Realme31 ->32 guest/data retention and guarded publication/live parity. Positive
-native in-app32 -> next33 is a natural-next-release gate, not already proven.
+Final current affected cohort88/88 and independent review pass; no SQL change.
+Next: bounded persistent received-text history with fresh privacy/revision
+admission (current received history is RAM, durable outbox is separate), then
+remaining actual network/device cases and generic-only Windows WNS. Ordinary
+Windows toasts and Android/iPhone sender/text are already implemented/accepted;
+privacy/installation consent remains required. Positive native in-app32 -> next33
+is a natural-next-release gate, not already proven.
 Do not replay previous accepted cohorts or touch A063.
 
 **Released baseline:** [connection/cache release](operations/2026-10-19-connection-performance.md).

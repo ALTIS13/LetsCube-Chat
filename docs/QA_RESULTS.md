@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-10-20 - Reconnection, Warm Cache and Update Release
+
+Product `d9991760`, Android Stable0.1.31/build32, mandatory=false. Actual SDK
+reproduces a stalled replacement handshake; the ten-second owned recovery,
+stale-timeout/disposal guards and exact-chat cache invalidation fix pass the
+final88/88 affected checks, typecheck and independent review. Retained motion,
+PWA/native-update/changelog browser/Java evidence is linked below, including one
+older inconclusive WebKit growth case, not relabelled as a clean full matrix.
+
+Fresh APK/AAB original sole signer, APKv2, four exact Firebase values, false QA
+flags, web/config/DEX parity and five updater class definitions pass. Actual
+Realme31 ->32 keeps UID/data/firstInstall, guest opens and native fatal count0.
+Stable publication preserves old31 rollback and checks the complete public APK:
+7,816,157B, SHA256 `b723b8c588b775c78720f5a6d7d2e50f1d5ae9c31b1be809c63bf26d86f8b562`.
+Sole-healthy web image `d9991760`, build `2b74d0d5f9bac197`, public/container
+HTML/JS/SW parity and four bidirectional markers pass at19:54:05Z.
+
+No SQL, host VPN/routing, personal capture, native Apple binary or Windows shell
+change. Reused accepted iPhone/Android sender/text and ordinary Windows toasts;
+background/killed WNS remains generic. Persistent received-text history and
+positive native in-app32 ->next33/device adverse-network cases remain separate.
+[Release, exact limits and next slice](operations/2026-10-20-reconnection-cache-release.md).
+
 ## 2026-10-16 - Recorder Mode Feedback Shared Web
 
 D-366 product a07c5ae6: actual RED dock66→109.328px becomes stable66; an

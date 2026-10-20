@@ -3782,3 +3782,17 @@ labels the prompts MIT. No REA engine is currently exposed, no proprietary code
 or assets are copied, and no personal traffic/accounts are used as fixtures.
 Actual LETSCUBE findings and remaining runtime limits belong to the
 [current evidence record](2026-10-20-reconnection-cache-release.md).
+
+**Android implementation evidence:** inspected Telegram's public Android source
+at commit `0aae959806c57be8ad457980f2a5c6277ff18635`, dated2026-10-20, rather than
+inferring internals from its UI. In
+[ConnectionsManager.checkConnection](https://github.com/DrKLO/Telegram/blob/0aae959806c57be8ad457980f2a5c6277ff18635/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java#L588),
+the Java layer forwards current network availability/type and IP strategy to the
+native transport. In
+[MessagesController.loadMessagesInternal](https://github.com/DrKLO/Telegram/blob/0aae959806c57be8ad457980f2a5c6277ff18635/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java#L11030),
+the applicable fromCache branch delegates to MessagesStorage.getMessages instead
+of entering the server-request branch. These prove separate transport and local
+history ownership; they do not prove instant recovery on every VPN, our cache
+limits, or identical authorization semantics. Telegram source is GPL2-or-later;
+no code is incorporated. LETSCUBE's independent implementation retains Supabase,
+ordinary RLS and current privacy admission rather than copying its wire/storage.

@@ -1,5 +1,13 @@
 # UI Motion And Update Experience
 
+**Released2026-10-20:** product `d9991760`, Android Stable0.1.31/build32 and
+sole-healthy shared-web build `2b74d0d5f9bac197`, with original signer/Firebase/
+assets, data-retaining Realme31 ->32 and complete public APK/web parity proof.
+[Release record and remaining boundaries](2026-10-20-reconnection-cache-release.md).
+Positive native in-app32 ->next33 and broader physical performance stay open.
+The source-stage notes below are chronological evidence, not instructions to
+repeat a completed build or release.
+
 Owner: Codex coordinator; branch `codex/ui-motion-updates-20261019`, base
 `9f6c7afe`. The owner requests smoother navigation/message scrolling, an
 understandable PWA/Android update flow and signed-in access to changelog.

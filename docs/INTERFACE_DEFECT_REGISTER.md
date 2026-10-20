@@ -26156,15 +26156,17 @@ Android Stable31. Controlled Node transport/stream proof is not live Storage/RLS
 physical route-change acceptance.
 [Cause, pins and verification](operations/2026-10-19-connection-performance.md#storage-signing-json-d-382--r6).
 
-## D-383 `[ ]` Prepend settling takes ownership back from continuing scroll
+## D-383 `[x]` Prepend settling takes ownership back from continuing scroll
 
 **Cause:** the older-history hold repeatedly restores its anchor while momentum
 continues without another touchstart. A message commit before the native scroll
 event can also overwrite the ownership token. Actual browser RED shows twelve
 scroll steps making zero progress and a separate24px commit rollback.
 Both layout writes, scroll delivery and RAF correction now check ownership first;
-legitimate layout growth/clamping still corrects. Helper17 (four loaded mutants),
-affected Chromium/WebKit6 and prior entry/retry checks pass. Release pending.
+legitimate layout growth/clamping still corrects. Final helper24, new/active
+Chromium/WebKit8 and retained entry/retry checks pass. Released on shared web and
+Android Stable32 at `d9991760`; the older inconclusive WebKit growth case stays
+explicitly recorded, not relabelled as a clean full matrix.
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
 ## D-384 `[ ]` Android APK download is handed to a browser without completion state
@@ -26173,21 +26175,24 @@ affected Chromium/WebKit6 and prior entry/retry checks pass. Release pending.
 download completion or offer installation. Native private streaming, persisted
 partial/ready state, strict source/hash/identity checks and explicit system
 installation replace this handoff. PWA also gains visible checking/restarting/
-retry and a consumed new-document success receipt. Native safety/integration and
-physical acceptance are in progress; no silent-install or completed device claim.
+retry and a consumed new-document success receipt. Reviewed native source and
+safety checks are released on web/Stable32, with guest upgrade/data retention.
+Positive in-app32 ->next33 is still a natural-next-release gate; no silent-install
+or completed full physical updater claim.
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
-## D-385 `[ ]` Release catalog JSON can hold the new changelog loading forever
+## D-385 `[x]` Release catalog JSON can hold the new changelog loading forever
 
 **Cause:** the old5s deadline ended at headers, before the body. A held200 JSON
 response left the consumer loading and Retry disabled. The same deadline now
 owns the full JSON read, preserving stale fallback, cancellation and retry.
 Actual RED and86 affected checks pass; independent review is clean. Signed-in
 Settings now exposes lazy searchable "Что нового" with real latest-release data,
-without inventing an archive. Release pending.
+without inventing an archive. Released on shared web and Android Stable32 at
+`d9991760`.
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
-## D-386 `[ ]` A replacement socket can strand recovery in CONNECTING
+## D-386 `[x]` A replacement socket can strand recovery in CONNECTING
 
 **Cause:** after the heartbeat replaces a dead transport, its new handshake can
 stall before OPEN. No heartbeat can run on that transport, and the old revival
@@ -26196,16 +26201,19 @@ installed-SDK fixture reproduces a healthy route returning while CONNECTING and
 the channel never rejoining. The existing revival now supervises replacement
 handshakes at a bounded ten-second cadence, without an account reset/reload.
 Healthy sockets, retirement and concurrent doubt signals retain their guards.
-Review/release pending; host VPN/routing and personal traffic were not changed.
+Reviewed and released on shared web/Stable32 at `d9991760`; actual SDK32 checks
+pass. Physical ISP/VPN acceptance remains separate. Host VPN/routing and personal
+traffic were not changed.
 [Current evidence](operations/2026-10-20-reconnection-cache-release.md).
 
-## D-387 `[ ]` Another chat's invalidation serially delays warm history
+## D-387 `[x]` Another chat's invalidation serially delays warm history
 
 **Cause:** a shared generation treated chat B's eviction as invalidation of A's
 pending clear-mark read. A finite burst amplified one query to five; actual
 useMessages execution held warm history behind an unnecessary second answer.
 Pending identity is now scoped to the exact user/chat request. Same-chat clear,
 connection gap and retired-account refusal remain enforced. Focused37+6 checks
-pass; review/release pending. This fixes warm RAM history, not persistent
-received-message history or every reported progressive slowdown.
+pass; reviewed/released on shared web/Stable32 at `d9991760`. This fixes warm RAM
+history, not persistent received-message history or every reported progressive
+slowdown.
 [Current evidence](operations/2026-10-20-reconnection-cache-release.md).

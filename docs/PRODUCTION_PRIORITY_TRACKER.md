@@ -2,15 +2,17 @@
 
 Status: active production-hardening tracker, updated 2026-10-20.
 
-**Current owner-priority stage:** D386 stalled replacement socket recovery and
-D387 unrelated-chat cache invalidation, retaining D383 continued-scroll,
-D384 visible native Android/PWA updates and signed-in "Что нового"/D385 finite
-catalog body. Android candidate0.1.31/build32 was built but not published; its
-exact permission-verifier refusal is repaired and a fresh source-bound build is
-required. Sender/text on iPhone PWA/Android is already shipped; per-installation
-consent/privacy still applies. Windows WNS readable content remains separate.
-Persistent received-text history is not implemented; RAM warm cache and durable
-outbox are different boundaries. Reuse accepted evidence, not unrelated QA.
+**Current released checkpoint:** D383/D385/D386/D387 and updater/changelog source
+are RELEASED at `d9991760`: Android Stable0.1.31/build32, mandatory=false, original
+signer/Firebase/assets, Realme31 ->32 data retention and complete public APK hash;
+web sole-healthy build `2b74d0d5f9bac197`, HTML/JS/SW public/container parity and
+four bidirectional markers pass at19:54:05Z. Prior Stable31 is retained.
+Current affected cohort88/88 and independent review pass. D384 positive native
+in-app32 ->next33 remains a natural-next-release criterion. Sender/text on iPhone
+PWA/Android and ordinary Windows toasts already exist; privacy/install consent
+still applies. Generic-only background/killed Windows WNS remains separate.
+Next priority: persistent received-text history, not yet implemented; RAM warm
+cache and durable outbox are different boundaries. No SQL change in this release.
 [Ownership, evidence and release state](operations/2026-10-20-reconnection-cache-release.md).
 
 **Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** D375 search
