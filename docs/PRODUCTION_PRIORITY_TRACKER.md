@@ -1,13 +1,17 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-19.
+Status: active production-hardening tracker, updated 2026-10-20.
 
-**Current owner-priority stage:** D383 prepend/continued-scroll ownership,
+**Current owner-priority stage:** D386 stalled replacement socket recovery and
+D387 unrelated-chat cache invalidation, retaining D383 continued-scroll,
 D384 visible native Android/PWA updates and signed-in "Что нового"/D385 finite
-catalog body. Source repairs and focused/browser acceptance are in progress;
-Android candidate0.1.31/build32 is not yet built or published. Reuse the accepted
-Stable31 connection/cache baseline rather than repeating unrelated QA.
-[Ownership, evidence and release state](operations/2026-10-19-ui-motion-and-updates.md).
+catalog body. Android candidate0.1.31/build32 was built but not published; its
+exact permission-verifier refusal is repaired and a fresh source-bound build is
+required. Sender/text on iPhone PWA/Android is already shipped; per-installation
+consent/privacy still applies. Windows WNS readable content remains separate.
+Persistent received-text history is not implemented; RAM warm cache and durable
+outbox are different boundaries. Reuse accepted evidence, not unrelated QA.
+[Ownership, evidence and release state](operations/2026-10-20-reconnection-cache-release.md).
 
 **Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** D375 search
 continuity is FIXED/RELEASED at `a02be032` on sole-healthy web/build

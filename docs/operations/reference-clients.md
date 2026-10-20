@@ -3758,3 +3758,27 @@ that Supabase's default matches Telegram. Installed auth-js2.105.1 and the
 both default to global scope and require explicit local scope. Candidate proof
 combines actual callback/SDK request scope with real owned two-session Auth/
 refresh and exact cleanup; device UI proof is recorded separately.
+
+## Reconnection and State Recovery (2026-10-20)
+
+**Reference scope:** official Telegram client protocol and Discord Gateway app
+protocol documentation, not a fresh measurement of either mobile application.
+[Telegram updates](https://core.telegram.org/api/updates) documents ordered local
+sequence state and fetching gaps. [Discord Gateway](https://docs.discord.com/developers/events/gateway)
+documents heartbeat ACKs, closing/reconnecting an unresponsive socket, and resume
+using session and sequence state. These establish protocol-level recovery
+mechanics, not identical SDK internals, mobile timings or offline retention.
+
+**LETSCUBE derivation:** replacing a failed transport must not retire the account,
+lose owned pending state or require a second user gesture to retry a replacement
+that itself stalled. Rejoin and catch-up remain separate from transport OPEN.
+Use the existing Supabase SDK and account/connection-generation fences rather
+than implementing either reference's protocol or treating a spinner as recovery.
+
+The [REA-Prompts methodology](https://github.com/JoasASantos/REA-Prompts) informs
+feature-level tracing: entry point -> state owner -> SDK/persistence -> observable
+effect, with confirmed/inferred/UNKNOWN labels and negative controls. Its README
+labels the prompts MIT. No REA engine is currently exposed, no proprietary code
+or assets are copied, and no personal traffic/accounts are used as fixtures.
+Actual LETSCUBE findings and remaining runtime limits belong to the
+[current evidence record](2026-10-20-reconnection-cache-release.md).

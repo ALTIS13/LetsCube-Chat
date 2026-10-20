@@ -26186,3 +26186,26 @@ Actual RED and86 affected checks pass; independent review is clean. Signed-in
 Settings now exposes lazy searchable "Что нового" with real latest-release data,
 without inventing an archive. Release pending.
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
+
+## D-386 `[ ]` A replacement socket can strand recovery in CONNECTING
+
+**Cause:** after the heartbeat replaces a dead transport, its new handshake can
+stall before OPEN. No heartbeat can run on that transport, and the old revival
+owned no follow-up; another foreground/network gesture was needed. An actual
+installed-SDK fixture reproduces a healthy route returning while CONNECTING and
+the channel never rejoining. The existing revival now supervises replacement
+handshakes at a bounded ten-second cadence, without an account reset/reload.
+Healthy sockets, retirement and concurrent doubt signals retain their guards.
+Review/release pending; host VPN/routing and personal traffic were not changed.
+[Current evidence](operations/2026-10-20-reconnection-cache-release.md).
+
+## D-387 `[ ]` Another chat's invalidation serially delays warm history
+
+**Cause:** a shared generation treated chat B's eviction as invalidation of A's
+pending clear-mark read. A finite burst amplified one query to five; actual
+useMessages execution held warm history behind an unnecessary second answer.
+Pending identity is now scoped to the exact user/chat request. Same-chat clear,
+connection gap and retired-account refusal remain enforced. Focused37+6 checks
+pass; review/release pending. This fixes warm RAM history, not persistent
+received-message history or every reported progressive slowdown.
+[Current evidence](operations/2026-10-20-reconnection-cache-release.md).

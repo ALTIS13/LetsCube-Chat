@@ -1,12 +1,14 @@
 # LETSCUBE — handover
 
-**Current State, 2026-10-19:** Owner: Codex coordinator, canonical branch
+**Current State, 2026-10-20:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Latest owner priority: fluid navigation/message scrolling, understandable native
-Android/PWA updates and signed-in changelog access.
-[Current work, ownership and acceptance](operations/2026-10-19-ui-motion-and-updates.md).
-Stage: final source frozen; Android0.1.31/build32 build/device/release next.
+Latest owner priority: network/VPN recovery, message history cache and readable
+sender/text notifications, retaining the pending motion/update/changelog release.
+[Current scope, ownership and next action](operations/2026-10-20-reconnection-cache-release.md).
+Stage: scoped network/cache/notification diagnosis; candidate32 verifier repaired.
+The old signed build is expired and was never published; build fresh after review.
+[Retained motion/update source acceptance](operations/2026-10-19-ui-motion-and-updates.md).
 Continued/first-prepend reader intent is repaired; helper24, new/active browser8,
 pane4, catalog/settings86, final PWA31 and native UI28 checks pass. Native total
 headers/body deadline16 passes. Actual combined settings8, notice14 and final

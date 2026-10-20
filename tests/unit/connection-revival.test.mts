@@ -180,7 +180,7 @@ function socketHarness({ connected = true }: { connected?: boolean } = {}) {
       },
       timers: {
         set: (run, ms) => {
-          assert.equal(ms, ANSWER_MS);
+          assert.ok(ms === 4_000 || ms === 10_000, "only the probe or recovery deadline is armed");
           pending = run;
           return run;
         },
@@ -234,7 +234,7 @@ test("a socket that already knows it is closed is opened rather than probed", ()
   assert.equal(state.beats, 0);
 });
 
-test("a handshake that never finishes is dropped before it is opened again", async () => {
+test("a handshake that never finishes is dropped before it is opened again", async (t) => {
   // realtime-js 2.105.1 `RealtimeClient.connect` returns while `isConnecting()`.
   // phoenix 0.4.1 `Socket.connect` returns while `conn` exists. A handshake
   // left on the route that just died therefore stays until the browser gives
@@ -271,6 +271,7 @@ test("a handshake that never finishes is dropped before it is opened again", asy
       state.beats += 1;
     },
   });
+  t.after(() => revival.dispose());
 
   assert.equal(revival.doubt(), "connect");
   assert.equal(state.beats, 0, "a stuck handshake was probed");
@@ -320,8 +321,9 @@ test("a disposed revival cannot reconnect after its held disconnect completes", 
   assert.equal(state.connects, 0, "a queued signal revived a disposed owner");
 });
 
-test("doubts during a held disconnect join one recovery without connecting early", async () => {
+test("doubts during a held disconnect join one recovery without connecting early", async (t) => {
   const { revival, state, finish } = pendingDisconnect();
+  t.after(() => revival.dispose());
   revival.doubt();
   revival.doubt();
   revival.doubt();

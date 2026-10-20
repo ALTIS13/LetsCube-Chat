@@ -18,6 +18,9 @@
  * socket down, errors the channels so that they rejoin, and reconnects. The
  * recovery is phoenix's own, only started when there is a reason rather than on
  * the clock. Only the public API is used (`sendHeartbeat`, `onHeartbeat`).
+ * A recovery also owns a bounded follow-up: a newly opened transport can remain
+ * CONNECTING forever, before the SDK can send heartbeats. It is retried without
+ * requiring another foreground/network event; healthy transports are left alone.
  *
  * The cost of being wrong is small by construction: a healthy socket answers
  * in a few hundred milliseconds and the second beat is never sent.
@@ -46,6 +49,9 @@ export interface RevivableSocket {
 
 /** How long a probing heartbeat may go unanswered before the socket is replaced. */
 export const ANSWER_MS = 4_000;
+
+/** A new transport can stall before OPEN, when the SDK heartbeat cannot run. */
+export const CONNECTING_TIMEOUT_MS = 10_000;
 
 /**
  * Dispatched on `window` when a moment of doubt cut stranded reads or replaced
@@ -81,11 +87,64 @@ export function createRealtimeRevival(
   let answered = false;
   let disposed = false;
   let reconnecting = false;
+  let recovery: { handle: unknown } | null = null;
+
+  const clearRecovery = () => {
+    if (recovery !== null) timers.clear(recovery.handle);
+    recovery = null;
+  };
+
+  const watchConnection = () => {
+    if (disposed || recovery !== null) return;
+    const pending = { handle: null as unknown };
+    recovery = pending;
+    pending.handle = timers.set(() => {
+      if (recovery !== pending) return;
+      recovery = null;
+      if (disposed || socket.isConnected()) return;
+      reconnect();
+    }, CONNECTING_TIMEOUT_MS);
+  };
+
+  const reconnect = () => {
+    if (disposed || reconnecting) return;
+    clearRecovery();
+    // connect() cannot replace an existing handshake or run during its drop.
+    if (socket.isConnecting?.() && socket.disconnect) {
+      reconnecting = true;
+      void (async () => {
+        try {
+          await socket.disconnect!();
+          if (!disposed && !socket.isConnected()) {
+            clearRecovery();
+            socket.connect();
+            watchConnection();
+          }
+        } catch {
+          // A failed drop never authorizes connect; retry at the bounded cadence.
+          watchConnection();
+        } finally {
+          reconnecting = false;
+        }
+      })();
+    } else {
+      try {
+        socket.connect();
+      } catch {
+        // A transport constructor can refuse too; no uncaught timer callback.
+      } finally {
+        watchConnection();
+      }
+    }
+  };
 
   return {
     /** Feed every heartbeat status here; `ok` is the answer a probe waits for. */
     heartbeat(status: HeartbeatStatus) {
+      if (disposed) return;
       if (status === "ok") answered = true;
+      // Also supervise the SDK's own heartbeat recovery, without a UI event.
+      if (status === "timeout" || status === "disconnected") watchConnection();
     },
 
     /** A moment of doubt. */
@@ -96,21 +155,7 @@ export function createRealtimeRevival(
         // connecting, so `connect()` leaves it there and no probe is sent.
         // Drop it first. `connect()` during the drop is refused as well
         // (`isDisconnecting`), so the new one waits until the drop settles.
-        if (socket.isConnecting?.() && socket.disconnect) {
-          reconnecting = true;
-          void (async () => {
-            try {
-              await socket.disconnect!();
-              if (!disposed && !socket.isConnected()) socket.connect();
-            } catch {
-              // A later doubt may retry; a failed drop cannot authorize a reconnect.
-            } finally {
-              reconnecting = false;
-            }
-          })();
-          return "connect";
-        }
-        socket.connect();
+        reconnect();
         return "connect";
       }
       if (probe !== null) return "probing";
@@ -118,10 +163,12 @@ export function createRealtimeRevival(
       void socket.sendHeartbeat();
       probe = timers.set(() => {
         probe = null;
-        if (answered || !socket.isConnected()) return;
+        if (disposed || answered) return;
+        if (!socket.isConnected()) { watchConnection(); return; }
         // Unanswered: the second beat is phoenix's heartbeat timeout.
         void socket.sendHeartbeat();
         onReplaced();
+        watchConnection();
       }, answerMs);
       return "probe";
     },
@@ -129,6 +176,7 @@ export function createRealtimeRevival(
     dispose() {
       disposed = true;
       if (probe !== null) timers.clear(probe);
+      clearRecovery();
       probe = null;
     },
   };

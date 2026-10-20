@@ -79,14 +79,13 @@ export class ClearedAtCache {
     if (answer && this.usable(answer)) return Promise.resolve(answer.value);
 
     const startedAt = this.now();
-    const generation = this.generation;
     const connectionGeneration = this.connectionGeneration;
     let request!: Promise<string | null | undefined>;
     request = (async () => {
       const result = await load();
       if (connectionGeneration !== this.connectionGeneration) return undefined;
-      if (generation !== this.generation) {
-        if (this.pending.get(key) === request) this.pending.delete(key);
+      // Only this chat's eviction can replace a pending read within a connection.
+      if (this.pending.get(key) !== request) {
         return this.getOrLoad(chatId, userId, load);
       }
       const newer = this.answers.get(key);

@@ -40,6 +40,7 @@ const approvedPermissions = [
   "android.permission.READ_MEDIA_IMAGES",
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.RECORD_AUDIO",
+  "android.permission.REQUEST_INSTALL_PACKAGES",
   "android.permission.WAKE_LOCK",
   "com.google.android.c2dm.permission.RECEIVE",
   "com.kub.messenger.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
@@ -161,7 +162,7 @@ test("Android release verifier accepts only the protected exported dependency re
   }
 });
 
-test("Android release verifier accepts only the required FCM permission additions", () => {
+test("Android release verifier accepts the exact FCM and explicit updater permission contract", () => {
   const fixture = createFixture();
   const options = {
     assetLinksPath: fixture.assetLinksPath,
@@ -174,6 +175,14 @@ test("Android release verifier accepts only the required FCM permission addition
       ...options,
       run: createRunner({ "manifest permissions": approvedPermissions.join("\n") }).run,
     }));
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, {
+      ...options,
+      run: createRunner({
+        "manifest permissions": approvedPermissions
+          .filter((permission) => permission !== "android.permission.REQUEST_INSTALL_PACKAGES")
+          .join("\n"),
+      }).run,
+    }), /permissions do not match the approved contract/);
     assert.throws(() => verifyAndroidRelease(fixture.apkPath, {
       ...options,
       run: createRunner({

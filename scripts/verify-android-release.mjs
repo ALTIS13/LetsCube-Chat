@@ -28,6 +28,7 @@ const EXPECTED_PERMISSIONS = new Set([
   "android.permission.READ_MEDIA_IMAGES",
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.RECORD_AUDIO",
+  "android.permission.REQUEST_INSTALL_PACKAGES",
   "android.permission.WAKE_LOCK",
   "com.google.android.c2dm.permission.RECEIVE",
   "com.kub.messenger.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
