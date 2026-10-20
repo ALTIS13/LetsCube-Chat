@@ -1,44 +1,35 @@
 # LETSCUBE — handover
 
-**Current State, 2026-10-20:** Owner: Codex coordinator, canonical branch
+**Current State, 2026-10-21:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Latest owner priority: network/VPN recovery, message history cache and readable
-sender/text notifications, retaining the pending motion/update/changelog release.
-[Current scope, ownership and next action](operations/2026-10-20-reconnection-cache-release.md).
-Stage: D383/D385/D386/D387 and updater/changelog source RELEASED at `d9991760`.
-Android Stable0.1.31/build32, mandatory=false: fresh original signer/Firebase/
-assets, Realme31 ->32 guest/UID/data/firstInstall and full public APK hash pass.
-Web sole-healthy image/build `2b74d0d5f9bac197`, public/container HTML/JS/SW parity
-and four bidirectional markers pass at19:54:05Z. Previous Stable31 retained.
-[Retained motion/update source acceptance](operations/2026-10-19-ui-motion-and-updates.md).
-Continued/first-prepend reader intent is repaired; helper24, new/active browser8,
-pane4, catalog/settings86, final PWA31 and native UI28 checks pass. Native total
-headers/body deadline16 passes. Actual combined settings8, notice14 and final
-native fixed-banner geometry8 pass; exact width/theme pixels viewed. Typecheck,
-actual Vite build and mechanical UI detect pass. One older WebKit growth check
-remains inconclusive (combined9/10 then separate1/1; raw failure artifact lost),
-not a clean10/10 or an established product cause. No SQL needed.
-Final current affected cohort88/88 and independent review pass; no SQL change.
-Next: bounded persistent received-text history with fresh privacy/revision
-admission (current received history is RAM, durable outbox is separate), then
-remaining actual network/device cases and generic-only Windows WNS. Ordinary
-Windows toasts and Android/iPhone sender/text are already implemented/accepted;
-privacy/installation consent remains required. Positive native in-app32 -> next33
-is a natural-next-release gate, not already proven.
-Latest direct owner authority now includes A063/ADB, superseding its earlier
-Apollo exclusion. The bounded physical VPN case on installed Stable32 is
-complete: bad-route DNS/TCP fails outside LETSCUBE too; after OS-confirmed VPN
-disconnect the same process automatically shows its nonempty chat list within
-a few seconds. Original phone VPN/tile configuration restored, test-only probe
-removed, no target reinstall/data clear or personal capture. This is not a new
-product fix or proof of every VPN route. [Physical evidence and limits](operations/2026-10-20-a063-vpn-recovery.md).
-Do not replay previous accepted cohorts; PC Happ/routing remains untouched.
-Admission investigation has exposed a concrete older-pagination mismatch;
-D-388 is repaired before adding disk history: confirmed/local cursor and exact
-minimum-microsecond/UUID cases pass, final affected155/155 and review/typecheck
-are accepted. Candidate33 is not yet built/published; next is native/web release
-and actual in-app32 ->33 acceptance. [Current scoped task](operations/2026-10-20-history-tuple-pagination.md).
+Stage: D-388 RELEASED at `b50dda0f`; Android Stable0.1.32/build33,
+mandatory=false, rollback32 retained. Original signer/Firebase/assets,
+Realme32 ->33 guest/data/UID/firstInstall retention and full public APK hash pass.
+Final affected155/155, typecheck and independent review pass. Sole-healthy shared
+web/build `affacc90ed0418d6`, public/container parity and new/old history marker
+pass at2026-10-20 21:06:39Z. [Release](operations/2026-10-20-history-tuple-pagination.md).
+
+Current task: D-384 actual A06332 ->33 updater canary REFUSED, not accepted.
+Actual UI/native bridge rejects before catalog while app-UID public catalog is
+reachable; WebView URL read succeeds on UI and throws on a worker. Installed
+Capacitor8.3.4 invokes PluginMethods on its worker; the updater reads getUrl there.
+Native34 source passes final87/87 and review; build/device acceptance is next.
+Existing32/33 need a one-time manual bootstrap,
+not a bypass of source/signature/hash/version checks. [Current repair](operations/2026-10-21-android-update-bridge-thread.md).
+
+Latest owner authority includes A063/ADB, superseding its earlier Apollo
+exclusion. The separate adverse-VPN case32 recovers the list automatically when
+the failed route returns; original phone VPN/tile configuration is restored.
+No personal capture, account clear or PC Happ/routing change. [VPN evidence](operations/2026-10-20-a063-vpn-recovery.md).
+Next after Native34: bounded persistent received-text history with fresh access/
+revision admission; current history is RAM and outbox is separate. The minimum
+conditional-page candidate is source/catalog-mapped, not implemented/measured.
+Generic-only background/killed Windows WNS and broader device QA remain open.
+Ordinary Windows toasts and Android/iPhone sender/text already exist; retain
+privacy/install consent. [Cache/release scope](operations/2026-10-20-reconnection-cache-release.md).
+Retain [motion/update evidence and its WebKit limit](operations/2026-10-19-ui-motion-and-updates.md);
+do not replay accepted cohorts or call native class presence API acceptance.
 
 **Released baseline:** [connection/cache release](operations/2026-10-19-connection-performance.md).
 Six reviewed repairs are RELEASED at product `1ef85b8f`: Auth `815f8009`, history `1096bd03`,

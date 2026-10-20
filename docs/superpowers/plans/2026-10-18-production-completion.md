@@ -45,7 +45,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published artifacts are immutable; current Stable32 and rollback31 are
+  parity. Published artifacts are immutable; current Stable33 and rollback32 are
   retained. Use the next version/build for new embedded-client code.
 
 ## Review Focus
@@ -62,6 +62,14 @@ this document coordinates their remaining deliverables, not a replacement design
    duplicate effects or misleading delivery/read state (Tasks2/7/10).
 
 ## Accepted Baseline (Reuse)
+
+- [x] D388/source `b50dda0f` released on shared web/build `affacc90ed0418d6`
+  and Android Stable0.1.32/build33. Final affected155/155/review, signer/Firebase/
+  assets, Realme32 ->33 data retention and public APK hash pass; rollback32.
+  The actual A063 built-in update case is REFUSED before catalog by a distinct
+  native bridge thread bug, currently being repaired for Native34. Do not equate
+  the guest ADB upgrade with a successful in-app installation.
+  [Current native repair](../../operations/2026-10-21-android-update-bridge-thread.md).
 
 - [x] D383/D385/D386/D387 released at product `d9991760`, shared web/build
   `2b74d0d5f9bac197` and Android Stable0.1.31/build32. Final affected88/88,

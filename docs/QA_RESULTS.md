@@ -1,5 +1,24 @@
 # QA Results
 
+## 2026-10-21 - History Stable33 and Native Updater Bridge Failure
+
+D388/source `b50dda0f`: final affected155/155, zero skips, typecheck and peer
+review pass. Actual fresh Android0.1.32/build33 original signer/Firebase/assets,
+Realme32 ->33 guest/data/UID/firstInstall retention, public complete APK hash and
+Stable32 rollback pass at2026-10-20 21:03:20Z. Shared-web exact sole-healthy image,
+build `affacc90ed0418d6`, public/container parity and old/new cursor marker pass
+at21:06:39Z. No SQL or native Apple/Windows shell change.
+[Release and limits](operations/2026-10-20-history-tuple-pagination.md).
+
+Actual A06332 built-in updater is REFUSED before download. Subsequent actual
+JS/native status rejects with ANDROID_UPDATE_UNAVAILABLE while app-UID catalog
+is200/core health401 and native runtime remains idle. Same WebView URL read is
+allowed on UI but throws RuntimeException on a worker; installed Capacitor8.3.4
+dispatches plugin methods on its worker. Native34 repair is pending, not a native
+download/install success. Temporary test packages removed, app32 data retained,
+no personal screens/body/URL paths/tokens captured. No VPN/profile/host change.
+[Root cause and one-time bootstrap boundary](operations/2026-10-21-android-update-bridge-thread.md).
+
 ## 2026-10-20 - A063 Adverse VPN and Automatic List Recovery
 
 Latest owner authority includes A063/ADB. Actual installed Stable0.1.31/build32

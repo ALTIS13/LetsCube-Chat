@@ -264,6 +264,13 @@ final class AndroidUpdateRuntime {
     synchronized void installerReturned(long owner, String failure) {
         if (current(owner) && "installing".equals(phase)) finish(owner, "ready", failure);
     }
+    void finishInstaller(long owner, String failure, Consumer<JSObject> completed) {
+        // The Activity/Bridge queue can be gone while app-owned preparation completes.
+        worker.execute(() -> {
+            installerReturned(owner, failure);
+            completed.accept(status());
+        });
+    }
     private static String code(Exception failure) {
         String message = failure.getMessage();
         return message != null && Arrays.asList("SOURCE", "CATALOG", "PACKAGE", "SIGNER", "HASH", "SIZE", "RANGE", "FILE", "VERSION", "STALE_RELEASE").contains(message)

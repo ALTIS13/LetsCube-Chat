@@ -26177,8 +26177,11 @@ partial/ready state, strict source/hash/identity checks and explicit system
 installation replace this handoff. PWA also gains visible checking/restarting/
 retry and a consumed new-document success receipt. Reviewed native source and
 safety checks are released on web/Stable32, with guest upgrade/data retention.
-Positive in-app32 ->next33 is still a natural-next-release gate; no silent-install
-or completed full physical updater claim.
+Actual in-app32 ->33 is REFUSED: updater calls WebView.getUrl from Capacitor's
+worker and rejects before catalog. Physical same-view UI/worker proof and healthy
+app-UID public catalog isolate this from VPN failure. Native34 repair/manual
+bootstrap is current; no successful full updater or silent-install claim.
+[Current physical finding](operations/2026-10-21-android-update-bridge-thread.md).
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
 ## D-385 `[x]` Release catalog JSON can hold the new changelog loading forever
@@ -26218,7 +26221,7 @@ history, not persistent received-message history or every reported progressive
 slowdown.
 [Current evidence](operations/2026-10-20-reconnection-cache-release.md).
 
-## D-388 `[~]` Equal-time messages disappear across an older-page boundary
+## D-388 `[x]` Equal-time messages disappear across an older-page boundary
 
 **Severity:** high. The query sorts by time/UUID but filters the next page only
 by strictly earlier time. The actual-hook/installed-SDK controlled shipped case
@@ -26226,7 +26229,8 @@ retains100 tied rows instead of200 after the second read. Use the same exclusive
 tuple as the server order, preserving microseconds and normal topic/privacy
 filters. Confirmed-only cursor selection keeps old local failed/pending rows and
 uses the actual minimum server tuple, not millisecond-rounded display order.
-Final affected155/155 and independent review/typecheck pass. Candidate33 is not
-yet built/published; device/release acceptance remains. This does not implement
-persistent disk history.
+Final affected155/155 and independent review/typecheck pass. Released at
+`b50dda0f` on verified shared web and Stable33, with original signer/Firebase,
+Realme32 ->33 guest/data retention and full public APK hash. Actual in-app updater
+failure belongs to D384; this does not implement persistent disk history.
 [Current repair and evidence](operations/2026-10-20-history-tuple-pagination.md).

@@ -4,14 +4,12 @@
 
 - Owner: Codex coordinator; canonical `android-current-20261015`, branch
   `codex/ui-motion-updates-20261019`, released baseline `41b775c7` / Stable32.
-- Stage: D-388 source repair, affected checks and final review are accepted.
-  Candidate metadata is Android0.1.32/build33, not yet built/published.
+- Stage: D-388 RELEASED at `b50dda0f`; Android0.1.32/build33 Stable.
 - Source boundary: `useMessages.loadOlderMessages`, its actual-hook/installed-SDK
   tests and the affected lifetime/account fixtures. No SQL, history retention,
   media body, native updater or notification-privacy contract change.
-- Next: build/verify the immutable
-  candidate, then device/publication/live-web proof. Do not claim this implements
-  persistent received-text history.
+- Next: fix the distinct actual updater-bridge thread failure found by the
+  A06332 ->33 canary. Do not claim this implements persistent received history.
 
 ## Confirmed Failure
 
@@ -68,6 +66,31 @@ the real scheduler/current fetch callback with finite timers, rather than a
 no-op; its epoch/retirement positive control and loaded lifecycle omission fail
 for the expected assertions. This is a test-harness repair, not an app defect.
 
-Native candidate/release acceptance remains next. No Stable33, actual in-app
-32 ->33 update, live pagination canary or persisted received-history feature is
-claimed by this checkpoint.
+## Release
+
+Product `b50dda0f0f33a4ea8259f50c2f1e21c1c0b15506` built freshly:
+`sw.js build 846d0c412bd39c77`, `built in 23.99s`, `BUILD SUCCESSFUL in 14s`.
+APK7,816,337B SHA256
+`59262f006cb8cfe72fc920abcc2431922b3b24050a62ed5c9939d5d1dd50658e`;
+AAB7,440,653B SHA256
+`c926fbcc18cadd23e26ca29add6ead2e3b918e65984533cabee925a5127ba4ce`.
+Original sole signer/APKv2, exact Firebase4, false QA flags and42-file web/config/
+DEX parity pass. Updater5 class definitions/registration/permission/provider pass;
+these are artifact checks, not proof of its JS/native entry point.
+
+Realme32 ->33 keeps UID/data/firstInstall and opens the guest interface, fatal0.
+The initial locked-screen refusal was before installation; ordinary non-secure
+keyguard dismissal changes that input and the accepted attempt follows. Stable33
+publication at2026-10-20 21:03:20Z has mandatory=false, old32 rollback retained
+and exact complete public APK bytes/SHA. No DB migration, Windows shell or native
+Apple binary change.
+
+Sole-healthy shared web image `b50dda0f`, build `affacc90ed0418d6`, has public/
+container HTML/JS/SW parity. The new cursor marker is absent from old41b775c7,
+present in the released tree/served entry, with the old timestamp-only selector
+removed from the new source at21:06:39Z. Windows remote renderer/shared PWA receive
+this repair; full physical pagination is not claimed from source/guest checks.
+
+Actual A06332 ->33 in-app canary is REFUSED before download. Its separate
+[bridge-thread cause and Native34 repair](2026-10-21-android-update-bridge-thread.md)
+remain explicit; no successful built-in installation or disk history is claimed.

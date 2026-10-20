@@ -2,17 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-20.
 
-**Current released checkpoint:** D383/D385/D386/D387 and updater/changelog source
-are RELEASED at `d9991760`: Android Stable0.1.31/build32, mandatory=false, original
-signer/Firebase/assets, Realme31 ->32 data retention and complete public APK hash;
-web sole-healthy build `2b74d0d5f9bac197`, HTML/JS/SW public/container parity and
-four bidirectional markers pass at19:54:05Z. Prior Stable31 is retained.
-Current affected cohort88/88 and independent review pass. D384 positive native
-in-app32 ->next33 remains a natural-next-release criterion. Sender/text on iPhone
-PWA/Android and ordinary Windows toasts already exist; privacy/install consent
-still applies. Generic-only background/killed Windows WNS remains separate.
-Next priority: persistent received-text history, not yet implemented; RAM warm
-cache and durable outbox are different boundaries. No SQL change in this release.
+**Current released checkpoint:** D388 is RELEASED at `b50dda0f` on Android
+Stable0.1.32/build33, mandatory=false, original signer/Firebase/assets,
+Realme32 ->33 data retention and complete public APK hash; sole-healthy shared
+web/build `affacc90ed0418d6`, public/container parity and bidirectional cursor
+marker pass at21:06:39Z. Prior Stable32 is retained. Affected155/155 and final
+review/typecheck pass; D383/D385/D386/D387 remain released from `d9991760`.
+Actual D384 A06332 ->33 is REFUSED before download: the native origin guard
+reads WebView on Capacitor's worker. Current work is Native34 repair/manual
+bootstrap, not a claim that built-in installation passed. [Current repair](operations/2026-10-21-android-update-bridge-thread.md).
+Then persistent received-text history, not yet implemented; RAM warm cache and
+durable outbox are different boundaries. Sender/text on iPhone PWA/Android and
+ordinary Windows toasts already exist; privacy/install consent still applies.
+Generic-only background/killed Windows WNS remains separate. No SQL change.
 [Ownership, evidence and release state](operations/2026-10-20-reconnection-cache-release.md).
 
 Latest A063 authority supersedes its old exclusion. On installed Stable32 the
@@ -22,10 +24,8 @@ Original VPN/tile state restored, test-only probe removed, target data retained.
 No new product defect or all-route acceptance is inferred. PC network untouched.
 [A063 evidence, clock correction and remaining work](operations/2026-10-20-a063-vpn-recovery.md).
 
-D-388 source is accepted: older reads use the same exclusive time/UUID tuple as
-the page order, selected from confirmed rows at full microsecond precision.
-Final affected155/155 and review/typecheck pass; candidate0.1.32/build33 is not
-yet built/published. [Current release task](operations/2026-10-20-history-tuple-pagination.md).
+D-388 older reads now use the same exclusive time/UUID tuple as the page order,
+selected from confirmed rows at full microsecond precision. [Released repair](operations/2026-10-20-history-tuple-pagination.md).
 
 **Latest accepted checkpoint, 2026-10-19 local / 2026-10-18 UTC:** D375 search
 continuity is FIXED/RELEASED at `a02be032` on sole-healthy web/build
