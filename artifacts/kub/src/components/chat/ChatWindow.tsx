@@ -2068,8 +2068,15 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           <div className="flex-1 flex items-center justify-center chat-bg">
             <KubEmptyState
               icon={<KubIcon name="chatRect" size={24} />}
-              title="Сообщений пока нет"
-              description="Поздоровайтесь и начните разговор."
+              title={hasMoreOlder ? "Ранние сообщения" : "Сообщений пока нет"}
+              description={hasMoreOlder ? (olderError ?? "В загруженной части истории нет сообщений.") : "Поздоровайтесь и начните разговор."}
+              action={hasMoreOlder ? (
+                <KubButton type="button" variant="secondary" className="min-h-11" loading={loadingOlder}
+                  leftIcon={<KubIcon name="chevronUp" size={16} />}
+                  onClick={() => void loadOlderMessages()}>
+                  Загрузить ранние сообщения
+                </KubButton>
+              ) : undefined}
             />
           </div>
         ) : (

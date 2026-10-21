@@ -26237,3 +26237,17 @@ Final affected155/155 and independent review/typecheck pass. Released at
 Realme32 ->33 guest/data retention and full public APK hash. Actual in-app updater
 failure belongs to D384; this does not implement persistent disk history.
 [Current repair and evidence](operations/2026-10-20-history-tuple-pagination.md).
+
+## D-389 `[~]` Own-hidden pages stop earlier history and leave no loading action
+
+**Cause:** the next cursor was derived only from visible rows. A100-slot page
+hidden for oneself has no visible cursor; an empty ChatWindow also never mounts
+the scroll-only loader. A short page cannot provide the necessary scroll range.
+An independently admitted raw time/UUID frontier now survives filtering, while
+scope/account/privacy/clear retirement, local-only exclusion and lookahead
+boundaries remain enforced. Empty/short views have an explicit loading/retry
+action instead of a false empty greeting. Cold hides-channel retirement uses one
+coalesced recovery, not an offline retry loop. Hook281/281, mounted12/12,
+prepend/entry7/7 and guest pixels16 pass; final review is clean, rollout pending.
+This does not enable persistent received history or close D384 device acceptance.
+[Current repair](operations/2026-10-21-hidden-history-pagination.md).

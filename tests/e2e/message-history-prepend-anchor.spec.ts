@@ -35,6 +35,8 @@ const ANYA = person("11111111-1111-4111-8111-1111111111d2", "Аня");
 const CHAT_ID = "22222222-2222-4222-8222-2222222222d1";
 const LATEST_TEXT = "Последнее из трёхсот";
 
+test.use({ screenshot: "off", trace: "off", video: "off" });
+
 function history(count = 300): Row[] {
   const start = Date.now() - 400 * 60_000;
   return Array.from({ length: count }, (_, index) =>
@@ -50,11 +52,30 @@ function history(count = 300): Row[] {
 
 async function openConversation(page: Page, count = 300): Promise<Locator> {
   const now = new Date().toISOString();
+  const messages = history(count);
   await openFixture(page, {
     me: ME,
     chats: [chat(CHAT_ID, "private", null, now)],
     memberships: [membership(CHAT_ID, ME, "owner", now), membership(CHAT_ID, ANYA, "member", now)],
-    messages: history(count),
+    messages,
+    rest(call) {
+      const params = new URLSearchParams(call.search);
+      if (call.resource !== "messages" || call.method !== "GET" || params.get("limit") !== "101") return;
+      expect(params.get("chat_id")).toBe(`eq.${CHAT_ID}`);
+      expect(params.get("order")).toBe("created_at.desc,id.desc");
+      const before = params.get("or");
+      let selected = messages.slice();
+      if (before) {
+        const tuple = /^\(created_at\.lt\."([^"]+)",and\(created_at\.eq\."([^"]+)",id\.lt\.([0-9a-f-]{36})\)\)$/.exec(before);
+        expect(tuple, "real SDK emits an exclusive history tuple").not.toBeNull();
+        expect(tuple![1]).toBe(tuple![2]);
+        selected = selected.filter(row => String(row.created_at) < tuple![1]
+          || (row.created_at === tuple![1] && String(row.id) < tuple![3]));
+      }
+      selected.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))
+        || String(b.id).localeCompare(String(a.id)));
+      return { status: 200, body: selected.slice(0, 101) };
+    },
   });
   await openChat(page, ANYA.full_name, LATEST_TEXT);
   const container = page.getByTestId("message-scroll-container");
@@ -66,8 +87,10 @@ async function openConversation(page: Page, count = 300): Promise<Locator> {
 /** Older pages answer after a pause, so there is a load to watch. */
 async function delayOlderPages(page: Page, ms: number) {
   await page.route(`${FIXTURE_HOST}/rest/v1/messages**`, async (route) => {
-    const createdAt = new URL(route.request().url()).searchParams.get("created_at");
-    if (createdAt?.startsWith("lt.")) await new Promise((resolve) => setTimeout(resolve, ms));
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get("created_at")?.startsWith("lt.") || params.get("or")?.includes("created_at.lt.")) {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    }
     await route.fallback();
   });
 }

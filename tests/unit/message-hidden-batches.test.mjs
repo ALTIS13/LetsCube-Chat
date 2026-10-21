@@ -9,6 +9,11 @@ const source = readFileSync(new URL('hooks/useMessages.ts', base), 'utf8');
 const windowSource = readFileSync(new URL('components/chat/ChatWindow.tsx', base), 'utf8');
 const plain = value => JSON.parse(JSON.stringify(value));
 const tick = async () => { for (let i = 0; i < 24; i++) await Promise.resolve(); };
+const FRESH = '40000000-0000-0000-0000-000000000001';
+const HELD = '50000000-0000-0000-0000-000000000001';
+const LAST_HELD = '50000000-0000-0000-0000-000000000101';
+const REPLY = '60000000-0000-0000-0000-000000000001';
+const LATE = '70000000-0000-0000-0000-000000000001';
 function javascript(text) {
   const result = ts.transpileModule(text, {reportDiagnostics: true, compilerOptions: {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS,
@@ -22,11 +27,11 @@ function select(text, kind = ts.ScriptKind.TS) {
   const nodes = [];
   const visit = node => { nodes.push(node); ts.forEachChild(node, visit); };
   visit(tree);
-  return predicate => {
+  return Object.assign(predicate => {
     const matches = nodes.filter(predicate);
     assert.equal(matches.length, 1, 'exact actual-source AST consumer');
     return matches[0].getText(tree);
-  };
+  }, {has: predicate => nodes.some(predicate)});
 }
 function actual(text = source) {
   const pick = select(text);
@@ -56,12 +61,37 @@ function actual(text = source) {
   const sharingModule = {exports: {}};
   vm.runInNewContext(javascript(readFileSync(new URL('lib/structuralSharing.ts', base), 'utf8')),
     {module: sharingModule, exports: sharingModule.exports});
-  const context = vm.createContext({console: {error() {}}, hiddenMessagesLive: {captureRead: () => () => true}, ...mergeModule.exports, ...sharingModule.exports});
+  const watermarkModule = {exports: {}}, hiddenModule = {exports: {}};
+  for (const [file, module] of [['lib/readMarkWatermark.ts', watermarkModule], ['lib/hiddenMessagesLive.ts', hiddenModule]]) {
+    vm.runInNewContext(javascript(readFileSync(new URL(file, base), 'utf8')), {module, exports: module.exports});
+  }
+  const timers = new Map(); let timerId = 0;
+  const context = vm.createContext({console: {error() {}}, hiddenMessagesLive: hiddenModule.exports.hiddenMessagesLive,
+    setTimeout: (callback, ms) => { timers.set(++timerId, {callback, ms}); return timerId; }, clearTimeout: id => timers.delete(id),
+    useRef: current => ({current}), ...watermarkModule.exports, ...mergeModule.exports, ...sharingModule.exports});
+  // The shipped-source comparison predates these closures. Current source loads
+  // the actual refs, callbacks and scope effect together, never substitutes them.
+  const ownedHistory = pick.has(n => ts.isVariableDeclaration(n) && n.name.getText() === 'captureHistoryRead');
+  const scopeEffect = ownedHistory ? pick(n => ts.isArrowFunction(n) && ts.isCallExpression(n.parent) &&
+    n.parent.expression.getText() === 'useLayoutEffect' && n.getText().includes('historyScopeOwnerRef.current = Symbol()')) : null;
+  const recoveryEffect = ownedHistory ? pick(n => ts.isArrowFunction(n) && ts.isCallExpression(n.parent) &&
+    n.parent.expression.getText() === 'useLayoutEffect' && n.getText().includes('recoveryOwnerRef.current = owner')) : null;
+  const ownership = ownedHistory ? `
+    ${['rawHistoryCursorRef', 'historyScopeOwnerRef', 'fetchMessagesRef', 'recoveryOwnerRef', 'recoveryTimerRef', 'recoveryTimerDueRef']
+      .map(name => `const ${variable(name)}; globalThis.${name} = ${name};`).join('\n')}
+    const captureHistoryRead = ${callback('captureHistoryRead')};
+    const rememberRawHistoryBoundary = ${callback('rememberRawHistoryBoundary')};
+    const scheduleRecoveryReconcile = ${callback('scheduleRecoveryReconcile')};
+    globalThis.commitHistoryScope = ${scopeEffect};
+    globalThis.commitRecoveryScope = ${recoveryEffect};` : '';
   const helpers = ['fetchHiddenMessageIdSet', 'captureMessageAccount', 'messageBelongsToTopic',
-    'getMessageAndReplyIds', 'sanitizeHiddenReply', 'sanitizeHiddenReplies'].map(declaration).join('\n');
-  vm.runInContext(javascript(`${helpers}\nconst ${variable('MESSAGE_PAGE_SIZE')};
+    'getMessageAndReplyIds', 'sanitizeHiddenReply', 'sanitizeHiddenReplies', ...(ownedHistory ? ['oldestHistoryTuple'] : [])].map(declaration).join('\n');
+  vm.runInContext(javascript(`${helpers}\nconst ${variable('MESSAGE_PAGE_SIZE')}; ${ownership}
+    const ${variable('ACTIVE_CHAT_RECONNECT_DELAY_MS')};
     globalThis.helper = fetchHiddenMessageIdSet;
+    globalThis.rememberHiddenMessageIds = ${callback('rememberHiddenMessageIds')};
     globalThis.fetch = ${callback('fetchMessages')};
+    ${ownedHistory ? 'fetchMessagesRef.current = globalThis.fetch;' : ''}
     globalThis.view = () => {
       const ${boundary};
       const chatMessages = useAppStore.getState().messages[chatId];
@@ -92,20 +122,25 @@ function row(id, held = false) {
 }
 function fixture(count, text = source) {
   const context = actual(text), hidden = deferredQueries(), published = [], marks = [];
-  const fetched = Array.from({length: 100}, (_, i) => row(`fresh-${i}`));
-  const held = Array.from({length: count - 100}, (_, i) => row(`held-${i}`, true));
+  const fetched = Array.from({length: 100}, (_, i) => row(`40000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`));
+  const held = Array.from({length: count - 100}, (_, i) => row(`50000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, true));
   const state = {currentUser: {id: 'fictional-owner'}, accountEpoch: 7,
     messages: {'fictional-chat': held}, chats: [{id: 'fictional-chat', type: 'group'}]};
   const query = {};
   for (const name of ['select', 'eq', 'is', 'gt', 'order']) query[name] = () => query;
   query.limit = async n => { assert.equal(n, 101); return {data: fetched, error: null}; };
+  const generalTopicIds = [];
+  const markVerified = context.hiddenMessagesLive.markVerified.bind(context.hiddenMessagesLive);
+  context.hiddenMessagesLive.markVerified = (...args) => { marks.push(args); markVerified(...args); };
+  context.hiddenMessagesLive.joined(); context.hiddenMessagesLive.pingReturned();
   Object.assign(context, {
-    chatId: 'fictional-chat', topicId: undefined, generalTopicIds: [], userId: 'fictional-owner', accountEpoch: 7,
+    chatId: 'fictional-chat', topicId: undefined, generalTopicIds, userId: 'fictional-owner', accountEpoch: 7,
     useAppStore: {getState: () => state}, EMPTY_MESSAGES: [], MESSAGE_SELECT_WITH_JOINS: 'fictional-joins',
     hookLifetimeRef: {current: Symbol('fictional-lifetime')}, chatIdRef: {current: 'fictional-chat'},
     topicIdRef: {current: undefined}, historyRequestGenerationRef: {current: 0},
+    generalTopicIdsRef: {current: generalTopicIds}, olderRequestOwnerRef: {current: null}, loadingOlderRef: {current: false},
     verifiedChatIdRef: {current: null}, verifiedAccountEpochRef: {current: null}, historyVerificationRef: {current: null},
-    currentUserRef: {current: state.currentUser}, clearedAtRef: {current: null},
+    currentUserRef: {current: state.currentUser, accountEpoch: 7}, clearedAtRef: {current: null},
     hiddenMessageIdsRef: {current: new Set()}, hiddenMessageIds: new Set(), hasMoreOlderRef: {current: false},
     verifiedChatId: null, verifyingChatId: null, historyError: null, loading: false,
     clearedAtCache: {hasFresh: () => false}, loadClearedAt: async () => null,
@@ -115,13 +150,19 @@ function fixture(count, text = source) {
     setVerifiedChatId: value => { context.verifiedChatId = value; context.verifiedChatIdRef.current = value; },
     setVerifyingChatId: value => { context.verifyingChatId = value; },
     setMessages: (chat, rows) => { published.push(rows); state.messages[chat] = rows; },
-    rememberHiddenMessageIds: ids => { for (const id of ids) context.hiddenMessageIds.add(id); },
-    hiddenMessagesLive: {captureRead: () => () => true, canSkip: () => false, markVerified: (...args) => marks.push(args)},
+    setHiddenMessageIds: update => { context.hiddenMessageIds = update(context.hiddenMessageIds);
+      context.hiddenMessageIdsRef.current = context.hiddenMessageIds; },
     fetchedMessageScopes: new Set(), getPinnedKey: () => 'fictional-scope',
     document: {visibilityState: 'hidden'}, isIncomingMessage: () => false,
     shouldMarkDeliveredForPrivateChat: () => false, keepsDeletedPlaceholder: () => true,
-    bumpFetch() {}, setClearedAt() {}, setHasMoreOlder() {}, setOlderError() {}, setPinnedMessages() {}, reportError() {},
+    setClearedAt: value => { context.clearedAtRef.current = value; },
+    setHasMoreOlder: value => { context.hasMoreOlderRef.current = value; },
+    setLoadingOlder: value => { context.loadingOlderRef.current = value; },
+    setOlderError: value => { context.olderError = value; },
+    bumpFetch() {}, setPinnedMessages() {}, reportError() {},
   });
+  if (context.commitHistoryScope) context.commitHistoryScope();
+  if (context.commitRecoveryScope) context.commitRecoveryScope();
   return {context, hidden, published, marks, state};
 }
 async function finish(calls, pending) {
@@ -145,24 +186,26 @@ for (const count of [101, 201]) {
       await tick(); closed(f);
       assert.equal(f.hidden.calls.length, 2, 'SECOND_INDEPENDENT_BATCH_DISPATCHED_WHILE_FIRST_HELD');
       assert.deepEqual(f.hidden.calls.map(c => c.ids.length), [100, Math.min(100, count - 100)]);
-      f.hidden.calls[1].resolve({data: [{message_id: 'held-0'}], error: null});
+      f.hidden.calls[1].resolve({data: [{message_id: HELD}], error: null});
       await tick(); closed(f);
       assert.equal(f.hidden.calls.length, 2, 'no next wave before both first-wave reads');
-      f.hidden.calls[0].resolve({data: [{message_id: 'fresh-0'}], error: null});
+      f.hidden.calls[0].resolve({data: [{message_id: FRESH}], error: null});
       await tick();
       if (count === 201) {
         closed(f); assert.equal(f.hidden.calls.length, 3);
         assert.equal(f.hidden.calls[2].ids.length, 1);
-        f.hidden.calls[2].resolve({data: [{message_id: 'held-100'}], error: null});
+        f.hidden.calls[2].resolve({data: [{message_id: LAST_HELD}], error: null});
       }
       await pending;
       const view = f.context.view();
       assert.equal(view.boundary, true); assert.equal(view.spinner, false); assert.equal(view.pending, false);
       assert.equal(view.visible.length, count - (count === 201 ? 3 : 2));
-      assert.equal(view.visible.some(r => ['fresh-0', 'held-0', 'held-100'].includes(r.id)), false);
+      assert.equal(view.visible.some(r => [FRESH, HELD, LAST_HELD].includes(r.id)), false);
       assert.equal(f.published.length, 1); assert.equal(f.marks.length, 1);
       assert.equal(new Set(f.hidden.calls.flatMap(c => c.ids)).size, count);
       assert.equal(f.hidden.calls.flatMap(c => c.ids).length, count);
+      if (f.context.rawHistoryCursorRef) assert.deepEqual(plain(f.context.rawHistoryCursorRef.current),
+        {tuple: {id: FRESH, created_at: '2026-10-12T00:00:00Z'}, clearedAt: null}, 'admitted raw cursor includes hidden server slots');
     } finally { await finish(f.hidden.calls, pending); }
   });
 }
@@ -180,7 +223,8 @@ test('actual helper: zero IDs, retired owner, dedupe, single chunk and null data
 });
 test('actual fetchMessages: owner retirement during hidden checks never publishes or starts next wave', async () => {
   for (const retire of [f => { f.state.accountEpoch++; }, f => { f.state.currentUser = {id: 'foreign-owner'}; },
-    f => { f.context.chatIdRef.current = 'foreign-chat'; }, f => { f.context.topicIdRef.current = 'foreign-topic'; },
+    f => { f.context.chatIdRef.current = 'foreign-chat'; f.context.commitHistoryScope?.(); },
+    f => { f.context.topicIdRef.current = 'foreign-topic'; f.context.commitHistoryScope?.(); },
     f => { f.context.historyRequestGenerationRef.current++; }, f => { f.context.hookLifetimeRef.current = null; }]) {
     const f = fixture(201), p = f.context.fetch({cacheIsStale: true});
     await tick(); const dispatched = f.hidden.calls.length; retire(f);
@@ -191,20 +235,20 @@ test('actual fetchMessages: owner retirement during hidden checks never publishe
 });
 test('actual caller checks reply IDs and late held rows before final admission', async () => {
   const f = fixture(101);
-  f.state.messages['fictional-chat'][0].reply_to_id = 'hidden-reply';
-  f.state.messages['fictional-chat'][0].reply_to = {id: 'hidden-reply'};
+  f.state.messages['fictional-chat'][0].reply_to_id = REPLY;
+  f.state.messages['fictional-chat'][0].reply_to = {id: REPLY};
   const p = f.context.fetch({cacheIsStale: true});
   await tick();
-  assert.deepEqual(f.hidden.calls[1].ids, ['held-0', 'hidden-reply']);
-  f.state.messages['fictional-chat'] = [...f.state.messages['fictional-chat'], row('late-held', true)];
-  f.hidden.calls[1].resolve({data: [{message_id: 'hidden-reply'}], error: null});
+  assert.deepEqual(f.hidden.calls[1].ids, [HELD, REPLY]);
+  f.state.messages['fictional-chat'] = [...f.state.messages['fictional-chat'], row(LATE, true)];
+  f.hidden.calls[1].resolve({data: [{message_id: REPLY}], error: null});
   f.hidden.calls[0].resolve({data: [], error: null});
   await tick(); closed(f);
-  assert.deepEqual(f.hidden.calls[2].ids, ['late-held']);
-  f.hidden.calls[2].resolve({data: [{message_id: 'late-held'}], error: null});
+  assert.deepEqual(f.hidden.calls[2].ids, [LATE]);
+  f.hidden.calls[2].resolve({data: [{message_id: LATE}], error: null});
   await p;
-  assert.equal(f.context.view().visible.some(r => r.id === 'late-held'), false);
-  assert.equal(f.context.view().visible.find(r => r.id === 'held-0').reply_to, undefined);
+  assert.equal(f.context.view().visible.some(r => r.id === LATE), false);
+  assert.equal(f.context.view().visible.find(r => r.id === HELD).reply_to, undefined);
   assert.equal(f.published.length, 1);
 });
 function mutatedHelper(before, after) {

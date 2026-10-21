@@ -3,6 +3,20 @@
 **Current State, 2026-10-21:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
+Stage: D389 hidden-history hook/UI repair, final source/keyboard acceptance before
+legitimate Android0.1.34/build35. Baseline5773aab6; no new publication yet.
+Hook281, storage80 and cache30 pass together; typecheck passes. Final mounted
+empty/short matrix12 (including Enter) and anchor7 pass; final review is clean.
+Guest-only pixels16 inspected; no personal captures.
+[Current repair](operations/2026-10-21-hidden-history-pagination.md).
+The received-history SQL/codec/IDB/controller foundation is implemented/tested,
+NOT mounted and NOT installed in production. Minimal nativePG17 proof16 and cost
+oracle pass; full schema/HTTP/fresh rendering metadata remain before integration.
+[Cache foundation and exact next steps](operations/2026-10-21-received-history-cache.md).
+Latest owner correction returns A063 for all tests; Realme also available.
+Coordinator owns next build/device/rollout; no rental is held.
+
+**Current released baseline:**
 Stage: D-384 bridge-thread/finalization repair RELEASED at `3a73975f`, Android
 Stable0.1.33/build34, mandatory=false, rollback33 retained. Original signer/
 Firebase/assets and complete public APK hash pass at2026-10-20 21:40:34Z.
@@ -23,9 +37,8 @@ Latest owner authority includes A063/ADB, superseding its earlier Apollo
 exclusion. The separate adverse-VPN case32 recovers the list automatically when
 the failed route returns; original phone VPN/tile configuration is restored.
 No personal capture, account clear or PC Happ/routing change. [VPN evidence](operations/2026-10-20-a063-vpn-recovery.md).
-Next: bounded persistent received-text history with fresh access/
-revision admission; current history is RAM and outbox is separate. The minimum
-conditional-page candidate is source/catalog-mapped, not implemented/measured.
+Received history in the released application is still RAM; outbox is separate.
+The candidate foundation and remaining gates are linked above.
 Generic-only background/killed Windows WNS and broader device QA remain open.
 Ordinary Windows toasts and Android/iPhone sender/text already exist; retain
 privacy/install consent. [Cache/release scope](operations/2026-10-20-reconnection-cache-release.md).

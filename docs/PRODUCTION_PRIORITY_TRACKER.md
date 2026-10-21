@@ -1,6 +1,14 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-20.
+Status: active production-hardening tracker, updated 2026-10-21.
+
+**Current work:** D389 hidden-page raw cursor and empty/short loading UI, candidate
+Native35 before publication; early keyboard review case is repaired/reviewed.
+Hook281/storage80/cache30 affected checks, mounted12, anchor7 and guest pixels16
+pass. [Current repair](operations/2026-10-21-hidden-history-pagination.md).
+Received-history disk foundation is source-only: no mounted feature or production
+SQL. MinimalPG17 proof16 and cost oracle pass; full current-schema/HTTP/fresh
+metadata/integration remain. [Cache boundaries](operations/2026-10-21-received-history-cache.md).
 
 **Current released checkpoint:** Native34/source `3a73975f` repairs D384's bridge
 thread/finalization fault. Stable0.1.33/build34, mandatory=false, rollback33,
@@ -12,8 +20,8 @@ container parity pass at21:42:34Z; web bytes retain verifiedb50/D388. Its155/155
 and earlier D383/D385/D386/D387 acceptance remain reused. [Release and limits](operations/2026-10-21-android-update-bridge-thread.md).
 Actual old in-app32 ->33 stays REFUSED. One-time manual bootstrap is needed;
 full fixed34 ->next legitimate release updater is still open, not inferred.
-Next: persistent received-text history, not yet implemented; RAM warm cache and
-durable outbox are different boundaries. Sender/text on iPhone PWA/Android and
+The released app's RAM warm cache and durable outbox are different boundaries.
+Sender/text on iPhone PWA/Android and
 ordinary Windows toasts already exist; privacy/install consent still applies.
 Generic-only background/killed Windows WNS remains separate. No SQL change.
 [Ownership, evidence and release state](operations/2026-10-20-reconnection-cache-release.md).

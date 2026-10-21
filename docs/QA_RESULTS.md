@@ -1,5 +1,19 @@
 # QA Results
 
+## 2026-10-21 - Hidden History And Unmounted Cache Foundation
+
+Frozen hook281/storage80/cache30 affected cohort completes with zero failures;
+typecheck passes. Actual mounted empty/short matrix12 and prepend/entry7 pass.
+Guest-only actual-component pixels16 inspected, detector[]. Early keyboard Enter
+failed before repair; final mounted12/12 includes focus+Enter on short pages and
+the independent final source delta review is clean.
+Independent delta review closes the cache primary-key cleanup and hook finite
+privacy recovery findings. NativePG17 minimal-RLS cache proof16, final fixed
+query-cost oracle and exact temporary-resource cleanup pass; no production SQL
+or mounted disk cache. Native35/build/publication/device acceptance pending.
+[History repair](operations/2026-10-21-hidden-history-pagination.md),
+[cache boundary](operations/2026-10-21-received-history-cache.md).
+
 ## 2026-10-21 - Native34 Stable and Actual Bridge Repair Acceptance
 
 Source3a73975f, Native0.1.33/build34: final native cohort87/87, zero skips, clean

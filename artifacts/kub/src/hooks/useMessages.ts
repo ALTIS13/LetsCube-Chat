@@ -62,6 +62,7 @@ import {
 
 const MESSAGE_PAGE_SIZE = 100;
 
+type HistoryTuple = Pick<MessageWithSender, "id" | "created_at">;
 
 type FetchMessagesOptions = {
   background?: boolean;
@@ -284,6 +285,35 @@ export function useMessages(
   useEffect(() => { loadingOlderRef.current = loadingOlder; }, [loadingOlder]);
   const hasMoreOlderRef = useRef(hasMoreOlder);
   useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
+  const rawHistoryCursorRef = useRef<{ tuple: HistoryTuple; clearedAt: string | null } | null>(null);
+  const historyScopeOwnerRef = useRef<symbol | null>(null);
+  useLayoutEffect(() => {
+    historyScopeOwnerRef.current = Symbol();
+    rawHistoryCursorRef.current = null;
+    olderRequestOwnerRef.current = null;
+    loadingOlderRef.current = false;
+    setLoadingOlder(false);
+    hasMoreOlderRef.current = false;
+    setHasMoreOlder(false);
+    setOlderError(null);
+  }, [chatId, topicId, generalTopicIds, userId, accountEpoch]);
+
+  const captureHistoryRead = useCallback((generation: number) => {
+    const owner = historyScopeOwnerRef.current;
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
+    const privacyIsCurrent = hiddenMessagesLive.captureRead();
+    const isCurrent = () => Boolean(owner && historyScopeOwnerRef.current === owner && sameAccount() &&
+      historyRequestGenerationRef.current === generation);
+    return { isCurrent, privacyIsCurrent };
+  }, []);
+
+  const rememberRawHistoryBoundary = useCallback((fetched: HistoryTuple[], mark: string | null, isCurrent: () => boolean) => {
+    if (!isCurrent()) return;
+    const previous = rawHistoryCursorRef.current;
+    // Only admitted server slots move this frontier, not filtered rows or lookahead.
+    const tuple = oldestHistoryTuple(previous?.clearedAt === mark ? [previous.tuple, ...fetched] : fetched);
+    rawHistoryCursorRef.current = tuple ? { tuple, clearedAt: mark } : null;
+  }, []);
   // topicId is passed into INSERTs and used to filter the realtime stream so
   // we only show messages from the active topic in forum chats. Undefined
   // means "topics disabled": show the whole chat without topic scoping.
@@ -306,11 +336,6 @@ export function useMessages(
         : LIST_READ_PENDING,
     );
     setClearedAt(null);
-    olderRequestOwnerRef.current = null;
-    loadingOlderRef.current = false;
-    setLoadingOlder(false);
-    setHasMoreOlder(false);
-    setOlderError(null);
     setIsTyping(false);
     // A refusal belongs to the conversation it was refused in.
     setActionRefusal((current) => (current === null ? current : null));
@@ -350,13 +375,50 @@ export function useMessages(
     return Boolean(chat && chat.type === "private" && !isSavedChat(chat, targetUserId));
   }, []);
 
+  const fetchMessagesRef = useRef<((options?: FetchMessagesOptions) => Promise<void>) | null>(null);
+  const recoveryOwnerRef = useRef<symbol | null>(null);
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recoveryTimerDueRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const owner = Symbol();
+    recoveryOwnerRef.current = owner;
+    return () => {
+      if (recoveryOwnerRef.current !== owner) return;
+      recoveryOwnerRef.current = null;
+      if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+      recoveryTimerDueRef.current = null;
+    };
+  }, [chatId, topicId, generalTopicIds, userId, accountEpoch]);
+
+  // Online/error fallbacks and the joined catchup share the earliest pending deadline.
+  // Once a prejoin read starts, the later join must still schedule a fresh one.
+  const scheduleRecoveryReconcile = useCallback((delay: number) => {
+    const owner = recoveryOwnerRef.current;
+    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
+    if (!owner || !chatIdRef.current || !sameAccount()) return;
+    const dueAt = Date.now() + delay;
+    if (recoveryTimerRef.current !== null && recoveryTimerDueRef.current !== null &&
+      recoveryTimerDueRef.current <= dueAt) return;
+    if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
+    const timer = setTimeout(() => {
+      if (recoveryTimerRef.current !== timer) return;
+      recoveryTimerRef.current = null;
+      recoveryTimerDueRef.current = null;
+      if (recoveryOwnerRef.current !== owner || !sameAccount()) return;
+      void fetchMessagesRef.current?.({ background: true });
+    }, delay);
+    recoveryTimerRef.current = timer;
+    recoveryTimerDueRef.current = dueAt;
+  }, []);
+
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
     const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
-    if (!sameAccount() || chatIdRef.current !== chatId || topicIdRef.current !== topicId) return;
+    if (!sameAccount() || chatIdRef.current !== chatId || topicIdRef.current !== topicId ||
+      generalTopicIdsRef.current !== generalTopicIds) return;
     const requestGeneration = ++historyRequestGenerationRef.current;
-    const isCurrent = () => sameAccount() && chatIdRef.current === chatId &&
-      topicIdRef.current === topicId && historyRequestGenerationRef.current === requestGeneration;
+    const { isCurrent, privacyIsCurrent: privacyReadIsCurrent } = captureHistoryRead(requestGeneration);
     if (!isCurrent()) return;
     const background = options.background === true;
     const heldWhenAsked = useAppStore.getState().messages[chatId] ?? EMPTY_MESSAGES;
@@ -389,7 +451,7 @@ export function useMessages(
       const user = currentUserRef.current;
       if (user) {
         localClearedAt = await loadClearedAt(supabase, chatId, user.id);
-        if (!isCurrent()) return;
+        if (!privacyReadIsCurrent() || !isCurrent()) return;
         if (localClearedAt === undefined) {
           setVerifiedChatId(null);
           setVerifyingChatId(chatId);
@@ -434,7 +496,7 @@ export function useMessages(
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(MESSAGE_PAGE_SIZE + 1);
-      if (!isCurrent()) return;
+      if (!privacyReadIsCurrent() || !isCurrent()) return;
       if (error) {
         console.error("Messages fetch error:", error);
         refuseHistory("Не удалось загрузить историю чата.");
@@ -450,7 +512,6 @@ export function useMessages(
         const heldResultIds = new Set([...existing.map((message) => message.id), ...hiddenMessageIdsRef.current]);
         const pageResultsKnown = [...fetchedIds].every((id) => heldResultIds.has(id));
         const hiddenReadAt = Date.now();
-        const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
         // Live proof does not retain the hidden verdict after remount. Re-read
         // the current page when its result is missing; omit only trusted held
         // rows from a mixed non-reply read, never fresh page IDs.
@@ -508,6 +569,7 @@ export function useMessages(
           return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
         }), effectiveHiddenIds);
         const reconciledMessages = mergeMessagesById(visibleFetched, visibleExisting);
+        rememberRawHistoryBoundary(fetched, localClearedAt ?? null, isCurrent);
         setMessages(chatId, reconciledMessages);
         const committedMessages = useAppStore.getState().messages[chatId];
         const retiredGoneIds = existing.filter((message) => goneIds.has(message.id) &&
@@ -547,51 +609,19 @@ export function useMessages(
       reportError(error, { category: "messages_fetch_failed", chatId, background });
       if (isCurrent()) refuseHistory("Не удалось загрузить историю чата.");
     } finally {
-      if (isCurrent()) setLoading(false);
+      if (isCurrent()) {
+        setLoading(false);
+        // A first hides-channel join can retire both the initial head and catchup.
+        // Re-read once with a fresh ticket; an ordinary offline failure does not retry.
+        if (!privacyReadIsCurrent()) scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
+      }
     }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch, captureHistoryRead, rememberRawHistoryBoundary, scheduleRecoveryReconcile]);
   // The latest read, for the channel below. The channel is the chat's, not the
   // scope's — its filter is the chat and its handlers read the scope from refs —
   // so a scope that resolves or changes must not leave and rejoin it: every
   // rejoin was one more revalidation of the same history (D-320).
-  const fetchMessagesRef = useRef(fetchMessages);
   fetchMessagesRef.current = fetchMessages;
-
-  const recoveryOwnerRef = useRef<symbol | null>(null);
-  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recoveryTimerDueRef = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const owner = Symbol();
-    recoveryOwnerRef.current = owner;
-    return () => {
-      if (recoveryOwnerRef.current !== owner) return;
-      recoveryOwnerRef.current = null;
-      if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
-      recoveryTimerRef.current = null;
-      recoveryTimerDueRef.current = null;
-    };
-  }, [chatId, topicId, generalTopicIds, userId, accountEpoch]);
-
-  // Online/error fallbacks and the joined catchup share the earliest pending deadline.
-  // Once a prejoin read starts, the later join must still schedule a fresh one.
-  const scheduleRecoveryReconcile = useCallback((delay: number) => {
-    const owner = recoveryOwnerRef.current;
-    const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
-    if (!owner || !chatIdRef.current || !sameAccount()) return;
-    const dueAt = Date.now() + delay;
-    if (recoveryTimerRef.current !== null && recoveryTimerDueRef.current !== null &&
-      recoveryTimerDueRef.current <= dueAt) return;
-    if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
-    const timer = setTimeout(() => {
-      if (recoveryTimerRef.current !== timer) return;
-      recoveryTimerRef.current = null;
-      recoveryTimerDueRef.current = null;
-      if (recoveryOwnerRef.current !== owner || !sameAccount()) return;
-      void fetchMessagesRef.current({ background: true });
-    }, delay);
-    recoveryTimerRef.current = timer;
-    recoveryTimerDueRef.current = dueAt;
-  }, []);
 
   // Tracker item 58: a hide or an unhide made on another device, heard for
   // this chat on the account's hides channel. The list has already taken a
@@ -606,7 +636,7 @@ export function useMessages(
       else next.delete(event.messageId);
       hiddenMessageIdsRef.current = next;
       setHiddenMessageIds(next);
-      if (!event.hidden) void fetchMessagesRef.current({ background: true });
+      if (!event.hidden) void fetchMessagesRef.current?.({ background: true });
     });
   }, [userId, accountEpoch]);
 
@@ -756,6 +786,8 @@ export function useMessages(
     const sameAccount = captureMessageAccount(currentUserRef.current?.id, currentUserRef.accountEpoch, hookLifetimeRef);
     if (!activeChatId || !sameAccount() || loadingOlderRef.current || !hasMoreOlderRef.current) return { loaded: 0 };
     const historyGeneration = historyRequestGenerationRef.current;
+    const { isCurrent, privacyIsCurrent: privacyReadIsCurrent } = captureHistoryRead(historyGeneration);
+    if (!isCurrent()) return { loaded: 0 };
     const activeTopicId = topicIdRef.current;
     const activeGeneralTopicIds = generalTopicIdsRef.current;
     const localClearedAt = clearedAtRef.current;
@@ -767,14 +799,11 @@ export function useMessages(
       if (!localClearedAt) return true;
       return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
     });
-    if (!visibleCurrent.length) {
-      hasMoreOlderRef.current = false;
-      setHasMoreOlder(false);
-      return { loaded: 0 };
-    }
     const confirmedCurrent = visibleCurrent.filter((message) =>
       typeof message.id !== "string" || !isLocalOnlyMessage(message));
-    if (!confirmedCurrent.length) return { loaded: 0 };
+    const rawCursor = rawHistoryCursorRef.current;
+    const cursorCandidates = rawCursor?.clearedAt === localClearedAt ? [...confirmedCurrent, rawCursor.tuple] : confirmedCurrent;
+    if (!cursorCandidates.length) return { loaded: 0 };
 
     const requestOwner = Symbol();
     olderRequestOwnerRef.current = requestOwner;
@@ -782,19 +811,8 @@ export function useMessages(
     setLoadingOlder(true);
     setOlderError(null);
     try {
-      let cursorId = "", cursorTime = "", cursorMicros = Number.POSITIVE_INFINITY;
-      // Held arrays use millisecond ordering; the server's cursor retains microseconds.
-      for (const candidate of confirmedCurrent) {
-        const candidateId = candidate.id;
-        const candidateTime = candidate.created_at;
-        const candidateMicros = typeof candidateTime === "string" ? timestampMicros(candidateTime) : null;
-        if (typeof candidateId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateId) ||
-            candidateMicros === null) throw new Error("invalid_history_cursor");
-        if (candidateMicros < cursorMicros ||
-            (candidateMicros === cursorMicros && candidateId.toLowerCase() < cursorId.toLowerCase())) {
-          cursorId = candidateId; cursorTime = candidateTime; cursorMicros = candidateMicros;
-        }
-      }
+      const cursor = oldestHistoryTuple(cursorCandidates)!;
+      const cursorId = cursor.id, cursorTime = cursor.created_at;
       let query = supabase
         .from("messages")
         .select(MESSAGE_SELECT_WITH_JOINS)
@@ -817,7 +835,7 @@ export function useMessages(
 
       if (error) throw error;
       const rawFetched = (data ?? []) as unknown as MessageWithSender[];
-      if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration) return { loaded: 0 };
+      if (!privacyReadIsCurrent() || !isCurrent()) return { loaded: 0 };
       const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
       const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
       if (!fetched.length) {
@@ -828,9 +846,8 @@ export function useMessages(
 
       const olderIds = getMessageAndReplyIds(fetched);
       const hiddenReadAt = Date.now();
-      const privacyReadIsCurrent = hiddenMessagesLive.captureRead();
-      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds, sameAccount);
-      if (!sameAccount() || chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId || historyRequestGenerationRef.current !== historyGeneration || !privacyReadIsCurrent()) return { loaded: 0 };
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, olderIds, isCurrent);
+      if (!isCurrent() || !privacyReadIsCurrent()) return { loaded: 0 };
       if (!fetchedHiddenIds) throw new Error("hidden_message_ids_unavailable");
       rememberHiddenMessageIds(fetchedHiddenIds);
       hiddenMessagesLive.markVerified(activeChatId, olderIds, hiddenReadAt);
@@ -848,13 +865,14 @@ export function useMessages(
         if (!localClearedAt) return true;
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
       }), effectiveHiddenIds);
+      rememberRawHistoryBoundary(fetched, localClearedAt, isCurrent);
       setMessages(activeChatId, mergeMessagesById(visibleFetched, visibleExisting));
       hasMoreOlderRef.current = nextHasMoreOlder;
       setHasMoreOlder(nextHasMoreOlder);
       return { loaded: visibleFetched.length };
     } catch (error) {
       console.error("Older messages fetch error:", error);
-      if (sameAccount() && chatIdRef.current === activeChatId && historyRequestGenerationRef.current === historyGeneration) {
+      if (isCurrent() && privacyReadIsCurrent()) {
         setOlderError("Не удалось загрузить более ранние сообщения.");
       }
       return { loaded: 0 };
@@ -866,7 +884,7 @@ export function useMessages(
         setLoadingOlder(false);
       }
     }
-  }, [rememberHiddenMessageIds, setMessages, supabase]);
+  }, [rememberHiddenMessageIds, setMessages, supabase, captureHistoryRead, rememberRawHistoryBoundary]);
 
   const fetchMessageById = useCallback(async (messageId: string): Promise<EnsureMessageLoadedResult> => {
     const activeChatId = chatIdRef.current;
@@ -1952,6 +1970,7 @@ export function useMessages(
     if (sameAccount()) dispatchChatsRefresh({ reason: "media-retired", chatId,
       ownerUserId: actingUserId, accountEpoch: actingEpoch, retireChat: "clear" });
     if (chatIdRef.current !== chatId) return { ok: true, error: null };
+    rawHistoryCursorRef.current = null;
     verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
     setVerifiedChatId(chatId);
     setVerifyingChatId(null);
@@ -2026,6 +2045,23 @@ export function useMessages(
 
 function getPinnedKey(chatId: string | null, topicId: string | null | undefined): string {
   return `${chatId ?? "none"}:${topicId === undefined ? "all" : topicId ?? "root"}`;
+}
+
+function oldestHistoryTuple(candidates: readonly HistoryTuple[]): HistoryTuple | null {
+  let cursorId = "", cursorTime = "", cursorMicros = Number.POSITIVE_INFINITY;
+  // Held arrays use millisecond ordering; the server's cursor retains microseconds.
+  for (const candidate of candidates) {
+    const candidateId = candidate.id;
+    const candidateTime = candidate.created_at;
+    const candidateMicros = typeof candidateTime === "string" ? timestampMicros(candidateTime) : null;
+    if (typeof candidateId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateId) ||
+        candidateMicros === null) throw new Error("invalid_history_cursor");
+    if (candidateMicros < cursorMicros ||
+        (candidateMicros === cursorMicros && candidateId.toLowerCase() < cursorId.toLowerCase())) {
+      cursorId = candidateId; cursorTime = candidateTime; cursorMicros = candidateMicros;
+    }
+  }
+  return cursorId ? { id: cursorId, created_at: cursorTime } : null;
 }
 
 function messageBelongsToTopic(

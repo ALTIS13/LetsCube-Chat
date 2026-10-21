@@ -1,7 +1,7 @@
 "use client";
 
 import React, { RefObject, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
-import { KubIcon, KubModal } from "@/components/kub";
+import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { MessageBubble, getVisibleMediaCaption, isRoundVideoMessage } from "./MessageBubble";
 import { MessageAlbumTile } from "./MessageAlbumTile";
 import type { BotCommandsInText } from "@/lib/formatText";
@@ -1333,7 +1333,7 @@ export function MessageList({
     el.scrollTop += change;
     if (olderHoldActiveRef.current) olderOwnedScrollTopRef.current = el.scrollTop;
     else if (preservingOlderScrollRef.current) olderObservedScrollTopRef.current = el.scrollTop;
-  }, [isInitialBottomLocked, loadingOlder, olderError, releaseOlderScrollPreservation]);
+  }, [isInitialBottomLocked, loadingOlder, olderError, hasMoreOlder, releaseOlderScrollPreservation]);
 
   useLayoutEffect(() => {
     if (!preservingOlderScrollRef.current || !olderScrollAnchorRef.current) return;
@@ -1870,12 +1870,23 @@ export function MessageList({
         }}
       >
         <div ref={contentRef} className="[overflow-anchor:none]">
-          {(loadingOlder || olderError) && (
-            <div ref={historyBandRef} className="flex justify-center py-2" data-message-history-status>
-              <span className="inline-flex items-center gap-2 rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs text-[color:var(--kub-chat-chip-text)]">
-                {loadingOlder && <KubIcon name="spinner" size={12} />}
-                {olderError ?? "Загружаем историю..."}
-              </span>
+          {(loadingOlder || olderError || (hasMoreOlder && onLoadOlder)) && (
+            <div ref={historyBandRef} className="flex flex-col items-center justify-center gap-1 py-2" data-message-history-status>
+              {olderError && <span className="max-w-full px-3 text-center text-sm text-[color:var(--kub-chat-chip-text)]">{olderError}</span>}
+              {onLoadOlder && hasMoreOlder ? (
+                <KubButton type="button" variant="ghost" size="sm" className="min-h-11 text-sm sm:min-h-8 sm:text-xs"
+                  loading={loadingOlder} leftIcon={<KubIcon name="chevronUp" size={14} />}
+                  onClick={() => {
+                    releaseScrollControl();
+                    void loadOlderAtTop();
+                  }}>
+                  Загрузить ранние сообщения
+                </KubButton>
+              ) : loadingOlder ? (
+                <span className="inline-flex min-h-8 items-center gap-2 px-3 text-sm text-[color:var(--kub-chat-chip-text)]">
+                  <KubIcon name="spinner" size={12} />Загружаем историю...
+                </span>
+              ) : null}
             </div>
           )}
 
