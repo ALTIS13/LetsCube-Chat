@@ -64,11 +64,20 @@ this document coordinates their remaining deliverables, not a replacement design
 
 ## Accepted Baseline (Reuse)
 
+- [x] D389 hidden raw-page cursor plus empty/short load action is released at
+  `c3bcbb30` on shared web/buildb8e796727de22a2d and Stable0.1.34/build35.
+  Hook281/storage80/cache30, mounted12 including Enter, anchor7, guest pixels16
+  and final review pass. Native original signer/Firebase/parity, Realme34->35
+  retention and full public APK hash pass; mandatory=false, rollback34 retained.
+  Full actual A06334->35 in-app updater/post main/data/hash/cleanup pass separately.
+  Wider OEM/call/draft/lifecycle remain open. Disk cache foundation
+  is NOT mounted; SQL is NOT installed. [Repair and limits](../../operations/2026-10-21-hidden-history-pagination.md).
+
 - [x] D384 bridge/finalization source3a73975f is Stable0.1.33/build34:87/87 and
   review, original signer/Firebase/assets, Realme33 ->34 guest, A06332 ->34 manual
   data-retaining bootstrap and actual signed-in main/exact entry/native bridge/
   catalog-current. Full public APK hash/rollback33 and healthy shared-web parity
-  pass; old in-app32 ->33 stays REFUSED, higher-build installation remains open.
+  pass; old in-app32 ->33 stays REFUSED, later full34->35 is accepted above.
   [Release and limits](../../operations/2026-10-21-android-update-bridge-thread.md).
 
 - [x] D388/source `b50dda0f` released on shared web/build `affacc90ed0418d6`
@@ -224,6 +233,9 @@ notification decision/read RPCs; current and pinned old client sources.
 **State:** IN PROGRESS; shared-web warm/offline baseline and reproduced redundant
 recovery/sanitizer read repair are accepted and released in web/Android25.
 Remaining native/intake boundaries are not closed by these cases.
+Received-history SQL/codec/IDB/controller foundation is implemented/tested,
+NOT enabled; full schema/HTTP/fresh metadata and mounting remain in its
+[scoped continuation](2026-10-21-received-history-cache.md).
 D-368 ordinary global logout is repaired and released on web/Android26; actual
 rendered web exit and actual Native26 ordinary UI login/binding/local logout,
 peer retention/refresh and cleanup pass. D369/D370 are now FIXED/RELEASED on web/
@@ -489,8 +501,9 @@ privacy, task invalidation, profile history and existing support assignment.
 
 ## Task10: Platform Delta Matrix (#7,9,28)
 
-**State:** IN PROGRESS; Android30 is released with actual guest upgrade/public
-bytes. Native26 ordinary UI/logout/binding evidence is retained; Native27 normal
+**State:** IN PROGRESS; Android35 is released with actual guest upgrade/public
+bytes and the full A06334->35 in-app/system-install/post acceptance. Native26
+ordinary UI/logout/binding evidence is retained; Native27 normal
 UI cleanup and installed-PWA final-nav/background/Profile subcase are accepted.
 D369/D370 are FIXED/RELEASED; unexercised physical503/held-early-phone/OEM cases
 remain broader QA coverage, not known remaining product bugs. Topic remains partial.
@@ -499,13 +512,15 @@ remain broader QA coverage, not known remaining product bugs. Topic remains part
 signer/package identity and verified in-place upgrade with retained user data.
 
 - [ ] Build a delta-only OEM/locked/long-session matrix reusing accepted23/24
-  evidence and current Stable34. Realme/rentals and newly authorized A063 are
+  evidence and current Stable35. Realme/rentals and newly authorized A063 are
   available; its bounded VPN case is accepted separately, not a full matrix.
 - [ ] Coordinate installed iPhone PWA keyboard/safe-area/scale checks on a bounded
   rented iPhone; do not claim native iOS/macOS release from web evidence.
-- [ ] On the next legitimate higher-build release, finish actual fixed34 updater
+- [x] On the next legitimate higher-build release35, finish actual fixed34 updater
   download/ready/permission/system-install and data retention. Reuse accepted
-  bridge/current cases; no dummy release, same-version bypass or fake APK source.
+  bridge/current cases; actual110-sample/three-control A063 path, Play Protect
+  scan, exact installed35 APK/UID/firstInstall, post source/main and final normal
+  cleanup/fatal0 pass. No dummy release, same-version bypass or fake APK source.
 - [ ] Finish Windows killed-process WNS and available Win10/11/offline/long-session
   cases while retaining owner-accepted unsigned EXE distribution.
 - [x] For the prior embedded-client delta, build immutable25 and verify

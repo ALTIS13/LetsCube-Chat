@@ -26169,7 +26169,7 @@ Android Stable32 at `d9991760`; the older inconclusive WebKit growth case stays
 explicitly recorded, not relabelled as a clean full matrix.
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
-## D-384 `[~]` Android APK download is handed to a browser without completion state
+## D-384 `[x]` Android APK download is handed to a browser without completion state
 
 **Cause:** an external artifact anchor and2500ms handoff message cannot know
 download completion or offer installation. Native private streaming, persisted
@@ -26182,8 +26182,11 @@ worker and rejects before catalog. Physical same-view UI/worker proof and health
 app-UID public catalog isolate this from VPN failure. Native34 bridge/finalization
 repair is RELEASED at3a73975f with87/87/review, data-preserving manual bootstrap,
 exact embedded entry and actual native bridge/current-state proof on A063.
-Full fixed34 ->next legitimate release updater remains open; no completed in-app
-or silent-install claim.
+Actual fixed34->35 full updater now passes on A063: normal download/ready/source
+permission/system installer plus Play Protect scan, exact installed APK/UID/
+firstInstall and post main/cleanup/fatal0. This is a user-approved system install,
+not silent installation or whole-OEM/call/draft acceptance.
+[Natural next-release acceptance](operations/2026-10-21-hidden-history-pagination.md#a063-full-update).
 [Current physical finding](operations/2026-10-21-android-update-bridge-thread.md).
 [Current work](operations/2026-10-19-ui-motion-and-updates.md).
 
@@ -26238,7 +26241,7 @@ Realme32 ->33 guest/data retention and full public APK hash. Actual in-app updat
 failure belongs to D384; this does not implement persistent disk history.
 [Current repair and evidence](operations/2026-10-20-history-tuple-pagination.md).
 
-## D-389 `[~]` Own-hidden pages stop earlier history and leave no loading action
+## D-389 `[x]` Own-hidden pages stop earlier history and leave no loading action
 
 **Cause:** the next cursor was derived only from visible rows. A100-slot page
 hidden for oneself has no visible cursor; an empty ChatWindow also never mounts
@@ -26248,6 +26251,8 @@ scope/account/privacy/clear retirement, local-only exclusion and lookahead
 boundaries remain enforced. Empty/short views have an explicit loading/retry
 action instead of a false empty greeting. Cold hides-channel retirement uses one
 coalesced recovery, not an offline retry loop. Hook281/281, mounted12/12,
-prepend/entry7/7 and guest pixels16 pass; final review is clean, rollout pending.
+prepend/entry7/7 and guest pixels16 pass; final review is clean. Released at
+`c3bcbb30` on exact verified web/buildb8e796727de22a2d and Stable35; original
+signer/Firebase/assets, Realme34->35 retention and complete public APK hash pass.
 This does not enable persistent received history or close D384 device acceptance.
 [Current repair](operations/2026-10-21-hidden-history-pagination.md).

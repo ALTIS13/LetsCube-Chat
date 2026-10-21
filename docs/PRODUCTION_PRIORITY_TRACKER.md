@@ -2,15 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-21.
 
-**Current work:** D389 hidden-page raw cursor and empty/short loading UI, candidate
-Native35 before publication; early keyboard review case is repaired/reviewed.
+**Current work:** D389 hidden-page raw cursor and empty/short loading UI is
+RELEASED atc3bcbb30 on web/buildb8e796727de22a2d and Stable35. Realme34->35 guest/
+data retention and complete public APK hash pass; mandatory=false/rollback34.
+Physical A063 full34->35 in-app download/ready/permission/system install and
+post main/full APK/data-identity/cleanup/fatal0 pass; D384's bounded natural next-
+release path is accepted, not a silent-install or wider OEM claim.
+Early keyboard review case is repaired/reviewed.
 Hook281/storage80/cache30 affected checks, mounted12, anchor7 and guest pixels16
 pass. [Current repair](operations/2026-10-21-hidden-history-pagination.md).
 Received-history disk foundation is source-only: no mounted feature or production
 SQL. MinimalPG17 proof16 and cost oracle pass; full current-schema/HTTP/fresh
 metadata/integration remain. [Cache boundaries](operations/2026-10-21-received-history-cache.md).
 
-**Current released checkpoint:** Native34/source `3a73975f` repairs D384's bridge
+**Prior released checkpoint (reuse):** Native34/source `3a73975f` repairs D384's bridge
 thread/finalization fault. Stable0.1.33/build34, mandatory=false, rollback33,
 original signer/Firebase/assets and full public APK hash pass at21:40:34Z.
 Realme33 ->34 guest and A06332 ->34 manual upgrade retain data identities; actual
@@ -19,7 +24,8 @@ and review pass. Shared sole-healthy image3a/build `affacc90ed0418d6` and public
 container parity pass at21:42:34Z; web bytes retain verifiedb50/D388. Its155/155
 and earlier D383/D385/D386/D387 acceptance remain reused. [Release and limits](operations/2026-10-21-android-update-bridge-thread.md).
 Actual old in-app32 ->33 stays REFUSED. One-time manual bootstrap is needed;
-full fixed34 ->next legitimate release updater is still open, not inferred.
+the earlier no-newer34 proof did not establish the now separately accepted
+full34->35 updater path above.
 The released app's RAM warm cache and durable outbox are different boundaries.
 Sender/text on iPhone PWA/Android and
 ordinary Windows toasts already exist; privacy/install consent still applies.

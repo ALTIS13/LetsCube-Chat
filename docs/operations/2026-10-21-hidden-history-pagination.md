@@ -2,7 +2,9 @@
 
 Owner: Codex coordinator, canonical `codex/ui-motion-updates-20261019`.
 Baseline `5773aab6`. D389 is an ordinary history repair, not an enabled disk cache.
-Android candidate:0.1.34/build35. Publication/device acceptance is pending.
+Product `c3bcbb30a7f20de591949f57ae8c8df67d314ab3`, Android0.1.34/build35 Stable.
+Realme guest/data acceptance, exact shared-web parity and the full actual A063
+in-app34->35 update/return acceptance pass. Wider OEM/lifecycle QA remains open.
 
 ## Observed Cause
 
@@ -66,3 +68,67 @@ The shared web repair serves browser, iPhone PWA and Windows remote renderer;
 Android embeds it only in the new APK. Native Apple and Windows shell identity
 are unchanged. Existing updater34->35 remains a distinct physical acceptance
 case, not inferred from source tests or an ADB upgrade.
+
+## Native35 Publication
+
+Fresh build reports `sw.js build 56cce50d61191ac7`, `built in 13.30s` and
+`BUILD SUCCESSFUL in 36s`. APK7,816,777B SHA256
+`d763cd87db010ee28f36b0dcdc26f37acb784e50538a290812504b140effa07d`;
+AAB7,444,556B SHA256
+`42694c04df54bc5f70d76459875452c60a87988a28770018e1241fed3d0fe68c`.
+Original sole signer/APKv2, four exact Firebase init values, false QA flags,
+42-file embedded web/config/DEX parity and updater registration/provider pass.
+The AAB manifest was not independently protobuf-decoded; no broader claim follows.
+
+Actual Realme34->35 upgrade retains UID/data/firstInstall, opens guest UI and has
+zero native fatal signals. An initial locked-screen refusal was retained; the
+next read confirmed normal unlock before installation. No clear/uninstall or
+owner PIN entry occurred. Phone returned HOME.
+
+Stable0.1.34/build35 publication and full public APK bytes/hash pass at
+2026-10-21T05:11:43Z, mandatory=false, previous Stable34 catalog/artifact retained
+for rollback. Notes preserve the one-time bootstrap advisory for0.1.31/0.1.32.
+This publication receipt alone is not full in-app acceptance or a new FCM test.
+
+## Shared Web Release
+
+Sole-healthy image `c3bcbb30` / build `b8e796727de22a2d` and public/container
+HTML/JS/SW parity pass at2026-10-21T05:14:48Z. New earlier-history text/actions
+are absent from baseline5773 and present in the exact served bundle. The
+unmounted cache database/module marker is absent from that bundle. Shared PWA
+and Windows remote-renderer source is delivered; no physical iPhone/native Apple
+or new Windows binary acceptance is inferred. Production SQL remains unchanged.
+
+## A063 Full Update
+
+Installed original34 reached normal in-app download/ready, requested source
+permission, returned from Android Settings and launched the ordinary system APK
+installer. The probe observed all three normal React controls,110 samples,
+current catalog, ready and both permission/installer handoffs. Android source
+permission was granted for LETSCUBE through the normal Settings row; its app-op
+changes from default to allow. No native source/hash/version/signer check or
+confirmation was bypassed, and no target APK was installed with ADB.
+
+Google Play Protect additionally requested a scan. The ordinary scan was run;
+its safe-to-install result was followed by its Install action. Play Protect and
+device-wide protections were not disabled. The installed35 full APK hash matches
+the exact published artifact, version/build match, UID/firstInstall are unchanged.
+The subsequent exact35 embedded-source/main check passes in two samples. The
+separate diagnostic package is removed after both invocations. A final normal
+MainActivity launch passes, all three known old/new diagnostic packages are absent
+and the current app process has zero native fatal signals at05:26Z.
+
+Two pre-install diagnostic refusals are retained: this Android's power dump does
+not use the guessed Display Power state format, and window/windows lacks a focus
+line. Actual awake/screen/interactive policy plus window/displays focus were
+calibrated before the successful changed-input attempt. Final offline controls
+pass14/14 with an installed admission file still denied to their child process.
+The earlier failures did not install the diagnostic or mutate target data.
+
+Instrumentation restarts the target runtime, so this is not uninterrupted-call,
+unsaved-draft or exact-conversation-restoration acceptance. Both runner receipts
+report focusRestored=false because cleanup did not override an intervening system
+surface; the independent final normal launch/cleanup above closes that bounded
+return step. No personal screens/message bodies/Auth tokens were captured. No
+phone VPN/profile or PC network change. The per-app installation-source grant is
+left enabled as the ordinary prerequisite for later user-approved updates.

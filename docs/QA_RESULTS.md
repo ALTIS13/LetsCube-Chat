@@ -10,7 +10,15 @@ the independent final source delta review is clean.
 Independent delta review closes the cache primary-key cleanup and hook finite
 privacy recovery findings. NativePG17 minimal-RLS cache proof16, final fixed
 query-cost oracle and exact temporary-resource cleanup pass; no production SQL
-or mounted disk cache. Native35/build/publication/device acceptance pending.
+or mounted disk cache. Native35 original signer/Firebase/assets/QA flags/updater
+registration pass; Realme34->35 guest/data/fatal0 and Stable/public full APK hash
+pass at05:11:43Z, mandatory=false/rollback34. Sole-healthy imagec3/buildb8e796727de22a2d
+and public/container/new-old marker parity pass at05:14:48Z. A063 actual in-app
+34->35 completes normal download/ready/permission/system install plus Play Protect
+scan. Exact installed APK and UID/firstInstall pass; post35 exact source/main,
+final normal return/helper absence/fatal0 pass at05:26Z. Source permission stays
+enabled only for LETSCUBE; no protection/VPN/PC routing was disabled. Original
+diagnostic-format refusals are preserved, not product failures or successful QA.
 [History repair](operations/2026-10-21-hidden-history-pagination.md),
 [cache boundary](operations/2026-10-21-received-history-cache.md).
 

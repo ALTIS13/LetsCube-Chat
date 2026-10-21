@@ -113,6 +113,9 @@ bootstrap for0.1.31/0.1.32. No SQL, Windows shell/identity or native Apple chang
 Sole-healthy shared image3a73975f/build `affacc90ed0418d6` has public/container
 parity at21:42:34Z; HTML/JS/SW are byte-identical to verifiedb50 (native-only code).
 
-Remaining: full fixed34 ->next real-release updater UI/system acceptance, wider
-OEM/lifecycle, persistent received history and generic-only Windows WNS. Do not
-repeat accepted cohorts or manufacture a release solely for QA.
+The natural next legitimate release35 now completes actual fixed34->35 on A063:
+normal download/ready/permission/system install plus Play Protect scan, exact
+installed APK/data identity, post35 main and final cleanup/fatal0 pass.
+[Full acceptance and diagnostic limits](2026-10-21-hidden-history-pagination.md#a063-full-update).
+Remaining: wider OEM/call/draft/lifecycle, persistent received history and generic-
+only Windows WNS. Do not repeat accepted cohorts or manufacture a release for QA.

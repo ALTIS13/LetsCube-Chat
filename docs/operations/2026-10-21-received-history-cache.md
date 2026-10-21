@@ -3,8 +3,10 @@
 Owner: Codex coordinator. Approved continuation of completion-plan Task2,
 baseline `5773aab6`, canonical `codex/ui-motion-updates-20261019`.
 This is an implemented/tested foundation, **not an enabled application feature**.
-Production SQL and received-history behavior remain unchanged until the remaining
-integration/migration gates below. Android Stable remains0.1.33/build34.
+Production SQL and received-history **disk-cache** behavior remain unchanged until
+the remaining integration/migration gates below. The separate ordinary pagination
+repair is released on web and Android Stable0.1.34/build35; it does not enable
+this foundation.
 
 ## Implemented Boundaries
 

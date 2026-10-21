@@ -3,8 +3,15 @@
 **Current State, 2026-10-21:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
-Stage: D389 hidden-history hook/UI repair, final source/keyboard acceptance before
-legitimate Android0.1.34/build35. Baseline5773aab6; no new publication yet.
+Stage: D389 hidden-history hook/UI repair RELEASED at `c3bcbb30`, Android
+Stable0.1.34/build35, mandatory=false/rollback34 retained. Realme34->35 guest/
+UID/data/firstInstall/fatal0 and complete public APK hash pass at05:11:43Z.
+Sole-healthy shared imagec3/build `b8e796727de22a2d`, public/container parity and
+new/old history markers pass at05:14:48Z. Actual A06334->35 full in-app download/
+ready/source-permission/system-installer/Play-Protect-scan/installed-full-APK and
+UID/firstInstall retention pass. Exact35 embedded-source/signed-in main and final
+normal return/helper cleanup/fatal0 pass at05:26Z. D384's natural next-release
+path is accepted; wider OEM/call/draft/lifecycle cases remain separate.
 Hook281, storage80 and cache30 pass together; typecheck passes. Final mounted
 empty/short matrix12 (including Enter) and anchor7 pass; final review is clean.
 Guest-only pixels16 inspected; no personal captures.
@@ -14,9 +21,10 @@ NOT mounted and NOT installed in production. Minimal nativePG17 proof16 and cost
 oracle pass; full schema/HTTP/fresh rendering metadata remain before integration.
 [Cache foundation and exact next steps](operations/2026-10-21-received-history-cache.md).
 Latest owner correction returns A063 for all tests; Realme also available.
-Coordinator owns next build/device/rollout; no rental is held.
+Next: fresh rendering metadata/full-schema HTTP proof, then cache integration;
+no rental is held. No production SQL or PC network change.
 
-**Current released baseline:**
+**Prior released baseline (reuse):**
 Stage: D-384 bridge-thread/finalization repair RELEASED at `3a73975f`, Android
 Stable0.1.33/build34, mandatory=false, rollback33 retained. Original signer/
 Firebase/assets and complete public APK hash pass at2026-10-20 21:40:34Z.
@@ -29,8 +37,8 @@ D-388 remains released with155/155/review/typecheck and the time/UUID cursor in
 both shared web and Native34. [History repair](operations/2026-10-20-history-tuple-pagination.md).
 
 Existing32/33 need a one-time manual APK upgrade. Their actual in-app32 ->33 case
-remains REFUSED; full fixed34 ->next legitimate release download/ready/permission/
-installer acceptance stays open, not inferred from manual bootstrap/current.
+remains REFUSED; the real fixed34->35 path is now accepted separately above,
+not inferred from the earlier manual bootstrap/current state.
 Do not create a dummy release or weaken source/signature/hash/version checks.
 
 Latest owner authority includes A063/ADB, superseding its earlier Apollo
