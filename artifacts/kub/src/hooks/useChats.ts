@@ -153,6 +153,7 @@ export function useChats() {
   const listDisplaySourceRef = useRef<"cache" | "server" | null>(null);
   const cacheRevisionRef = useRef(0);
   const cacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ownListRetirementRef = useRef<{ chatId: string; generation: number; observed: boolean } | null>(null);
 
   // A setup-specific lease also retires requests on cleanup without an auth change.
   const captureOwner = useCallback(() => {
@@ -192,8 +193,17 @@ export function useChats() {
     const isCurrent = captureOwner();
     return offlineHistory.subscribe((chatId, broadcast) => {
       if (!isCurrent()) return;
+      const ownRetirement = ownListRetirementRef.current;
+      ownListRetirementRef.current = null;
       cacheRevisionRef.current += 1;
       listProgressRef.current += 1;
+      // A fresh RLS list may purge older pages without retiring its own preview.
+      // Consume only this synchronous notification, never another retirement.
+      if (ownRetirement && broadcast === true && ownRetirement.chatId === chatId &&
+        ownRetirement.generation === fetchGenerationRef.current && listDisplaySourceRef.current === "server") {
+        ownRetirement.observed = true;
+        return;
+      }
       serverListReadyRef.current = false;
       const state = useAppStore.getState();
       if (listDisplaySourceRef.current !== "server") {
@@ -238,27 +248,38 @@ export function useChats() {
   }, []);
 
   const persistChats = useCallback(async (rows: ChatWithLastMessage[], isCurrent: () => boolean, dropped: string[]) => {
-    const revision = cacheRevisionRef.current;
+    let revision = cacheRevisionRef.current;
+    const generation = fetchGenerationRef.current;
+    const sameListRead = () => isCurrent() && generation === fetchGenerationRef.current;
     const saved = await cachedChatsReadRef.current;
-    if (!isCurrent() || useAppStore.getState().chats !== rows || revision !== cacheRevisionRef.current) return;
+    if (!sameListRead() || useAppStore.getState().chats !== rows || revision !== cacheRevisionRef.current) return;
     const nextIds = new Set(rows.map(chat => chat.id));
     for (const chat of saved ?? []) {
       const current = rows.find(row => row.id === chat.id);
       if (!nextIds.has(chat.id) || (current?.cleared_at && current.cleared_at !== chat.cleared_at)) dropped.push(chat.id);
     }
+    serverListReadyRef.current = false;
     // Each purge retires *all* old handles. Reacquire only after the last purge.
     for (const id of new Set(dropped)) {
-      if (!isCurrent() || useAppStore.getState().chats !== rows) return;
-      const retirement = invalidateCachedChat(id);
-      const ownRetirement = cacheRevisionRef.current;
+      if (!sameListRead() || revision !== cacheRevisionRef.current) return;
+      const ownRetirement = { chatId: id, generation, observed: false };
+      ownListRetirementRef.current = ownRetirement;
+      let retirement: Promise<void>;
+      try {
+        retirement = invalidateCachedChat(id);
+      } finally {
+        if (ownListRetirementRef.current === ownRetirement) ownListRetirementRef.current = null;
+      }
       await retirement;
-      if (ownRetirement !== cacheRevisionRef.current) return;
+      if (!ownRetirement.observed || cacheRevisionRef.current !== revision + 1) return;
+      revision = cacheRevisionRef.current;
     }
-    if (!isCurrent()) return;
+    if (!sameListRead() || revision !== cacheRevisionRef.current) return;
+    // RLS-delivered RT progress may have advanced the list while purge awaited IDB.
     const snapshot = useAppStore.getState().chats;
-    if (snapshot !== rows) return;
     serverListReadyRef.current = true;
-    await offlineHistory.capture()?.writeChats(rows, () => isCurrent() && useAppStore.getState().chats === snapshot);
+    await offlineHistory.capture()?.writeChats(snapshot, () => sameListRead() && serverListReadyRef.current &&
+      revision === cacheRevisionRef.current && useAppStore.getState().chats === snapshot);
   }, [invalidateCachedChat]);
 
   const persistFreshPreview = useCallback(() => {

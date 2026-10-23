@@ -1,5 +1,44 @@
 # QA Results
 
+## 2026-10-24 - Physical Cache Refusal And Corrected Candidate
+
+Actual A063 candidate36 source/assets and100 rendered rows pass, but the cache
+acceptance is REFUSED: only owner/profile persist. Stable stays35;36 is not
+published. Short bot timestamps and array-shaped self joins are reproduced and
+repaired in codec; historical-clear self-retirement is independently reproduced
+and repaired in the mounted sidebar. Final58/58 affected checks, real-shape
+Chromium1440/390 and WebKit3903/3, typecheck and independent delta review pass.
+New fixture buildd7a5a761d31b5ba8 completes11.15s and actual built-PWA cold process,
+expired-token offline and SDK refresh/reconcile pass. Native37 is the next
+legitimate candidate, not a republished/relabelled36. Physical cache/reconnect and
+exact release evidence remain required. Prior test-shape/capture refusals are
+retained; all diagnostic packages removed, no network/VPN change during probes.
+[Detailed source/runtime distinction](operations/2026-10-23-offline-history.md).
+
+## 2026-10-23 - Mounted Offline History
+
+Product82db2d49, shared web/build8ec79ab9995b9cf3: exact sole-healthy image and
+public/container HTML/JS/SW hashes plus mounted-cache runtime markers pass20:25Z.
+Pure service11, actual IDB2 plus storage82 pass together95/95; affected auth/hook
+cohort247 and final changed HTTP-status boundary36 pass; typecheck/diff pass.
+Actual Chromium desktop/mobile and WebKit mobile consumers cover503 cold restore,
+reconnect replacement, refused history and actual clear UI; plain HTTP403 was
+RED before the explicit HTTP-status repair and GREEN after. Guest-only status
+pixels1440/390 in both themes inspected. No signed-in capture.
+
+Real loopback HTTP + built service worker restore after browser-process close,
+zero offline HTTP calls, expired-token last-known display and actual SDK refresh
+after reconnect pass. Route mocks were removed from this built-artifact case:
+Chromium routing changes static requests to cache:reload; workers separately
+bypass consumer API mocks. Neither test transport issue led to a product patch.
+
+Native36 original signer/APKv2/Firebase/assets and exact installed APK,
+Realme35->36 guest/fatal0 and A06335->36 manual data retention pass. Stable
+publication and actual native cold-cache acceptance remain pending. Fresh Realme
+notification preview/card/tap NOT RUN; unchanged earlier acceptance is retained.
+No production SQL, binary-media offline, physical iPhone or new Windows shell
+claim. [Current report and remaining scope](operations/2026-10-23-offline-history.md).
+
 ## 2026-10-21 - Hidden History And Unmounted Cache Foundation
 
 Frozen hook281/storage80/cache30 affected cohort completes with zero failures;

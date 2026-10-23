@@ -5,6 +5,7 @@ const ME = person("74000000-0000-4000-8000-000000000001", "Offline QA");
 const PEER = person("74000000-0000-4000-8000-000000000002", "Offline peer");
 const CHAT = "74000000-0000-4000-8000-000000000010";
 const ID = "74000000-0000-4000-8000-000000000011";
+const GROUP = "74000000-0000-4000-8000-000000000012";
 test.use({ screenshot: "off", trace: "off", video: "off", serviceWorkers: "block" });
 test.beforeEach(async ({ request }) => requireFixtureServer(request));
 
@@ -14,10 +15,12 @@ test("actual app cold restore: list, received history, reconnect replacement and
   page.on("console", message => { if (message.type() === "error" && message.text().includes("Error")) runtimeErrors.push(message.text()); });
   let disconnected = false, changed = false, cleared = false, denied = false;
   const initial = message(ID, CHAT, PEER, "Synthetic offline original", new Date(Date.now() - 60000).toISOString());
+  (initial as unknown as { reply_to: unknown }).reply_to = [];
   const mine = membership(CHAT, ME, "owner", null);
+  mine.cleared_at = new Date(Date.now() - 3600000).toISOString();
   const fixture = await openFixture(page, {
-    me: ME, chats: [chat(CHAT, "private", null, new Date().toISOString())],
-    memberships: [mine, membership(CHAT, PEER, "member", null)],
+    me: ME, chats: [chat(CHAT, "private", null, new Date().toISOString()), chat(GROUP, "group", "Synthetic bot group", new Date().toISOString())],
+    memberships: [mine, membership(CHAT, PEER, "member", null), membership(GROUP, ME, "owner", null)],
     messages: [initial],
     rpc(name) {
       if (name !== "clear_chat_for_me") return;
@@ -26,6 +29,9 @@ test("actual app cold restore: list, received history, reconnect replacement and
     },
     rest(call) {
       if (disconnected) return { status: 503, body: { code: "SYNTHETIC_OFFLINE" } };
+      if (call.resource === "chat_bot_members") return { status: 200, body: [{ chat_id: GROUP, privacy_mode: "all", bot: {
+        id: "74000000-0000-4000-8000-000000000013", username: "synthetic_bot", display_name: "Synthetic bot", description: "", avatar_url: null, state: "active",
+      } }] };
       if (denied && call.resource === "messages" && call.method === "GET") return { status: 403, body: { message: "Synthetic permission refusal" } };
       if (cleared && call.resource === "messages" && call.method === "GET") return { status: 200, body: [] };
       if (changed && call.resource === "messages" && call.method === "GET") return { status: 200, body: [{ ...initial, content: "Synthetic online replacement" }] };

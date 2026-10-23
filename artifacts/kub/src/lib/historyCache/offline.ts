@@ -1,5 +1,5 @@
 import type { AuthSessionIdentity } from "../authSessionIdentity";
-import type { ChatWithLastMessage, MessageWithSender, Profile } from "../../types/database";
+import type { BotProfile, ChatWithLastMessage, MessageWithSender, Profile } from "../../types/database";
 import type { HistoryCacheLease, HistoryCacheStorage } from "./storage";
 
 export interface OfflineMessageScope {
@@ -57,7 +57,9 @@ function botProjection(value: unknown) {
   const row = record(value);
   return { id: uuid(row.id), username: text(row.username, 256) ?? "", display_name: text(row.display_name, 256) ?? "",
     description: "", avatar_url: null, state: "active" as const,
-    created_at: timestamp(row.created_at), updated_at: timestamp(row.updated_at) };
+    // The sidebar membership join deliberately carries no bot timestamps.
+    ...(row.created_at == null ? {} : { created_at: timestamp(row.created_at) }),
+    ...(row.updated_at == null ? {} : { updated_at: timestamp(row.updated_at) }) } as BotProfile;
 }
 
 function replyProjection(value: unknown): MessageWithSender {
@@ -101,7 +103,17 @@ function messageProjection(value: unknown, chatId: string, depth = 0): MessageWi
     sender: row.sender ? profileProjection(row.sender) : null,
     bot: row.bot ? botProjection(row.bot) : null,
   } as MessageWithSender;
-  if (depth === 0 && row.reply_to) result.reply_to = replyProjection(row.reply_to);
+  if (depth === 0 && result.reply_to_id && row.reply_to) {
+    // PostgREST self joins may be arrays. Never guess among multiple rows or
+    // let a reverse/mismatched join stand in for the actual parent FK.
+    const reply = Array.isArray(row.reply_to) ? row.reply_to.length === 1 ? row.reply_to[0] : null : row.reply_to;
+    if (reply) {
+      try {
+        const projected = replyProjection(reply);
+        if (projected.id === result.reply_to_id) result.reply_to = projected;
+      } catch { /* Keep the message and parent slot, not an unreadable quote. */ }
+    }
+  }
   return result;
 }
 

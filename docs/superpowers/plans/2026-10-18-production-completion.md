@@ -233,9 +233,14 @@ notification decision/read RPCs; current and pinned old client sources.
 **State:** IN PROGRESS; shared-web warm/offline baseline and reproduced redundant
 recovery/sanitizer read repair are accepted and released in web/Android25.
 Remaining native/intake boundaries are not closed by these cases.
-Received-history SQL/codec/IDB/controller foundation is implemented/tested,
-NOT enabled; full schema/HTTP/fresh metadata and mounting remain in its
-[scoped continuation](2026-10-21-received-history-cache.md).
+The separate last-known profile/list/received-history snapshot is mounted and
+released on shared web at82db2d49, with built-PWA cold/expired-token offline and
+SDK reconnect proof. Native36 is built/installed; physical cache acceptance and
+Stable publication remain. [Current integration](../../operations/2026-10-23-offline-history.md).
+The conditional SQL/codec/controller optimization remains NOT enabled; its full
+schema/HTTP/fresh metadata gates remain in the
+[separate continuation](2026-10-21-received-history-cache.md). Media binary cache
+and unlimited retention are not implied by last-known message display.
 D-368 ordinary global logout is repaired and released on web/Android26; actual
 rendered web exit and actual Native26 ordinary UI login/binding/local logout,
 peer retention/refresh and cleanup pass. D369/D370 are now FIXED/RELEASED on web/

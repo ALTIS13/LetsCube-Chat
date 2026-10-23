@@ -1,8 +1,28 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-21.
+Status: active production-hardening tracker, updated 2026-10-23.
 
-**Current work:** D389 hidden-page raw cursor and empty/short loading UI is
+**Current correction, Oct24:** actual A06336 cache acceptance is REFUSED despite
+successful UI/source/install checks: only profile persisted. D391 real bot/reply
+join shapes and D392 own clear-retirement are reproduced/repaired; affected58,
+combined Chromium/WebKit3, typecheck/review and built-PWA cold/expired/reconnect
+pass. Prepare corrected0.1.36/build37;36 remains unpublished and Stable stays35.
+Shared web82db2d49 also needs this fix-forward. No whole-cache acceptance inferred
+from the earlier synthetic/browser or native guest tests.
+[Current report](operations/2026-10-23-offline-history.md).
+
+**Earlier Oct23 rollout:** last-known received-history integration is deployed on shared
+web82db2d49/build8ec79ab9995b9cf3 with exact image/public-container parity. Real
+built-PWA cold browser restart, expired-token offline and SDK refresh/reconcile
+pass. Profile/list/history share backend/account/session isolation and durable
+clear/logout/privacy retirement. Actual Chromium/WebKit consumers, storage95,
+affected hook/auth247 and typecheck pass. Android0.1.35/build36 original signer/
+Firebase/assets, Realme35->36 guest and A06335->36 exact manual upgrade/data
+retention pass; actual native cache acceptance and Stable publication remain.
+Binary media offline and conditional SQL bandwidth optimization are still OPEN.
+[Current integration and limits](operations/2026-10-23-offline-history.md).
+
+**Prior released checkpoint:** D389 hidden-page raw cursor and empty/short loading UI is
 RELEASED atc3bcbb30 on web/buildb8e796727de22a2d and Stable35. Realme34->35 guest/
 data retention and complete public APK hash pass; mandatory=false/rollback34.
 Physical A063 full34->35 in-app download/ready/permission/system install and

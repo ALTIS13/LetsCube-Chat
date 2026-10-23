@@ -25,7 +25,7 @@ let browser, bundle;
 const fixturePort = `
   const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve}};
   const boot=deferred(),cachedProfile=deferred(),cachedChats=deferred();
-  const requests=[],channels=[],authCalls=[],writes=[],identities=[],invalidations=[];
+  const requests=[],channels=[],authCalls=[],writes=[],identities=[],invalidations=[],retirements=[],durablePurges=[];
   let listener,identity=null,generation=0;const retirementListeners=new Set();
   export const offlineHistory={setIdentity(next){
     if(JSON.stringify(next)!==JSON.stringify(identity)){identity=next;generation++}identities.push(next);
@@ -33,8 +33,9 @@ const fixturePort = `
     readProfile:()=>cachedProfile.promise,readChats:()=>cachedChats.promise,
     async writeProfile(value,isCurrent){if(held!==generation||isCurrent&&!isCurrent())return false;writes.push({kind:'profile',value});return true},
     async writeChats(value,isCurrent){if(held!==generation||isCurrent&&!isCurrent())return false;writes.push({kind:'chats',value});return true},
-    async invalidate(){invalidations.push('owner');generation++;for(const fn of retirementListeners)fn(null)},
-    async invalidateChat(id){invalidations.push(id);generation++;for(const fn of retirementListeners)fn(id)}
+    async invalidate(){invalidations.push('owner');generation++;for(const fn of retirementListeners)fn(null,true)},
+    async invalidateChat(id){invalidations.push(id);generation++;for(const fn of retirementListeners)fn(id,true);window.fixture.onRetirement?.(id);
+      const gate=deferred();retirements.push({id,gate});if(window.fixture.holdRetirements)await gate.promise;durablePurges.push(id)}
   }}};
   const rt={setAuth(value){authCalls.push({kind:'realtime',value})},channel(name){const c={name,bindings:[],
     on(type,filter,callback){c.bindings.push({type,filter,callback});return c},subscribe(callback){c.status=callback;return c}};channels.push(c);return c},
@@ -50,7 +51,8 @@ const fixturePort = `
     insert(){insert=true;return q},then(done,fail){const gate=deferred();requests.push({table,insert,gate});return gate.promise.then(done,fail)}};return q},
     async rpc(name){if(name==='chat_list_summaries')return{data:window.fixture.summaryRows??[],error:null};return{data:null,error:null}}};
   export const createClient=()=>client;export const getRealtimeClient=()=>rt;
-  window.fixture={boot,cachedProfile,cachedChats,requests,channels,authCalls,writes,identities,invalidations,
+  window.fixture={boot,cachedProfile,cachedChats,requests,channels,authCalls,writes,identities,invalidations,retirements,durablePurges,
+    captureOwner:()=>offlineHistory.capture(),releaseRetirements(){for(const item of retirements)item.gate.resolve()},
     retire(chatId){generation++;for(const fn of retirementListeners)fn(chatId,false)},
     emit(event,session){listener?.(event,session)},reply(table,data,error=null,status=error?400:200){const r=requests.find(r=>r.table===table&&!r.done);if(!r)throw Error('missing '+table);r.done=true;r.gate.resolve({data,error,status,count:0})}};
 `;
@@ -300,6 +302,191 @@ test("mounted: online during the final failed profile read queues one fresh reva
 });
 
 const seed = { currentUser: profile(A, "member"), authSessionIdentity: { userId: A, sessionId: SID }, authSessionSource: "sdk", accountEpoch: 1 };
+const historicalChatId = "30000000-0000-0000-0000-000000000001";
+const historicalClear = "2026-01-15T00:00:00Z";
+const postClearMessage = { id: "40000000-0000-0000-0000-000000000001", chat_id: historicalChatId,
+  user_id: A, bot_id: null, type: "text", content: "Synthetic post-clear preview", created_at: "2026-02-01T00:00:00Z" };
+
+async function firstHistoricalClearList(f, preview = postClearMessage) {
+  assert.deepEqual((await f.snapshot()).state.chats, [], "first load has no old RAM membership or preview");
+  await f.page.evaluate(({ id, preview }) => {
+    window.fixture.cachedChats.resolve([]);
+    window.fixture.summaryRows = [{ chat_id: id, last_message: preview, unread_count: 0 }];
+  }, { id: historicalChatId, preview });
+  await f.page.evaluate(({ id, owner, cleared }) => window.fixture.reply("chat_members", [{
+    chat_id: id, user_id: owner, joined_at: "2026-01-01T00:00:00Z", hidden_at: null, cleared_at: cleared,
+  }]), { id: historicalChatId, owner: A, cleared: historicalClear });
+  await f.page.waitForFunction(() => window.fixture.requests.some(r => r.table === "chats" && !r.done));
+  await f.page.evaluate(c => window.fixture.reply("chats", [c]), { ...chat(historicalChatId), type: "private" });
+  await f.page.waitForFunction(() => !window.chatsView.loading && window.store.getState().chats.length === 1);
+  const s = await f.snapshot();
+  assert.equal(s.state.chats[0].cleared_at, historicalClear);
+  return s;
+}
+
+test("mounted: historical clear without a preview persists the initial server list (control)", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    const s = await firstHistoricalClearList(f, null);
+    assert.equal(s.writes.filter(w => w.kind === "chats").at(-1)?.value[0]?.id, historicalChatId);
+  } finally { await f.close(); }
+});
+
+test("mounted: historical clear with a post-clear preview persists the initial server list without old RAM", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    const s = await firstHistoricalClearList(f);
+    assert.equal(s.writes.filter(w => w.kind === "chats").at(-1)?.value[0]?.id, historicalChatId,
+      "own historical-clear retirement must not abort the successful initial disk snapshot");
+    assert.equal(s.state.chats[0].last_message?.id, postClearMessage.id, "fresh post-clear server preview is not retired cache");
+  } finally { await f.close(); }
+});
+
+test("mounted: historical clear does not strand background RT preview persistence after the initial list", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    await firstHistoricalClearList(f);
+    const latest = { ...postClearMessage, id: "40000000-0000-0000-0000-000000000002", created_at: "2026-02-02T00:00:00Z" };
+    await f.page.evaluate(row => {
+      const c = window.fixture.channels.find(c => c.name.endsWith(":messages"));
+      c.bindings.find(b => b.filter.event === "INSERT").callback({ new: row });
+    }, latest);
+    await f.page.waitForTimeout(400);
+    const s = await f.snapshot();
+    assert.equal(s.state.chats[0].last_message?.id, latest.id, "background RT reaches live RAM without an active message hook");
+    assert.equal(s.requests.filter(r => r.table === "chat_members").length, 1, "local retirement is not a remote broadcast/refetch");
+    assert.equal(s.writes.filter(w => w.kind === "chats").at(-1)?.value[0]?.last_message?.id, latest.id,
+      "successful initial list must leave disk persistence enabled for later RT progress");
+  } finally { await f.close(); }
+});
+
+test("mounted: own list purge fences old writers, waits for durable retirement and preserves its fresh preview", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    await f.page.evaluate(() => { window.fixture.holdRetirements = true; window.oldCacheWriter = window.fixture.captureOwner(); });
+    const pending = await firstHistoricalClearList(f);
+    assert.deepEqual(pending.invalidations, [historicalChatId], "unknown old clear mark still purges earlier pages");
+    assert.equal(await f.page.evaluate(() => window.oldCacheWriter.writeChats([])), false, "purge still fences previously captured writers");
+    assert.deepEqual(await f.page.evaluate(() => window.fixture.durablePurges), []);
+    assert.equal(pending.writes.filter(w => w.kind === "chats").length, 0, "list cannot become durable before its purge");
+    assert.equal(pending.state.chats[0].last_message?.id, postClearMessage.id, "own purge must not scrub freshly checked RLS data");
+    await f.page.evaluate(() => window.fixture.releaseRetirements());
+    const committed = await f.snapshot();
+    assert.deepEqual(await f.page.evaluate(() => window.fixture.durablePurges), [historicalChatId]);
+    assert.equal(committed.writes.filter(w => w.kind === "chats").at(-1)?.value[0]?.last_message?.id, postClearMessage.id);
+  } finally { await f.close(); }
+});
+
+test("mounted: RT during an own durable purge persists the newer preview rather than the pre-purge snapshot", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    await f.page.evaluate(() => { window.fixture.holdRetirements = true; });
+    await firstHistoricalClearList(f);
+    const latest = { ...postClearMessage, id: "40000000-0000-0000-0000-000000000003", created_at: "2026-02-03T00:00:00Z" };
+    await f.page.evaluate(row => {
+      const c = window.fixture.channels.find(c => c.name.endsWith(":messages"));
+      c.bindings.find(b => b.filter.event === "INSERT").callback({ new: row });
+    }, latest);
+    await f.page.waitForTimeout(300);
+    const pending = await f.snapshot();
+    assert.equal(pending.state.chats[0].last_message?.id, latest.id);
+    assert.equal(pending.writes.filter(w => w.kind === "chats").length, 0, "RT cannot bypass a pending purge");
+    await f.page.evaluate(() => window.fixture.releaseRetirements());
+    const committed = await f.snapshot();
+    const lists = committed.writes.filter(w => w.kind === "chats");
+    assert.equal(lists.length, 1);
+    assert.equal(lists[0].value[0].last_message?.id, latest.id, "stale fetched preview never reaches disk");
+  } finally { await f.close(); }
+});
+
+for (const [retired, local] of [[historicalChatId, false], ["30000000-0000-0000-0000-000000000002", false], [null, false], [historicalChatId, true]]) {
+  test(`mounted: external retirement ${retired ?? "all"} (${local ? "local" : "remote"}) during own purge still fences list persistence`, async () => {
+    const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+      await f.page.evaluate(() => { window.fixture.holdRetirements = true; });
+      await firstHistoricalClearList(f);
+      await f.page.evaluate(({ id, local }) => {
+        if (local) void window.fixture.captureOwner().invalidateChat(id);
+        else window.fixture.retire(id);
+      }, { id: retired, local });
+      const scrubbed = await f.snapshot();
+      assert.equal(scrubbed.state.chats[0].id, historicalChatId, "fresh RLS membership remains visible");
+      assert.equal(scrubbed.state.chats[0].last_message?.id, retired === historicalChatId || retired === null ? undefined : postClearMessage.id);
+      await f.page.evaluate(() => window.fixture.releaseRetirements());
+      const committed = await f.snapshot();
+      assert.equal(committed.writes.filter(w => w.kind === "chats").length, 0, "even unrelated retirement invalidates the pending global handle");
+      await f.page.evaluate(row => {
+        const c = window.fixture.channels.find(c => c.name.endsWith(":messages"));
+        c.bindings.find(b => b.filter.event === "INSERT").callback({ new: row });
+      }, { ...postClearMessage, id: "40000000-0000-0000-0000-000000000004", created_at: "2026-02-04T00:00:00Z" });
+      await f.page.waitForTimeout(300);
+      assert.equal((await f.snapshot()).writes.filter(w => w.kind === "chats").length, 0, "external retirement cannot regain trust from RT alone");
+    } finally { await f.close(); }
+  });
+}
+
+test("mounted: reentrant unrelated retirement is not mistaken for the own list purge", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    await f.page.evaluate(() => {
+      window.fixture.holdRetirements = true;
+      window.fixture.onRetirement = () => {
+        delete window.fixture.onRetirement;
+        window.fixture.retire("30000000-0000-0000-0000-000000000002");
+      };
+    });
+    const pending = await firstHistoricalClearList(f);
+    assert.equal(pending.state.chats[0].last_message?.id, postClearMessage.id, "unrelated retirement does not scrub this fresh membership");
+    await f.page.evaluate(() => window.fixture.releaseRetirements());
+    assert.equal((await f.snapshot()).writes.filter(w => w.kind === "chats").length, 0,
+      "an extra synchronous notification cannot become part of the own-retirement revision");
+  } finally { await f.close(); }
+});
+
+test("mounted: a fresh list waits for every historical-clear purge before committing both previews", async () => {
+  const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
+    const otherId = "30000000-0000-0000-0000-000000000002";
+    const previews = [postClearMessage, { ...postClearMessage, chat_id: otherId, id: "40000000-0000-0000-0000-000000000005" }];
+    await f.page.evaluate(({ previews, owner, cleared }) => {
+      window.fixture.holdRetirements = true;
+      window.fixture.cachedChats.resolve([]);
+      window.fixture.summaryRows = previews.map(row => ({ chat_id: row.chat_id, last_message: row, unread_count: 0 }));
+      window.fixture.reply("chat_members", previews.map(row => ({ chat_id: row.chat_id, user_id: owner, hidden_at: null, cleared_at: cleared })));
+    }, { previews, owner: A, cleared: historicalClear });
+    await f.page.waitForFunction(() => window.fixture.requests.some(r => r.table === "chats" && !r.done));
+    await f.page.evaluate(rows => window.fixture.reply("chats", rows), [chat(historicalChatId), chat(otherId)]);
+    await f.page.waitForFunction(() => !window.chatsView.loading && window.store.getState().chats.length === 2);
+    const pending = await f.snapshot();
+    assert.equal(pending.invalidations.length, 1, "second purge waits for the first durable retirement");
+    await f.page.evaluate(() => window.fixture.retirements[0].gate.resolve());
+    const midway = await f.snapshot();
+    assert.deepEqual(new Set(midway.invalidations), new Set([historicalChatId, otherId]));
+    assert.equal(midway.writes.filter(w => w.kind === "chats").length, 0, "the first completed purge is not sufficient");
+    await f.page.evaluate(() => window.fixture.releaseRetirements());
+    const committed = await f.snapshot();
+    assert.deepEqual(new Set(await f.page.evaluate(() => window.fixture.durablePurges)), new Set([historicalChatId, otherId]));
+    assert.deepEqual(new Set(committed.writes.filter(w => w.kind === "chats").at(-1)?.value.map(row => row.last_message?.id)),
+      new Set(previews.map(row => row.id)));
+  } finally { await f.close(); }
+});
+
+for (const [name, from, to, scenario] of [
+  ["own RLS retirement distinction", "ownRetirement.observed = true;\n        return;", "ownRetirement.observed = true;", async f => {
+    const s = await firstHistoricalClearList(f);
+    assert.equal(s.writes.filter(w => w.kind === "chats").at(-1)?.value[0]?.last_message?.id, postClearMessage.id);
+  }],
+  ["required historical purge", "retirement = invalidateCachedChat(id);", "retirement = Promise.resolve(); ownRetirement.observed = true; cacheRevisionRef.current += 1;", async f => {
+    const s = await firstHistoricalClearList(f);
+    assert.ok(s.invalidations.includes("30000000-0000-0000-0000-000000000001"), "unknown old clear must still retire earlier pages");
+  }],
+  ["external retirement revision fence", "if (!ownRetirement.observed || cacheRevisionRef.current !== revision + 1) return;", "if (!ownRetirement.observed) return;", async f => {
+    await f.page.evaluate(() => { window.fixture.onRetirement = () => {
+      delete window.fixture.onRetirement;
+      window.fixture.retire("30000000-0000-0000-0000-000000000002");
+    }; });
+    const s = await firstHistoricalClearList(f);
+    assert.equal(s.writes.filter(w => w.kind === "chats").length, 0, "external retirement cannot regain disk trust");
+  }],
+]) test(`compiled mutation killed by mounted behavior: ${name}`, async () => {
+  const js = await buildFixture({ file: "hooks/useChats.ts", from, to });
+  const f = await fixture({ js, mode: "chats", seed, cached: null, offline: false });
+  try { await assert.rejects(() => scenario(f), error => error.code === "ERR_ASSERTION"); }
+  finally { await f.close(); }
+});
+
 test("mounted: list restores concurrently with a blocked server read", async () => {
   const f = await fixture({ mode: "chats", seed, cached: null, offline: false }); try {
     await f.page.evaluate(c => window.fixture.cachedChats.resolve([c]), chat());

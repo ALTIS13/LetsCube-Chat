@@ -115,11 +115,36 @@ test('actual partial reply join can be cached without inventing a full message r
   assert.equal(saved.messages[0].reply_to.id, id(8));
 });
 
+test('the actual array-shaped self join preserves the message and only its exact reply', async () => {
+  const f = setup(), reply = { id: id(8), content: 'Synthetic parent', type: 'text', user_id: id(1), bot_id: null, deleted_at: null };
+  assert.equal(await f.owner.writeMessages(scope, [{ ...message(), reply_to: [] }], { hasMore: false }), true);
+  assert.equal((await f.owner.readMessages(scope)).messages[0].content, 'synthetic received text');
+  assert.equal(await f.owner.writeMessages(scope, [{ ...message(), reply_to_id: id(8), reply_to: [reply] }], { hasMore: false }), true);
+  assert.equal((await f.owner.readMessages(scope)).messages[0].reply_to.content, 'Synthetic parent');
+  for (const embed of [[{ ...reply, id: id(9) }], [reply, { ...reply, id: id(9) }], { ...reply, id: id(9) }]) {
+    assert.equal(await f.owner.writeMessages(scope, [{ ...message(), reply_to_id: id(8), reply_to: embed }], { hasMore: false }), true);
+    const saved = (await f.owner.readMessages(scope)).messages[0];
+    assert.equal(saved.reply_to_id, id(8));
+    assert.equal(saved.reply_to, undefined, 'an ambiguous or mismatched embed cannot become a quoted parent');
+  }
+});
+
 test('a topic snapshot never accepts rows from other topics', async () => {
   const f = setup(), scoped = { ...scope, topicId: id(30) };
   assert.equal(await f.owner.writeMessages(scoped, [message()], { hasMore: false }), false);
   assert.equal(await f.owner.writeMessages(scoped, [{ ...message(), topic_id: id(30) }], { hasMore: false }), true);
   assert.equal((await f.owner.readMessages(scoped)).messages.length, 1);
+});
+
+test('the actual short sidebar bot projection does not disable the whole chat cache', async () => {
+  const f = setup();
+  const bot = { id: id(40), username: 'fixture_bot', display_name: 'Synthetic bot', description: '', avatar_url: null, state: 'active' };
+  const chat = { id: scope.chatId, type: 'group', name: 'Synthetic group', created_by: id(1), created_at: time, updated_at: time,
+    bots: [bot], last_message: message() };
+  assert.equal(await f.owner.writeChats([chat]), true);
+  const restored = await f.owner.readChats();
+  assert.equal(restored[0].bots[0].display_name, 'Synthetic bot');
+  assert.equal(restored[0].bots[0].created_at, undefined, 'a display join must not invent a creation time');
 });
 
 test('unavailable disk and retired publication are soft misses, not network dependencies', async () => {

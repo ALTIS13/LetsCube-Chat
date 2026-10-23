@@ -1,9 +1,13 @@
 # LETSCUBE — handover
 
 **Current State, 2026-10-23:** Owner: Codex coordinator, canonical branch
-`codex/ui-motion-updates-20261019`, base `7ef703b9`. Stage: offline received-history
-integration verified in source/browsers; Android0.1.35/build36 candidate preparation,
-NOT published yet. Local account/session/backend-scoped profile, list and received
+`codex/ui-motion-updates-20261019`, base `82db2d49`. Stage: correction after actual
+A063 acceptance REFUSED candidate36: only profile persisted, no list/history.
+Shared web82db2d49/build8ec79ab9995b9cf3 is deployed but has the same short-bot/
+array-reply projection defects; fix-forward is required. Candidate36 is signed/
+installed only, NEVER promoted to Stable (still0.1.34/build35). New candidate is
+0.1.36/build37; preserve all prior artifacts and rollback35.
+Local account/session/backend-scoped profile, list and received
 history snapshots are now mounted without requiring network admission first.
 Actual built PWA cold browser-process restore, expired-token offline display and
 SDK refresh/reconciliation pass. Chromium/WebKit consumers pass reconnect,
@@ -12,12 +16,12 @@ Prior affected hook/auth cohort247/247 and guest-only visual matrix are retained
 No production SQL or PC network change. A063 returned with installation authority;
 Realme available but fresh preview/card/tap canary NOT RUN (locked/QA identity not
 confirmed); retain unchanged notification source tests and prior actual acceptance.
-Next: final candidate build, A063 cold native/offline/reconnect, immutable
+Next: corrected build37, A063 cold native/offline/reconnect, immutable
 publication and exact image/artifact verification. Binary media offline caching
 and the conditional SQL optimization remain OPEN, not implied by text restoration.
 [Current integration, limits and evidence](operations/2026-10-23-offline-history.md).
 
-**Current State, 2026-10-21:** Owner: Codex coordinator, canonical branch
+**Prior Release, 2026-10-21:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).
 Stage: D389 hidden-history hook/UI repair RELEASED at `c3bcbb30`, Android

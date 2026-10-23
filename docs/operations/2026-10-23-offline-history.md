@@ -1,7 +1,10 @@
 # Offline received history integration
 
-Owner: Codex coordinator. Stage: source/browser acceptance; native candidate
-preparation, NOT released. Baseline: `7ef703b9`.
+Owner: Codex coordinator. Stage: correction after actual A063 refusal of native36.
+Shared source82db2d49 was deployed but its snapshot projection is incomplete for
+real bot/reply joins; fix-forward is required. Candidate36 was NOT published to
+Stable. Prepare0.1.36/build37; current Stable remains0.1.34/build35.
+Initial baseline: `7ef703b9`; correction base: `82db2d49`.
 Source: owner's2026-10-23 request requires actual offline viewing, not just a
 conditional-network cache. Notification wiring is an independent worker scope.
 
@@ -83,8 +86,7 @@ that network operation or pretend it is proof of current authorization
 
 ## Remaining boundaries
 
-- Build/sign/check the legitimate0.1.35/build36 release using original custody;
-  install without data clear and prove actual native cold offline/reconnect.
+- Build corrected0.1.36/build37 and prove actual native cold offline/reconnect.
 - Publish only after those gates, retain rollback35 and mandatory=false; verify
   full public APK bytes and exact shared web container/build parity.
 - Offline display is last-known, bounded8MiB/ten scopes/seven days, up to1000
@@ -93,6 +95,50 @@ that network operation or pretend it is proof of current authorization
   decorations, contact details and elevated roles are not persisted here.
 - Conditional SQL bandwidth optimization still needs its own full-schema/HTTP
   and production migration gates. It is not required for the local display path.
+
+## Release evidence
+
+- Build36: `sw.js build 6ec74a5734973e8f`, `built in11.38s`, Gradle25s. Original
+  sole signer/APKv2, four exact Firebase values, false QA flags,42-file web and
+  native DEX/config parity pass. APK7,823,325B SHA256
+  `6a997f987c4de9a278eec38086c11dc342f260252501575242488614092272af`.
+- Realme35->36 guest/startup/fatal0 and UID/data/firstInstall pass20:19:59Z.
+  A06335->36 manual in-place install and full installed APK hash pass20:22:13Z;
+  UID/data/firstInstall retained. These are not cold-cache or FCM proofs.
+- Shared-web sole-healthy image82db2d49/build `8ec79ab9995b9cf3`, public/container
+  HTML/JS/SW parity and bidirectional source/runtime cache mount markers pass
+  at20:25:52Z. Earlier hidden-history actions remain in the served bundle.
+  Shared PWA/Windows renderer receive this release; no new Windows or native
+  Apple binary is claimed. Windows shell0.2.14 remains deliberately unsigned.
+
+## Actual Native Refusal And Corrections
+
+Candidate36 remains unpublished. A063 renders100 received rows, but actual IDB
+contains only the owner/profile records. Crypto/IDB and exact release source are
+verified; no message bodies, identifiers or captures are retained in receipts.
+The source/browser synthetic shape did not establish real projection acceptance.
+
+- Short `fetchChatBots` records intentionally omit timestamps. Two real sidebar
+  bots fail the previous full-timestamp projection and disable the complete list
+  snapshot. Exact BotLike input is RED, then GREEN with optional display dates;
+  no timestamp is invented.
+- Actual self-join replies are arrays:90 empty and10 singleton among the sampled
+  100 received rows. The prior object-only projector rejects the whole page.
+  Empty/singleton normalization is RED/GREEN; only the exact parent FK may yield
+  a quote. Ambiguous/malformed embeds leave the message/parent slot intact without
+  exposing an unrelated quote.
+- A historical clear mark on initial list hydration purges old disk pages, but
+  its own notification was also scrubbing the freshly checked list and disabling
+  persistence. Two actual-hook regressions are RED; the fix distinguishes only
+  its exact synchronous own purge while preserving external retirement/fetch
+  generation fences. Mounted43/43 and three new omission controls pass.
+- The combined real-shape fixture (short bot, historical clear, reply array)
+  restores offline and reconciles/denies/clears in Chromium1440/390 and
+  WebKit390:3/3. Codec/actual IDB15/15 and final typecheck pass. Independent delta
+  review approves source only; native37 cold/offline/reconnect is still required.
+- Retained private probes are purpose-specific. Early unpopulated-chat selection
+  and diagnostic-format problems are not product bugs or accepted runtime tests.
+  All temporary test packages were removed; no phone/PC VPN configuration changed.
 
 ## REA method
 

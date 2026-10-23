@@ -26256,3 +26256,35 @@ prepend/entry7/7 and guest pixels16 pass; final review is clean. Released at
 signer/Firebase/assets, Realme34->35 retention and complete public APK hash pass.
 This does not enable persistent received history or close D384 device acceptance.
 [Current repair](operations/2026-10-21-hidden-history-pagination.md).
+
+## D-390 `[~]` Permission refusal without a PostgREST code keeps old history visible
+
+**Cause:** the new offline path recognized only structured PostgREST permission
+codes, not the HTTP401/403 status itself. The actual mounted consumer reproduces
+a plain403 retaining a visible old row. Checking status as well as codes makes
+the same case GREEN in Chromium/WebKit and retires both RAM display and the
+chat's durable snapshots. Released on shared web82db2d49; Android36 carries the
+repair and awaits its distinct native cache/Stable gates. No permission or RLS
+rule is relaxed. [Integration and evidence](operations/2026-10-23-offline-history.md).
+
+## D-391 `[~]` Real short-bot and array-reply joins disable received-history snapshots
+
+Actual A06336 renders100 messages while IDB retains only the profile. Two sidebar
+BotLike records have no timestamps; all100 self-join replies are arrays,90 empty
+and10 singleton. The full-object projector rejected these valid display shapes.
+Both contracts are reproduced RED and repaired: optional bot display dates, no
+invented data, only an exact parent FK may produce a cached quote. Final codec/
+actual IDB15/15, combined mounted real-shape matrix3/3 and typecheck pass; independent
+delta review approves. Candidate36 is NOT Stable. Await corrected37 native gates.
+[Evidence and release state](operations/2026-10-23-offline-history.md).
+
+## D-392 `[~]` Historical clear hydration retires its own freshly checked sidebar
+
+The initial list treated a historical clear mark as a need to purge older disk
+pages; its own notification also scrubbed the new RLS preview, changed the array
+identity and disabled further RT persistence. Actual mounted REDs cover initial
+preview and subsequent background persistence. Only the exact synchronous own
+purge is distinguished; external retirement and fetch-generation fences remain.
+Mounted43/43 and three new compiled omission controls pass. Await corrected37
+runtime/publication; server clear and privacy checks are not bypassed.
+[Evidence](operations/2026-10-23-offline-history.md).
