@@ -67,6 +67,8 @@ function actual(text = source) {
   }
   const timers = new Map(); let timerId = 0;
   const context = vm.createContext({console: {error() {}}, hiddenMessagesLive: hiddenModule.exports.hiddenMessagesLive,
+    offlineHistory: { capture: () => null }, offlineReadRef: { current: null }, authSessionSource: "sdk",
+    setOfflineSnapshot() {}, showingOfflineHistory: false, offlineSnapshot: null,
     setTimeout: (callback, ms) => { timers.set(++timerId, {callback, ms}); return timerId; }, clearTimeout: id => timers.delete(id),
     useRef: current => ({current}), ...watermarkModule.exports, ...mergeModule.exports, ...sharingModule.exports});
   // The shipped-source comparison predates these closures. Current source loads

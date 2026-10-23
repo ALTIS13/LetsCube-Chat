@@ -15,6 +15,7 @@ export interface HistoryCacheStorage {
   read(lease: HistoryCacheLease, scope: string, now?: number): Promise<HistoryCacheValue | null>;
   write(lease: HistoryCacheLease, scope: string, value: Pick<HistoryCacheValue, "payload" | "digest">, now: number): Promise<boolean>;
   invalidate(namespace: string, ownerId: string, scope?: string): Promise<void>;
+  invalidatePrefix?(namespace: string, ownerId: string, prefix: string): Promise<void>;
 }
 
 interface OwnerRow { key: string; generation: string }
@@ -230,6 +231,18 @@ export function browserHistoryCacheStorage(factory: IDBFactory | undefined = glo
           else request(ownerScopeRows(store, namespace, ownerId), (rows: ScopeRow[]) => {
             for (const item of rows) store.delete(item.key);
           });
+          set(undefined);
+        });
+      });
+    },
+
+    async invalidatePrefix(namespace, ownerId, prefix) {
+      identifier(namespace); identifier(ownerId); identifier(prefix);
+      const key = ownerKey(namespace, ownerId);
+      await transact<void>("readwrite", (store, request, set) => {
+        store.put({ key, generation: newGeneration() });
+        request(ownerScopeRows(store, namespace, ownerId), (rows: ScopeRow[]) => {
+          for (const row of rows) if (!canonicalScopeRow(row, namespace, ownerId) || row.scope.startsWith(prefix)) store.delete(row.key);
           set(undefined);
         });
       });

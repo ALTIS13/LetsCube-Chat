@@ -86,6 +86,36 @@ function reactLifecycle() {
   };
 }
 
+// Only the disk port is fictional; identity retirement and display projection
+// run through the same offline service as the hook and store.
+function historyStorageFixture() {
+  const records = new Map(), generations = new Map();
+  let generation = 0;
+  const ownerKey = (namespace, ownerId) => JSON.stringify([namespace, ownerId]);
+  const rowKey = (lease, scope) => JSON.stringify([ownerKey(lease.namespace, lease.ownerId), scope]);
+  const current = lease => generations.get(ownerKey(lease.namespace, lease.ownerId)) === lease.generation;
+  return {
+    async capture(namespace, ownerId) {
+      const key = ownerKey(namespace, ownerId);
+      if (!generations.has(key)) generations.set(key, ++generation);
+      return { namespace, ownerId, generation: generations.get(key) };
+    },
+    async read(lease, scope) { return current(lease) ? records.get(rowKey(lease, scope)) ?? null : null; },
+    async write(lease, scope, value, now) {
+      if (!current(lease)) return false;
+      records.set(rowKey(lease, scope), { ...value, verifiedAt: now }); return true;
+    },
+    async invalidate(namespace, ownerId, scope) {
+      const owner = ownerKey(namespace, ownerId);
+      generations.set(owner, ++generation);
+      for (const key of records.keys()) {
+        const [heldOwner, heldScope] = JSON.parse(key);
+        if (heldOwner === owner && (scope === undefined || scope === heldScope)) records.delete(key);
+      }
+    },
+  };
+}
+
 // Full hook/store/receipt source and Zustand core are real. React lifecycle,
 // SDK I/O, timers, outbox stop and browser event publication are fictional.
 function fixture({ hook = hookSource, store = storeSource, identity = identitySource, delayedChannels = false } = {}) {
@@ -97,6 +127,16 @@ function fixture({ hook = hookSource, store = storeSource, identity = identitySo
     setTimeout(callback, ms) { const handle = ++nextTimer; timers.set(handle, { callback, ms }); return handle; },
     clearTimeout(handle) { timers.delete(handle); },
   };
+  const browserEvents = new EventTarget();
+  const browser = {
+    addEventListener: browserEvents.addEventListener.bind(browserEvents),
+    removeEventListener: browserEvents.removeEventListener.bind(browserEvents),
+    ...clock,
+  };
+  const offlineHistory = compile(read("lib/historyCache/offline.ts"), {}, { TextEncoder, crypto }).createOfflineHistory({
+    storage: historyStorageFixture(), namespace: "https://auth-ownership.invalid",
+  });
+  const offlineModule = { offlineHistory };
   const sdk = {
     auth: {
       getSession: () => boot.promise,
@@ -149,6 +189,7 @@ function fixture({ hook = hookSource, store = storeSource, identity = identitySo
     "@/lib/authSessionIdentity": identityModule,
     "@/lib/chatMute": { EMPTY_CHAT_MUTES: {} }, "@/lib/errors": {},
     "@/lib/outbox/appOutbox": { appOutbox: { stop() { stops += 1; } } },
+    "@/lib/historyCache/appOfflineHistory": offlineModule,
   });
   const { useAppStore } = storeModule;
   const hookModule = compile(hook, {
@@ -157,13 +198,15 @@ function fixture({ hook = hookSource, store = storeSource, identity = identitySo
     "@/lib/authSessionIdentity": identityModule,
     "@/lib/dev/instrumentation": { registerChannel() {}, unregisterChannel() {} },
     "@/lib/singleFlight": compile(read("lib/singleFlight.ts")),
+    "@/lib/historyCache/appOfflineHistory": offlineModule,
+    "@/lib/realtimeRevival": { CONNECTION_REVIVED_EVENT: "fictional:connection-revived" },
     "@/lib/media/mediaUrl": { signedMediaUrls: () => ({ setAccount() {} }) },
     "@/lib/platform/capabilities": { isWebBrowser: () => false },
     "@/lib/platform/webMessagePreviews": {
       observeWebMessagePreviewIdentity() { throw new Error("native ownership fixture must not enter browser preview"); },
       retireWebMessagePreviews() { throw new Error("native ownership fixture must not enter browser preview"); },
     },
-  }, clock);
+  }, { ...clock, window: browser, localStorage: { getItem() { return null; } } });
   const availabilityModule = compile(read("lib/rpcAvailability.ts"));
   const availability = availabilityModule.createRpcAvailability({ now: () => 0 });
   const receipts = compile(read("lib/deliveryReceipts.ts"), {
@@ -492,8 +535,8 @@ const mutants = [
   ["omit epoch increment", "store", storeSource, "accountEpoch: state.accountEpoch + 1",
     "accountEpoch: state.accountEpoch", replacement, "new same-user session advances epoch synchronously"],
   ["omit immediate profile retirement", "store", storeSource,
-    "return { ...retireAccountState(state), authSessionIdentity: identity, currentUser: null };",
-    "return { ...retireAccountState(state), authSessionIdentity: identity };", replacement,
+    "return { ...retireAccountState(state), authSessionIdentity: identity, authSessionSource: identity ? source : null, currentUser: null };",
+    "return { ...retireAccountState(state), authSessionIdentity: identity, authSessionSource: identity ? source : null };", replacement,
     "retired profile is cleared before replacement profile load"],
   ["omit public profile epoch guard", "store", storeSource,
     "if (expectedAccountEpoch !== undefined && state.accountEpoch !== expectedAccountEpoch) return state;",
@@ -526,8 +569,8 @@ const mutants = [
     "if (shouldBlockUiForProfile) setLoading(false);", retiredFailure,
     "old profile completion cannot finish replacement loading"],
   ["omit error publication guard", "hook", hookSource,
-    "if (isCurrent(owner) && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);",
-    "if (shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);", retiredFailure,
+    "if (isCurrent(owner) && !ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);",
+    "if (!ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);", retiredFailure,
     "old profile completion cannot publish replacement error"],
   ["omit channel ownership topic", "hook", hookSource,
     "`profile-self:${key}:${++nextProfileChannelGeneration}`", "`profile-self:${userId}`", distinctChannel,

@@ -53,6 +53,7 @@ import { emitChannelActivity } from "@/lib/channelActivity";
 import { channelPreviewCache } from "@/lib/channelPreviewCache";
 import { patchHeldMessage } from "@/lib/messageMerge";
 import { chatIdInFilters, heldChatIdsKey } from "@/lib/realtimeChatFilters";
+import { offlineHistory } from "@/lib/historyCache/appOfflineHistory";
 
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 const CHAT_SUMMARY_DEBOUNCE_MS = 250;
@@ -124,6 +125,7 @@ export function useChats() {
   const setChats = useAppStore((s) => s.setChats);
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const authSessionSource = useAppStore((s) => s.authSessionSource);
   const supabase = createClient();
   const rt = getRealtimeClient();
   const fetchInFlightRef = useRef(false);
@@ -144,6 +146,13 @@ export function useChats() {
   const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const summaryChatIdsRef = useRef(new Set<string>());
   const ownerRef = useRef<symbol | null>(null);
+  const listProgressRef = useRef(0);
+  const retiredChatIdsRef = useRef(new Set<string>());
+  const cachedChatsReadRef = useRef<Promise<ChatWithLastMessage[] | null> | null>(null);
+  const serverListReadyRef = useRef(false);
+  const listDisplaySourceRef = useRef<"cache" | "server" | null>(null);
+  const cacheRevisionRef = useRef(0);
+  const cacheWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A setup-specific lease also retires requests on cleanup without an auth change.
   const captureOwner = useCallback(() => {
@@ -156,6 +165,11 @@ export function useChats() {
   useEffect(() => {
     const owner = Symbol();
     ownerRef.current = owner;
+    offlineHistory.setIdentity(useAppStore.getState().authSessionIdentity);
+    retiredChatIdsRef.current.clear();
+    cachedChatsReadRef.current = null;
+    serverListReadyRef.current = false;
+    listDisplaySourceRef.current = null;
     fetchInFlightRef.current = false;
     fetchQueuedRef.current = false;
     queuedPreserveActiveChatRef.current = false;
@@ -169,8 +183,96 @@ export function useChats() {
       refetchTimerRef.current = null;
       summaryTimerRef.current = null;
       summaryChatIdsRef.current.clear();
+      if (cacheWriteTimerRef.current) clearTimeout(cacheWriteTimerRef.current);
+      cacheWriteTimerRef.current = null;
     };
   }, [userId, accountEpoch]);
+
+  useEffect(() => {
+    const isCurrent = captureOwner();
+    return offlineHistory.subscribe((chatId, broadcast) => {
+      if (!isCurrent()) return;
+      cacheRevisionRef.current += 1;
+      listProgressRef.current += 1;
+      serverListReadyRef.current = false;
+      const state = useAppStore.getState();
+      if (listDisplaySourceRef.current !== "server") {
+        // A cache row is not evidence of continuing membership after retirement.
+        state.setChats(chatId === null ? [] : state.chats.filter(chat => chat.id !== chatId));
+      } else {
+        // Keep fresh RLS-proven memberships, but never a retired preview body.
+        state.setChats(state.chats.map(chat => (chatId === null || chat.id === chatId) && chat.last_message
+          ? { ...chat, last_message: undefined } : chat));
+      }
+      if (!broadcast && authSessionSource === "sdk") {
+        if (refetchTimerRef.current) clearTimeout(refetchTimerRef.current);
+        refetchTimerRef.current = setTimeout(() => {
+          if (isCurrent()) void latestFetchChatsRef.current?.({ preserveActiveChat: true });
+        }, CHAT_REFETCH_DEBOUNCE_MS);
+      }
+    });
+  }, [captureOwner, authSessionSource]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const isCurrent = captureOwner();
+    const cache = offlineHistory.capture();
+    const before = useAppStore.getState().chats;
+    const progress = listProgressRef.current;
+    if (!cache || cache.userId !== userId) return;
+    const pending = cache.readChats();
+    cachedChatsReadRef.current = pending;
+    void pending.then((saved) => {
+      if (before.length) return;
+      if (!saved || !isCurrent() || progress !== listProgressRef.current
+        || useAppStore.getState().chats !== before) return;
+      listDisplaySourceRef.current = "cache";
+      setChats(saved);
+      setRead(listReadRefused(listReadSucceeded(userId), { subject: userId, message: CHATS_UNAVAILABLE }));
+    });
+  }, [userId, accountEpoch, captureOwner, setChats]);
+
+  const invalidateCachedChat = useCallback((chatId: string) => {
+    listProgressRef.current += 1;
+    return offlineHistory.capture()?.invalidateChat(chatId) ?? Promise.resolve();
+  }, []);
+
+  const persistChats = useCallback(async (rows: ChatWithLastMessage[], isCurrent: () => boolean, dropped: string[]) => {
+    const revision = cacheRevisionRef.current;
+    const saved = await cachedChatsReadRef.current;
+    if (!isCurrent() || useAppStore.getState().chats !== rows || revision !== cacheRevisionRef.current) return;
+    const nextIds = new Set(rows.map(chat => chat.id));
+    for (const chat of saved ?? []) {
+      const current = rows.find(row => row.id === chat.id);
+      if (!nextIds.has(chat.id) || (current?.cleared_at && current.cleared_at !== chat.cleared_at)) dropped.push(chat.id);
+    }
+    // Each purge retires *all* old handles. Reacquire only after the last purge.
+    for (const id of new Set(dropped)) {
+      if (!isCurrent() || useAppStore.getState().chats !== rows) return;
+      const retirement = invalidateCachedChat(id);
+      const ownRetirement = cacheRevisionRef.current;
+      await retirement;
+      if (ownRetirement !== cacheRevisionRef.current) return;
+    }
+    if (!isCurrent()) return;
+    const snapshot = useAppStore.getState().chats;
+    if (snapshot !== rows) return;
+    serverListReadyRef.current = true;
+    await offlineHistory.capture()?.writeChats(rows, () => isCurrent() && useAppStore.getState().chats === snapshot);
+  }, [invalidateCachedChat]);
+
+  const persistFreshPreview = useCallback(() => {
+    if (!serverListReadyRef.current || authSessionSource === "cache") return;
+    const isCurrent = captureOwner();
+    if (cacheWriteTimerRef.current) clearTimeout(cacheWriteTimerRef.current);
+    cacheWriteTimerRef.current = setTimeout(() => {
+      cacheWriteTimerRef.current = null;
+      if (!isCurrent() || !serverListReadyRef.current) return;
+      const snapshot = useAppStore.getState().chats;
+      void offlineHistory.capture()?.writeChats(snapshot, () => isCurrent() && serverListReadyRef.current
+        && useAppStore.getState().chats === snapshot);
+    }, CHAT_SUMMARY_DEBOUNCE_MS);
+  }, [authSessionSource, captureOwner]);
 
   const fetchChats = useCallback(async (options: FetchChatsOptions = {}) => {
     const isCurrentAccount = captureOwner();
@@ -183,6 +285,7 @@ export function useChats() {
       setRead(listReadCleared());
       return;
     }
+    if (authSessionSource === "cache") return;
 
     if (fetchInFlightRef.current) {
       fetchQueuedRef.current = true;
@@ -191,6 +294,7 @@ export function useChats() {
     }
 
     fetchInFlightRef.current = true;
+    const cacheRevision = cacheRevisionRef.current;
     fetchGenerationRef.current += 1;
     eventsDuringFetchRef.current = [];
     bumpFetch("useChats");
@@ -223,8 +327,12 @@ export function useChats() {
       }
 
       if (!memberships?.length) {
+        const dropped = useAppStore.getState().chats.map(chat => chat.id);
+        listProgressRef.current += 1;
+        listDisplaySourceRef.current = "server";
+        setChats([]);
+        void persistChats(useAppStore.getState().chats, isCurrentAccount, dropped);
         if (!preserveActiveChat) {
-          setChats([]);
           const selectedChatId = useAppStore.getState().selectedChatId;
           if (selectedChatId) useAppStore.getState().setSelectedChatId(null);
         }
@@ -364,7 +472,7 @@ export function useChats() {
         })();
       }
 
-      const sortedVisibleChats = sortChatsForSidebar(visibleChats, userId);
+      const sortedVisibleChats = sortChatsForSidebar(visibleChats.filter(chat => !retiredChatIdsRef.current.has(chat.id)), userId);
 
       // Reconcile stale active chat after delete/member removal. Only clear
       // after a successful fresh list proves the selected chat is no longer visible.
@@ -374,11 +482,22 @@ export function useChats() {
       }
 
       const arrived = eventsDuringFetchRef.current ?? [];
+      const previousChats = useAppStore.getState().chats;
+      listProgressRef.current += 1;
+      listDisplaySourceRef.current = "server";
       setChats(
         arrived.length
           ? sortChatsForSidebar(replayChatListEvents(sortedVisibleChats, arrived, eventContext(userId)), userId)
           : sortedVisibleChats,
       );
+      const nextChats = useAppStore.getState().chats;
+      const nextIds = new Set(nextChats.map(chat => chat.id));
+      const dropped = [...previousChats, ...enriched].filter(chat => !nextIds.has(chat.id)).map(chat => chat.id);
+      // A clear mark applies even to an inactive chat with retained disk pages.
+      for (const chat of nextChats) {
+        if (chat.cleared_at && previousChats.find(old => old.id === chat.id)?.cleared_at !== chat.cleared_at) dropped.push(chat.id);
+      }
+      if (cacheRevision === cacheRevisionRef.current) void persistChats(nextChats, isCurrentAccount, dropped);
       setRead(listReadSucceeded(userId));
     } finally {
       if (isCurrentAccount()) {
@@ -397,7 +516,7 @@ export function useChats() {
         }
       }
     }
-  }, [userId, supabase, setChats, captureOwner]);
+  }, [userId, authSessionSource, supabase, setChats, captureOwner, persistChats]);
   latestFetchChatsRef.current = fetchChats;
 
   useEffect(() => {
@@ -423,7 +542,7 @@ export function useChats() {
    */
   const scheduleSummary = useCallback((chatId: string) => {
     const isCurrentAccount = captureOwner();
-    if (!userId || !isCurrentAccount()) return;
+    if (!userId || authSessionSource === "cache" || !isCurrentAccount()) return;
     summaryChatIdsRef.current.add(chatId);
     if (summaryTimerRef.current) return;
     const flush = async () => {
@@ -449,25 +568,30 @@ export function useChats() {
       ) return;
       const current = useAppStore.getState().chats;
       const patched = applyChatSummaries(current, summaries);
-      if (patched !== current) useAppStore.getState().setChats(sortChatsForSidebar(patched, userId));
+      if (patched !== current) {
+        useAppStore.getState().setChats(sortChatsForSidebar(patched, userId));
+        persistFreshPreview();
+      }
     };
     summaryTimerRef.current = setTimeout(() => void flush(), CHAT_SUMMARY_DEBOUNCE_MS);
-  }, [supabase, userId, captureOwner]);
+  }, [supabase, userId, authSessionSource, captureOwner, persistFreshPreview]);
 
   /** Applies one event to the list on screen, and remembers it for a fetch in flight. */
   const applyEvent = useCallback((event: ChatListEvent): ChatListEventOutcome => {
     if (!userId || !captureOwner()()) return "ignored";
+    listProgressRef.current += 1;
     eventsDuringFetchRef.current?.push(event);
     const state = useAppStore.getState();
     const { chats: next, outcome } = reduceChatListEvent(state.chats, event, eventContext(userId));
     if (next !== state.chats) {
       state.setChats(event.kind === "peer-receipt" ? next : sortChatsForSidebar(next, userId));
+      persistFreshPreview();
     }
     return outcome;
-  }, [userId, captureOwner]);
+  }, [userId, captureOwner, persistFreshPreview]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || authSessionSource === "cache") return;
 
     const sameOwner = captureOwner();
     let active = true;
@@ -637,6 +761,7 @@ export function useChats() {
           if (!isCurrent()) return;
           if (payload.new?.user_id && payload.new.user_id !== userId) return;
           if (payload.new?.chat_id) {
+            retiredChatIdsRef.current.delete(payload.new.chat_id);
             clearedAtCache.evictChat(payload.new.chat_id);
             dispatchChatsRefresh({ reason: "media-retired", chatId: payload.new.chat_id,
               ownerUserId: userId, accountEpoch, retireChat: "access-restored" });
@@ -650,8 +775,12 @@ export function useChats() {
         (payload: { new: MembershipRowLike }) => {
           if (!isCurrent()) return;
           if (!payload.new?.chat_id) return;
+          const previous = useAppStore.getState().chats.find((chat) => chat.id === payload.new.chat_id);
+          if ((payload.new.hidden_at && previous?.hidden_at !== payload.new.hidden_at)
+            || ("cleared_at" in payload.new && previous?.cleared_at !== payload.new.cleared_at)) {
+            void invalidateCachedChat(payload.new.chat_id);
+          }
           if ("cleared_at" in payload.new) {
-            const previous = useAppStore.getState().chats.find((chat) => chat.id === payload.new.chat_id);
             if (previous?.cleared_at !== payload.new.cleared_at) {
               clearedAtCache.evictChat(payload.new.chat_id);
               channelPreviewCache.evict(payload.new.chat_id);
@@ -669,6 +798,9 @@ export function useChats() {
           if (!isCurrent()) return;
           if (payload.old?.user_id && payload.old.user_id !== userId) return;
           if (payload.old?.chat_id) {
+            retiredChatIdsRef.current.add(payload.old.chat_id);
+            void invalidateCachedChat(payload.old.chat_id);
+            useAppStore.getState().setChats(useAppStore.getState().chats.filter(chat => chat.id !== payload.old.chat_id));
             clearedAtCache.evictChat(payload.old.chat_id);
             dispatchChatsRefresh({ reason: "media-retired", chatId: payload.old.chat_id,
               ownerUserId: userId, accountEpoch, retireChat: "access" });
@@ -700,7 +832,10 @@ export function useChats() {
         const event = readHideEvent(message.payload);
         if (!event) return;
         hiddenMessagesLive.heard(event);
-        if (event.hidden) useAppStore.getState().removeMessage(event.chatId, event.messageId);
+        if (event.hidden) {
+          void invalidateCachedChat(event.chatId);
+          useAppStore.getState().removeMessage(event.chatId, event.messageId);
+        }
         // The line under the chat's name may have been that message, or may be again.
         scheduleSummary(event.chatId);
       })
@@ -746,7 +881,7 @@ export function useChats() {
       window.removeEventListener("offline", notLive);
       clearedAtCache.setLive(false);
     };
-  }, [userId, accountEpoch, rt, supabase, applyEvent, scheduleRefetch, scheduleSummary, captureOwner]);
+  }, [userId, accountEpoch, authSessionSource, rt, supabase, applyEvent, scheduleRefetch, scheduleSummary, captureOwner, invalidateCachedChat]);
 
   // A peer's departure, heard only from the chats this reader holds (D-327).
   //
@@ -764,7 +899,7 @@ export function useChats() {
   const departuresKey = useMemo(() => heldChatIdsKey(chats), [chats]);
   const departuresGeneration = useRef(0);
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || authSessionSource === "cache") return;
     const sameOwner = captureOwner();
     let active = true;
     const isCurrent = () => active && sameOwner();
@@ -796,7 +931,7 @@ export function useChats() {
       rt.removeChannel(channel);
       unregisterChannel(name);
     };
-  }, [userId, accountEpoch, rt, applyEvent, departuresKey, captureOwner]);
+  }, [userId, accountEpoch, authSessionSource, rt, applyEvent, departuresKey, captureOwner]);
 
   useEffect(() => {
     if (!userId) return;
@@ -806,6 +941,12 @@ export function useChats() {
       if (!active || !sameOwner()) return;
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
       if (detail?.reason === "message-realtime") return;
+      if (detail?.reason === "message-hidden" && detail.chatId) {
+        void invalidateCachedChat(detail.chatId);
+      } else if (detail?.reason === "media-retired" && detail.retireChat !== "access-restored"
+        && detail.ownerUserId === userId && detail.accountEpoch === accountEpoch) {
+        void invalidateCachedChat(detail.chatId);
+      }
       scheduleRefetch();
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
@@ -813,7 +954,7 @@ export function useChats() {
       active = false;
       window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     };
-  }, [userId, accountEpoch, scheduleRefetch, captureOwner]);
+  }, [userId, accountEpoch, scheduleRefetch, captureOwner, invalidateCachedChat]);
 
   useEffect(() => {
     const total = chats.reduce((sum, chat) => sum + (chat.unread_count ?? 0), 0);

@@ -16,6 +16,7 @@ import { ForwardModal } from "./ForwardModal";
 import { MessageDeleteDialogHost, copySelectedMessages, useChatMessageSelection } from "./MessageSelectionChrome";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
+import { OfflineHistoryStatus } from "./OfflineHistoryStatus";
 import { TopicStrip } from "./TopicStrip";
 import { ChannelRail, ChannelRailSheet, ChannelRailTrigger } from "./ChannelRail";
 import { ChannelManageDialogHost, requestChannelManage } from "./ChannelManageModal";
@@ -231,7 +232,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageTopicId = messageScoped ? (topicScopeUnknown ? null : selectedTopicId) : undefined;
   const messageGeneralTopicIds = messageScoped && !topicScopeUnknown ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
   const {
-    messages, pinnedMessages, pinnedReady, loading, historyPending, historyError,
+    messages, pinnedMessages, pinnedReady, loading, historyPending, historyError, showingOfflineHistory,
     loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     actionRefusal, clearActionRefusal,
@@ -2051,6 +2052,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           insets all belong to the conversation, not to the pane. */}
       {railOffered && railFitsColumn && <ChannelRail {...railProps} />}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {showingOfflineHistory && <OfflineHistoryStatus topInset={messageListTopInset} />}
         {loading || historyPending ? (
           <div className="flex-1 flex items-center justify-center chat-bg">
             <KubIcon name="spinner" size={28} className="text-[color:var(--kub-cyan)]" />

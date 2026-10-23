@@ -1,5 +1,22 @@
 # LETSCUBE — handover
 
+**Current State, 2026-10-23:** Owner: Codex coordinator, canonical branch
+`codex/ui-motion-updates-20261019`, base `7ef703b9`. Stage: offline received-history
+integration verified in source/browsers; Android0.1.35/build36 candidate preparation,
+NOT published yet. Local account/session/backend-scoped profile, list and received
+history snapshots are now mounted without requiring network admission first.
+Actual built PWA cold browser-process restore, expired-token offline display and
+SDK refresh/reconciliation pass. Chromium/WebKit consumers pass reconnect,
+HTTP403 refusal and real clear-button retirement; storage/service cohort95/95.
+Prior affected hook/auth cohort247/247 and guest-only visual matrix are retained.
+No production SQL or PC network change. A063 returned with installation authority;
+Realme available but fresh preview/card/tap canary NOT RUN (locked/QA identity not
+confirmed); retain unchanged notification source tests and prior actual acceptance.
+Next: final candidate build, A063 cold native/offline/reconnect, immutable
+publication and exact image/artifact verification. Binary media offline caching
+and the conditional SQL optimization remain OPEN, not implied by text restoration.
+[Current integration, limits and evidence](operations/2026-10-23-offline-history.md).
+
 **Current State, 2026-10-21:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`; follows the approved
 [completion plan](superpowers/plans/2026-10-18-production-completion.md).

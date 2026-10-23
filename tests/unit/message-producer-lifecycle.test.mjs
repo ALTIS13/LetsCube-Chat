@@ -115,6 +115,7 @@ function fixture({ text = source, holdInitially, visibility = "visible", history
   };
   const noop = () => {};
   const aliases = {
+    "@/lib/historyCache/appOfflineHistory": { offlineHistory: { capture: () => null, subscribe: () => () => {} } },
     react, "@/store/app.store": { useAppStore }, "@/lib/supabase/client": { createClient: () => client, getRealtimeClient: () => rt },
     "@/lib/dev/instrumentation": { bumpFetch: noop, registerChannel: noop, unregisterChannel: noop },
     "@/lib/errors": { mapPgError: () => "fictional error" }, "@/lib/monitoring": { reportError: () => publish("error") },

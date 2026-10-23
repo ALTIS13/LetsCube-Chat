@@ -142,6 +142,32 @@ for (const [name, engine] of [["Chromium", chromium], ["WebKit", webkit]]) {
     });
   });
 
+  test(`${name}: exact owner prefix retirement preserves siblings and fences held writers`, { timeout: 30000 }, async t => {
+    await fixture(t, engine, async (page, context) => {
+      await page.evaluate(async () => {
+        globalThis.storage = make(); globalThis.lease = await storage.capture("ns", "alice");
+        globalThis.value = { payload: "synthetic", digest: await digest("synthetic") };
+        for (const scope of ["messages:a:all", "messages:a:topic", "messages:ab:all", "chats"])
+          await storage.write(lease, scope, value, 1000);
+        for (const [ns, owner] of [["other", "alice"], ["ns", "bob"]])
+          await storage.write(await storage.capture(ns, owner), "messages:a:all", value, 1000);
+        globalThis.hold = await holdDigest(); globalThis.pending = storage.write(lease, "messages:a:all", value, 1001);
+        await hold.started;
+      });
+      const second = await context.newPage(); await second.goto(origin);
+      await second.evaluate(async () => (await import("/storage.js")).browserHistoryCacheStorage().invalidatePrefix("ns", "alice", "messages:a:"));
+      assert.deepEqual(await page.evaluate(async () => {
+        hold.release(); const written = await pending, fresh = await storage.capture("ns", "alice");
+        const read = scope => storage.read(fresh, scope, 1002);
+        return { written, advanced: fresh.generation !== lease.generation,
+          removed: await read("messages:a:all"), topic: await read("messages:a:topic"),
+          sibling: (await read("messages:ab:all"))?.payload, list: (await read("chats"))?.payload,
+          foreign: await Promise.all([["other", "alice"], ["ns", "bob"]].map(async ([ns, owner]) =>
+            (await storage.read(await storage.capture(ns, owner), "messages:a:all", 1002))?.payload)) };
+      }), { written: false, advanced: true, removed: null, topic: null, sibling: "synthetic", list: "synthetic", foreign: ["synthetic", "synthetic"] });
+    });
+  });
+
   test(`${name}: literal 8MiB UTF8/metadata budget and individual refusal`, { timeout: 30000 }, async t => {
     await fixture(t, engine, async page => {
       assert.deepEqual(await page.evaluate(async () => {

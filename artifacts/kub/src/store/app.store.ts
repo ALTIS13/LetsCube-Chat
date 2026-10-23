@@ -33,6 +33,7 @@ import {
 } from '@/lib/chatMute'
 import { mapPgError } from '@/lib/errors'
 import { appOutbox } from '@/lib/outbox/appOutbox'
+import { offlineHistory } from '@/lib/historyCache/appOfflineHistory'
 import type { TopicNotificationPreferenceView } from '@/lib/topicNotificationPreferences'
 
 type ChatMuteOwner = { userId: string | null; accountEpoch: number;
@@ -58,7 +59,9 @@ interface AppState {
   /** Changes only at an account boundary, including logout/relogin as the same person. */
   accountEpoch: number
   authSessionIdentity: AuthSessionIdentity | null
-  setAuthSessionIdentity: (identity: AuthSessionIdentity | null) => void
+  /** Cache identity owns local display only; it is never an SDK session. */
+  authSessionSource: 'cache' | 'sdk' | null
+  setAuthSessionIdentity: (identity: AuthSessionIdentity | null, source?: 'cache' | 'sdk') => void
   setCurrentUser: (user: Profile | null, expectedAccountEpoch?: number) => void
 
   // Selected chat
@@ -402,7 +405,8 @@ function latestTimestamp(a: string | null | undefined, b: string | null | undefi
 function retireAccountState(state: AppState) {
   // Stop outgoing ACK publication before synchronously publishing the new owner.
   appOutbox.stop();
-  return { accountEpoch: state.accountEpoch + 1, chats: [], messages: {},
+  offlineHistory.setIdentity(null);
+  return { accountEpoch: state.accountEpoch + 1, authSessionSource: null, chats: [], messages: {},
     chatMutes: EMPTY_CHAT_MUTES, mutedChatIds: [], topicNotificationPreferences: {},
     replyToMessage: null, editingMessage: null, forwardingMessages: null, pendingForward: null,
     messageSelection: null, messageDeleteRequest: null,
@@ -415,16 +419,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   accountEpoch: 0,
   topicNotificationPreferences: {},
   authSessionIdentity: null,
-  setAuthSessionIdentity: (identity) => set((state) => {
+  authSessionSource: null,
+  setAuthSessionIdentity: (identity, source = 'sdk') => set((state) => {
     const previous = state.authSessionIdentity
       ?? (state.currentUser ? { userId: state.currentUser.id, sessionId: null } : null);
     if (sameAuthSessionIdentity(previous, identity)) {
       if (!identity) return state;
       const sessionId = identity.sessionId ?? previous?.sessionId ?? null;
-      if (state.authSessionIdentity?.userId === identity.userId && state.authSessionIdentity.sessionId === sessionId) return state;
-      return { authSessionIdentity: { userId: identity.userId, sessionId } };
+      if (state.authSessionIdentity?.userId === identity.userId && state.authSessionIdentity.sessionId === sessionId
+        && state.authSessionSource === source) return state;
+      return { authSessionIdentity: { userId: identity.userId, sessionId }, authSessionSource: source };
     }
-    return { ...retireAccountState(state), authSessionIdentity: identity, currentUser: null };
+    return { ...retireAccountState(state), authSessionIdentity: identity, authSessionSource: identity ? source : null, currentUser: null };
   }),
   /**
    * Shallow-compare significant fields and DROP no-op writes.

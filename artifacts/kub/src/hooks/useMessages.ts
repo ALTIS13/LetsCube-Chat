@@ -51,6 +51,8 @@ import { sameData } from "@/lib/structuralSharing";
 import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import { clearedAtCache } from "@/lib/clearedAtCache";
 import { hiddenMessagesLive } from "@/lib/hiddenMessagesLive";
+import { offlineHistory } from "@/lib/historyCache/appOfflineHistory";
+import type { OfflineMessageSnapshot } from "@/lib/historyCache/offline";
 import {
   DELETE_FOR_EVERYONE_RPC,
   deletionBatches,
@@ -228,8 +230,33 @@ export function useMessages(
   const currentUser = useAppStore((s) => s.currentUser);
   const userId = currentUser?.id ?? null;
   const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const authSessionSource = useAppStore((s) => s.authSessionSource);
   const verifiedAccountEpochRef = useRef<number | null>(null);
   const hookLifetimeRef = useRef<symbol | null>(null);
+  const [offlineSnapshot, setOfflineSnapshot] = useState<(OfflineMessageSnapshot & { key: string; epoch: number }) | null>(null);
+  const offlineReadRef = useRef<symbol | null>(null);
+  const offlineKey = JSON.stringify([chatId, topicId === undefined ? "all" : topicId, generalTopicIds]);
+
+  useEffect(() => {
+    const ticket = Symbol();
+    offlineReadRef.current = ticket;
+    setOfflineSnapshot(null);
+    if (!chatId || !userId) return;
+    const owner = offlineHistory.capture();
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
+    if (owner?.userId === userId) void owner.readMessages({ chatId, topicId, generalTopicIds }).then(saved => {
+      if (saved && offlineReadRef.current === ticket && sameAccount() && verifiedChatIdRef.current !== chatId) {
+        setOfflineSnapshot({ ...saved, key: offlineKey, epoch: accountEpoch });
+      }
+    });
+    return () => { if (offlineReadRef.current === ticket) offlineReadRef.current = null; };
+  }, [chatId, userId, accountEpoch, offlineKey]);
+
+  useEffect(() => offlineHistory.subscribe(retiredChatId => {
+    if (retiredChatId !== null && retiredChatId !== chatId) return;
+    offlineReadRef.current = null;
+    setOfflineSnapshot(null);
+  }), [chatId]);
 
   // Retire async producers synchronously, even when the account and chat stay selected.
   useLayoutEffect(() => {
@@ -414,6 +441,7 @@ export function useMessages(
 
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
+    if (authSessionSource === "cache") return;
     const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
     if (!sameAccount() || chatIdRef.current !== chatId || topicIdRef.current !== topicId ||
       generalTopicIdsRef.current !== generalTopicIds) return;
@@ -492,13 +520,22 @@ export function useMessages(
         else query = applyGeneralTopicFilter(query, generalTopicIds);
       }
       if (localClearedAt) query = query.gt("created_at", localClearedAt);
-      const { data, error } = await query
+      const { data, error, status } = await query
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(MESSAGE_PAGE_SIZE + 1);
       if (!privacyReadIsCurrent() || !isCurrent()) return;
       if (error) {
         console.error("Messages fetch error:", error);
+        if (status === 401 || status === 403 || ["42501", "PGRST301", "PGRST302"].includes(error.code)) {
+          offlineReadRef.current = null;
+          setOfflineSnapshot(null);
+          void offlineHistory.capture()?.invalidateChat(chatId);
+          setMessages(chatId, []);
+          setVerifiedChatId(null);
+          setVerifyingChatId(chatId);
+          setHistoryError("Нет доступа к истории чата.");
+        }
         refuseHistory("Не удалось загрузить историю чата.");
         return;
       }
@@ -585,6 +622,13 @@ export function useMessages(
         verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
         setVerifiedChatId(chatId);
         setVerifyingChatId(null);
+        offlineReadRef.current = null;
+        setOfflineSnapshot(null);
+        // Disk is optional and never holds up the server answer. Only the
+        // privacy-filtered received projection is persisted, never the outbox.
+        void offlineHistory.capture()?.writeMessages({ chatId, topicId, generalTopicIds },
+          reconciledMessages.filter(message => !isLocalOnlyMessage(message)), { hasMore: nextHasMoreOlder },
+          () => isCurrent() && privacyReadIsCurrent());
         fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
         historyVerificationRef.current = committedMessages && sameData(committedMessages, reconciledMessages) ? {
           chatId, topicId, generalTopicIds,
@@ -616,7 +660,7 @@ export function useMessages(
         if (!privacyReadIsCurrent()) scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
       }
     }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch, captureHistoryRead, rememberRawHistoryBoundary, scheduleRecoveryReconcile]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch, authSessionSource, captureHistoryRead, rememberRawHistoryBoundary, scheduleRecoveryReconcile]);
   // The latest read, for the channel below. The channel is the chat's, not the
   // scope's — its filter is the chat and its handlers read the scope from refs —
   // so a scope that resolves or changes must not leave and rejoin it: every
@@ -866,7 +910,10 @@ export function useMessages(
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
       }), effectiveHiddenIds);
       rememberRawHistoryBoundary(fetched, localClearedAt, isCurrent);
-      setMessages(activeChatId, mergeMessagesById(visibleFetched, visibleExisting));
+      const merged = mergeMessagesById(visibleFetched, visibleExisting);
+      setMessages(activeChatId, merged);
+      void offlineHistory.capture()?.writeMessages({ chatId: activeChatId, topicId: activeTopicId, generalTopicIds: activeGeneralTopicIds },
+        merged.filter(message => !isLocalOnlyMessage(message)), { hasMore: nextHasMoreOlder }, () => isCurrent() && privacyReadIsCurrent());
       hasMoreOlderRef.current = nextHasMoreOlder;
       setHasMoreOlder(nextHasMoreOlder);
       return { loaded: visibleFetched.length };
@@ -1964,6 +2011,10 @@ export function useMessages(
       return { ok: false, error: mapPgError(error) };
     }
     const nextClearedAt = new Date().toISOString();
+    offlineReadRef.current = null;
+    setOfflineSnapshot(null);
+    await offlineHistory.capture()?.invalidateChat(chatId);
+    if (!sameAccount()) return { ok: false, error: "Аккаунт изменился. Повторите действие." };
     clearedAtCache.evictChat(chatId);
     if (chatIdRef.current === chatId) historyRequestGenerationRef.current += 1;
     setMessages(chatId, []);
@@ -1991,14 +2042,43 @@ export function useMessages(
   // had changed.
   const boundaryVerified = Boolean(chatId && userId && verifiedAccountEpochRef.current === accountEpoch &&
     verifyingChatId !== chatId && verifiedChatId === chatId);
+  const showingOfflineHistory = !boundaryVerified && offlineSnapshot?.key === offlineKey && offlineSnapshot.epoch === accountEpoch;
+  useEffect(() => {
+    if (!boundaryVerified || !chatId || !userId) return;
+    const owner = offlineHistory.capture();
+    if (!owner) return;
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
+    const privacyCurrent = hiddenMessagesLive.captureRead();
+    const received = chatMessages.filter(message => !isLocalOnlyMessage(message) &&
+      messageBelongsToTopic(message, topicId, generalTopicIds));
+    if (!hiddenMessagesLive.canSkip(chatId, getMessageAndReplyIds(received))) return;
+    const timer = setTimeout(() => {
+      void owner?.writeMessages({ chatId, topicId, generalTopicIds }, received, { hasMore: hasMoreOlder },
+        () => sameAccount() && privacyCurrent());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [boundaryVerified, chatId, userId, accountEpoch, chatMessages, topicId, generalTopicIds, hasMoreOlder]);
+
+  useEffect(() => {
+    const retire = (event: Event) => {
+      const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
+      if (detail?.reason !== "media-retired" || detail.chatId !== chatId ||
+        detail.ownerUserId !== userId || detail.accountEpoch !== accountEpoch) return;
+      offlineReadRef.current = null;
+      setOfflineSnapshot(null);
+    };
+    window.addEventListener(KUB_CHATS_REFRESH_EVENT, retire);
+    return () => window.removeEventListener(KUB_CHATS_REFRESH_EVENT, retire);
+  }, [chatId, userId, accountEpoch]);
   const visibleMessages = useMemo(() => {
+    if (showingOfflineHistory && offlineSnapshot) return offlineSnapshot.messages;
     if (!boundaryVerified) return EMPTY_MESSAGES;
     const scoped = chatMessages.filter((message) =>
       !hiddenMessageIds.has(message.id) && messageBelongsToTopic(message, topicId, generalTopicIds)
     );
     if (scoped.length === chatMessages.length && !hiddenMessageIds.size) return chatMessages;
     return sanitizeHiddenReplies(scoped, hiddenMessageIds);
-  }, [boundaryVerified, chatMessages, generalTopicIds, hiddenMessageIds, topicId]);
+  }, [boundaryVerified, chatMessages, generalTopicIds, hiddenMessageIds, topicId, showingOfflineHistory, offlineSnapshot]);
 
   const currentPinnedKey = getPinnedKey(chatId, topicId);
   /** Whether what is held was read for the conversation now on screen. */
@@ -2029,7 +2109,10 @@ export function useMessages(
     pinnedReady: pinnedAnswersThisChat && !pinnedRead.loading,
     pinnedError: visiblePinnedError,
     pinnedView,
-    loading, historyPending: Boolean(chatId && !boundaryVerified && !historyError), historyError,
+    loading: loading && !showingOfflineHistory,
+    historyPending: Boolean(chatId && !boundaryVerified && !historyError && !showingOfflineHistory),
+    historyError: showingOfflineHistory ? null : historyError,
+    showingOfflineHistory,
     loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     actionRefusal, clearActionRefusal,

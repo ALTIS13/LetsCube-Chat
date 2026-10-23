@@ -4,6 +4,14 @@ Continuation of Task2 of the [approved completion plan](2026-10-18-production-co
 not a replacement of its accepted release/device evidence. Owner: coordinator.
 Baseline: `5773aab6`, canonical `codex/ui-motion-updates-20261019`.
 
+**Oct23 continuation:** this remains the conditional-network optimization plan.
+It cannot alone satisfy the owner's cold-offline requirement. A separate bounded
+last-known snapshot now mounts profile/list/history without waiting for fresh
+admission; ordinary RLS reads replace it on reconnect. See
+[the current integration](../../operations/2026-10-23-offline-history.md).
+Do not mistake the unmounted SQL gates below for the mounted local-display path,
+or waive those SQL gates because local browser tests pass.
+
 ## Contract
 
 - Received history and the durable outgoing outbox remain separate.
