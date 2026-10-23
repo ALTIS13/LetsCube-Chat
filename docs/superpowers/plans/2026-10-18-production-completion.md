@@ -234,9 +234,11 @@ notification decision/read RPCs; current and pinned old client sources.
 recovery/sanitizer read repair are accepted and released in web/Android25.
 Remaining native/intake boundaries are not closed by these cases.
 The separate last-known profile/list/received-history snapshot is mounted and
-released on shared web at82db2d49, with built-PWA cold/expired-token offline and
-SDK reconnect proof. Native36 is built/installed; physical cache acceptance and
-Stable publication remain. [Current integration](../../operations/2026-10-23-offline-history.md).
+RELEASED at80d0584d on shared web and Stable0.1.36/build37, after real A06336
+refusal exposed short-bot/reply-array and clear-retirement contracts. Actual37
+persists/restores100 rows in a cold offline process and reconciles on reconnect;
+built-PWA cold/expired-token and SDK reconnect pass. Candidate36 was never Stable.
+[Current integration](../../operations/2026-10-23-offline-history.md).
 The conditional SQL/codec/controller optimization remains NOT enabled; its full
 schema/HTTP/fresh metadata gates remain in the
 [separate continuation](2026-10-21-received-history-cache.md). Media binary cache

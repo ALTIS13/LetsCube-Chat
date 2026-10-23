@@ -1,9 +1,8 @@
 # Offline received history integration
 
-Owner: Codex coordinator. Stage: correction after actual A063 refusal of native36.
-Shared source82db2d49 was deployed but its snapshot projection is incomplete for
-real bot/reply joins; fix-forward is required. Candidate36 was NOT published to
-Stable. Prepare0.1.36/build37; current Stable remains0.1.34/build35.
+Owner: Codex coordinator. Stage: RELEASED after actual A063 refusal of native36
+and the corrected native37 acceptance. Product `80d0584d`; Android Stable0.1.36/
+build37, mandatory=false, rollback35 retained. Candidate36 was never published.
 Initial baseline: `7ef703b9`; correction base: `82db2d49`.
 Source: owner's2026-10-23 request requires actual offline viewing, not just a
 conditional-network cache. Notification wiring is an independent worker scope.
@@ -39,7 +38,7 @@ conditional-network cache. Notification wiring is an independent worker scope.
 - [x] Clear/logout/account switch and privacy events retire persisted data.
 - [x] Notification setting/provider/UI source audit and regression tests; prior
   actual device acceptance reused. Fresh Oct23 Realme card/tap is NOT RUN.
-- [ ] Review, shared/native builds, runtime checks, then immutable release and
+- [x] Review, shared/native builds, runtime checks, then immutable release and
   exact running-image/public-artifact verification. No source-only release claim.
 
 Reference: browser storage can be evicted and writes can fail with quota errors;
@@ -86,15 +85,17 @@ that network operation or pretend it is proof of current authorization
 
 ## Remaining boundaries
 
-- Build corrected0.1.36/build37 and prove actual native cold offline/reconnect.
-- Publish only after those gates, retain rollback35 and mandatory=false; verify
-  full public APK bytes and exact shared web container/build parity.
+- Private binary-media offline cache is the next separate implementation slice.
 - Offline display is last-known, bounded8MiB/ten scopes/seven days, up to1000
   rows per chat/topic snapshot. It is not unlimited history or fresh authorization.
   Media slots/reply text survive, but binary attachments, signed media URLs,
   decorations, contact details and elevated roles are not persisted here.
 - Conditional SQL bandwidth optimization still needs its own full-schema/HTTP
   and production migration gates. It is not required for the local display path.
+- Inspect ordinary online reply previews outside the loaded window: actual
+  self-join arrays are now safe in local snapshots, while the ordinary renderer
+  commonly resolves parents from its loaded message map. No outside-window
+  renderer defect or server relationship direction is asserted without that case.
 
 ## Release evidence
 
@@ -139,6 +140,30 @@ The source/browser synthetic shape did not establish real projection acceptance.
 - Retained private probes are purpose-specific. Early unpopulated-chat selection
   and diagnostic-format problems are not product bugs or accepted runtime tests.
   All temporary test packages were removed; no phone/PC VPN configuration changed.
+
+## Corrected Release37
+
+Final affected58/58, real-shape consumer3/3, typecheck/diff and independent review
+pass. Built fixture `d7a5a761d31b5ba8` passes cold browser/expired-token offline and
+SDK reconnect. Native source80d0584d reports build `0d50b204ac7d2bf0`, Vite11.34s
+and Gradle10s. Original signer/APKv2, four exact Firebase values, false QA flags,
+web/config/DEX parity pass. APK7,823,533B SHA256
+`0fa72bcfd41dd39618419dde402267923e24f93a6a881a765deb11a37ac26c3d`.
+
+Realme36->37 guest/fatal0 and data identities pass21:13:33Z. A06336->37 manual
+upgrade/full installed APK/UID/data/firstInstall pass21:14:41Z. Actual37 warm
+normal chat100 rendered +100 durable rows pass21:15:12Z. Fresh instrumentation
+process with WiFi/data disabled restores100, shows last-known status while native
+connectivity is false, then ordinary connection recovery removes that status,
+revalidates and persists a newer snapshot. The list remains usable. Exact source/
+signer/data guards, diagnostic removal, normal return and original network
+settings pass21:16:34Z. No personal captures/values or VPN profile changes.
+
+Stable37 publication/full public APK hash and rollback35 pass21:17:18Z,
+mandatory=false. Shared sole-healthy80d0584d/build `feb80ecef14bab62`, public/container
+HTML/JS/SW parity and mounted-history markers pass21:15:51Z. Windows remote
+renderer and iPhone PWA receive the shared change; new Windows/native Apple
+binaries or new physical iPhone/FCM delivery are not claimed. SQL unchanged.
 
 ## REA method
 

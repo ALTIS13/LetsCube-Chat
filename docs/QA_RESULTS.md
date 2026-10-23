@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-10-24 - Corrected Offline Cache Stable37
+
+Product80d0584d: affected58/58, actual real-shape Chromium1440/390+WebKit3903/3,
+typecheck/diff and independent review pass. Built-PWA cold browser process,
+expired-session local display and SDK refresh/reconnect pass on final fixture.
+Original signer/Firebase/QA flags/assets and Native37 build markers pass.
+Realme36->37 guest/fatal0 and A06336->37 full APK/data identities pass. Actual
+A06337 renders/persists100 messages, cold-opens100 without connectivity, then
+reconciles and writes a fresh snapshot after original WiFi/data restoration.
+Temporary helper removed; normal app returned. No captures/personal values.
+Stable0.1.36/build37 full public APK SHA and rollback35 pass21:17:18Z, mandatoryfalse.
+Exact healthy shared-web80d0584d/buildfeb80ecef14bab62 and public/container parity
+pass21:15:51Z. Binary attachments, unlimited cache, a new iPhone/FCM delivery or
+Windows binary are not claimed. No SQL change. Candidate36 stayed unpublished.
+[Detailed release and remaining work](operations/2026-10-23-offline-history.md#corrected-release37).
+
 ## 2026-10-24 - Physical Cache Refusal And Corrected Candidate
 
 Actual A063 candidate36 source/assets and100 rendered rows pass, but the cache

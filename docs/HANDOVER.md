@@ -1,12 +1,15 @@
 # LETSCUBE — handover
 
-**Current State, 2026-10-23:** Owner: Codex coordinator, canonical branch
-`codex/ui-motion-updates-20261019`, base `82db2d49`. Stage: correction after actual
-A063 acceptance REFUSED candidate36: only profile persisted, no list/history.
-Shared web82db2d49/build8ec79ab9995b9cf3 is deployed but has the same short-bot/
-array-reply projection defects; fix-forward is required. Candidate36 is signed/
-installed only, NEVER promoted to Stable (still0.1.34/build35). New candidate is
-0.1.36/build37; preserve all prior artifacts and rollback35.
+**Current State, 2026-10-24:** Owner: Codex coordinator, canonical branch
+`codex/ui-motion-updates-20261019`, product `80d0584d`. Stage: offline received
+history RELEASED on shared web/build `feb80ecef14bab62` and Android Stable0.1.36/
+build37, mandatory=false, rollback35 retained. Candidate36 FAILED actual cache
+acceptance and was never published. Short bot/reply joins and historical-clear
+self-retirement are repaired/reviewed. Actual A06337 normal read saves100 rows;
+cold process without network restores100, then ordinary reconnect revalidates and
+persists fresh history without reload. Original signer/Firebase/full public APK,
+Realme36->37 guest and A06336->37 exact data-retaining upgrade pass. Temporary
+diagnostic removed, original WiFi/data restored, normal MainActivity returned.
 Local account/session/backend-scoped profile, list and received
 history snapshots are now mounted without requiring network admission first.
 Actual built PWA cold browser-process restore, expired-token offline display and
@@ -14,11 +17,11 @@ SDK refresh/reconciliation pass. Chromium/WebKit consumers pass reconnect,
 HTTP403 refusal and real clear-button retirement; storage/service cohort95/95.
 Prior affected hook/auth cohort247/247 and guest-only visual matrix are retained.
 No production SQL or PC network change. A063 returned with installation authority;
-Realme available but fresh preview/card/tap canary NOT RUN (locked/QA identity not
-confirmed); retain unchanged notification source tests and prior actual acceptance.
-Next: corrected build37, A063 cold native/offline/reconnect, immutable
-publication and exact image/artifact verification. Binary media offline caching
-and the conditional SQL optimization remain OPEN, not implied by text restoration.
+Fresh Oct23 Realme preview/card/tap canary NOT RUN (QA identity not confirmed);
+retain unchanged notification source tests and prior actual acceptance.
+Next: private binary-media offline cache, then conditional bandwidth optimization.
+Both remain OPEN, not implied by text restoration. Do not replay accepted install/
+cache cohorts without changed inputs.
 [Current integration, limits and evidence](operations/2026-10-23-offline-history.md).
 
 **Prior Release, 2026-10-21:** Owner: Codex coordinator, canonical branch

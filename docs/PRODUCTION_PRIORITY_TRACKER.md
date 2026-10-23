@@ -1,14 +1,15 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-23.
+Status: active production-hardening tracker, updated 2026-10-24.
 
-**Current correction, Oct24:** actual A06336 cache acceptance is REFUSED despite
-successful UI/source/install checks: only profile persisted. D391 real bot/reply
-join shapes and D392 own clear-retirement are reproduced/repaired; affected58,
-combined Chromium/WebKit3, typecheck/review and built-PWA cold/expired/reconnect
-pass. Prepare corrected0.1.36/build37;36 remains unpublished and Stable stays35.
-Shared web82db2d49 also needs this fix-forward. No whole-cache acceptance inferred
-from the earlier synthetic/browser or native guest tests.
+**Current release, Oct24:** corrected80d0584d is RELEASED on shared web/build
+feb80ecef14bab62 and Android Stable0.1.36/build37, mandatory=false/rollback35.
+D390--D392 repaired: affected58, real-shape Chromium/WebKit3, typecheck/review and
+built-PWA cold/expired/reconnect pass. Actual A06337 saves100 rows, restores100
+after a cold process without network and reconciles after restoring connection.
+Original signer/Firebase/assets, Realme/A06336->37 data retention and complete
+public APK hash pass21:17Z. Candidate36 was refused and never published. Binary
+media offline cache and conditional SQL optimization remain OPEN; no SQL change.
 [Current report](operations/2026-10-23-offline-history.md).
 
 **Earlier Oct23 rollout:** last-known received-history integration is deployed on shared
