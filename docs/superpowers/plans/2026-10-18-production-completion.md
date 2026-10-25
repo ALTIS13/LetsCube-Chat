@@ -318,6 +318,13 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct25 gallery delta:** local Android10+ original image/video gallery export is
+RELEASED at85025f59/shared-web7d22d125aa0f30b1 and Stable0.1.38/build39. Actual
+Realme WebView/native/MediaStore offline PNG/WebM bytes/hash/MIME/size/decode,
+abort/wrong-hash refusals and exact cleanup pass. Full public APK/rollback38 and
+healthy web image/public-container parity pass. No authenticated large-message
+or Apple-audio closure follows. [Release](../../operations/2026-10-25-offline-gallery.md).
+
 **Oct25 delta:** bounded managed binary cache, consumers and settings are RELEASED
 at product20b57a45/shared-webfd39a7c4346dffb7 and Android Stable0.1.37/build38.
 Original signer/Firebase/parity, Realme data retention, synthetic native cold
@@ -346,7 +353,11 @@ metadata and positional intent; preserve original bytes and explicit downloads.
 - [x] Release bounded private media IDB and mounted photo/file/voice/viewer/settings
   integration, with durable privacy retirement, SHA-256 integrity, separate
   preview/original representations and actual browser/native engine cold proof.
-  Android offline gallery export and the wider authenticated journey stay open.
+  Android offline gallery export is accepted separately below; the wider
+  authenticated journey stays open.
+- [x] Release bounded Android10+ cached-original gallery export through actual
+  native MediaStore byte/hash proof without network, with retained-data upgrade,
+  original signer/Firebase, complete public APK and shared-web parity (Stable39).
 - [x] Implement/release the pre-send photo/video editor as a separate slice:
   maintained MIT cropper and installed Mediabunny, explicit unsupported/error
   states, no raw privacy-edit fallback. Source/UI/bytes/native upgrade/public

@@ -1,15 +1,20 @@
 # LETSCUBE — handover
 
-**Active Work, 2026-10-25:** Coordinator implementing the approved offline-gallery
-continuation on `codex/ui-motion-updates-20261019`, base `b1196535`. Candidate
-0.1.38/build39 is NOT published. Local sender/native staging, cold media menus
-and visible viewer feedback are implemented; one integrated review's four gaps
-are repaired (JVM25, final JS74, mounted4+changed2, inspected UI8). Next: signed
-Native39 build/parity, Realme offline gallery byte/cleanup proof, then release.
-Stable38 below remains current; no SQL or PC-network change.
-[Current source/evidence and limits](operations/2026-10-25-offline-gallery.md).
-
 **Current State, 2026-10-25:** Owner Codex coordinator, canonical
+`codex/ui-motion-updates-20261019`. Offline Android gallery export is RELEASED at
+product `85025f59`, shared-web build `7d22d125aa0f30b1` and Android Stable0.1.38/
+build39, mandatory=false, rollback38 retained. Original signer/Firebase/assets,
+Realme38->39 UID/data/firstInstall/guest/fatal0 and full public APK hash pass.
+Actual installed WebView/native/MediaStore canary without WiFi/data saves exact
+PNG/WebM bytes/hash/MIME/size, decodes both, refuses abort/wrong hash, cleans own
+rows/staging, removes helper, restores network and normal app at13:10:40Z.
+Healthy exact web image and public/container parity plus old/new export markers
+pass13:15:21Z. No authenticated large-media journey or Apple audio is inferred.
+Next: actual mounted authenticated large-original receive/open/cold-reopen/save/
+hash workflow; private preparation is separate from execution. No SQL or PC
+network change. [Proof and limits](operations/2026-10-25-offline-gallery.md).
+
+**Prior Release, 2026-10-25:** Owner Codex coordinator, canonical
 `codex/ui-motion-updates-20261019`. Managed binary-media cache and searchable
 Data/Memory settings are RELEASED at product `20b57a45`: healthy shared-web
 build `fd39a7c4346dffb7` with public/container parity and Android Stable0.1.37/

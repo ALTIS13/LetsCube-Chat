@@ -1,5 +1,11 @@
 # Managed Offline Media Cache
 
+**Subsequent release:** bounded offline Android gallery export is now accepted
+on Stable0.1.38/build39/shared-web85025f59. Its actual installed WebView/native/
+MediaStore PNG/WebM proof is separate from this cache-engine baseline; the
+authenticated large-message journey and Apple audio remain open.
+[Gallery release and limits](2026-10-25-offline-gallery.md).
+
 Owner: Codex coordinator. Stage: RELEASED at product `20b57a45`, shared web and
 Android Stable0.1.37/build38. Source baseline `12c4cc45`; accepted text-cache/
 Stable37 evidence remains valid and was not replayed. Next: uncovered physical

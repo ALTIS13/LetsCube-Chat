@@ -1,9 +1,9 @@
 # Offline Android Gallery
 
-Owner: Codex coordinator. Stage: reviewed source repairs complete; candidate39
-not built/installed/published yet. Base `b1196535`; public Stable38 stays intact.
-Next: original-signer/Firebase/parity build, Realme retained-data upgrade and
-actual offline WebView/native/MediaStore byte proof, then gated release.
+Owner: Codex coordinator. Stage: RELEASED at product `85025f59`, Android
+Stable0.1.38/build39 and shared-web build `7d22d125aa0f30b1`. Base `b1196535`;
+rollback38 retained, mandatory=false. Next: actual authenticated mounted large-
+original receive/open/cold-reopen/save/hash journey and real Apple audio.
 [Bounded plan and decisions](../superpowers/plans/2026-10-25-offline-gallery.md).
 
 ## Cause And Implementation
@@ -29,7 +29,7 @@ Viewer save now shows an actual spinner and visible local pending/success/error
 status, without relying on a global toast behind its portal or shifting the photo.
 Success expires after3s, error after5s. No unrelated global layer is raised.
 
-## Evidence Before Native Acceptance
+## Source And UI Evidence
 
 - Final affected JS74/74, zero skips; TypeScript passes. Four limit/chunk/retirement/
   abort omission mutants fail as intended.
@@ -68,10 +68,47 @@ genuine failing cases and green affected checks:
 No new SQL, dependency, identity, signing policy or PC network change. This is
 bounded source/privacy review, not a security certification.
 
+## Release And Actual Native Acceptance
+
+- Source `85025f59fc92568ed01473575c6114fee31664ad`, clean original-signer build:
+  Vite37.75s/Gradle36s, embedded SW `0645a87d39019229`. Four Firebase values,
+  QA flags false, APKv2, APK/AAB assets and native DEX parity pass. No remote
+  `server.url`, client service-role credential or package identity change.
+- APK7,833,977B SHA-256
+  `611bea310c02c482b1f78add535790fabfc8021eb01fa7d8e262ae0d761215b7`;
+  AAB7,468,556B SHA-256
+  `39e18149513e5487161fd1d20e86b71274b5dcd2580c8a2222bee055613bb905`.
+- Realme RMX3830 retained-data38->39 at13:06:28Z: exact installed APK, UID,
+  firstInstall/data, guest foreground and fatal0 pass; no target clear/uninstall.
+  Screen wake dismissed the swipe keyguard; the guarded PIN runner refused
+  before entry. No credential or personal screen was captured.
+- Actual gallery canary at13:10:40Z runs the real TS sender/managed registry in
+  the installed WebView, calls the actual Capacitor plugin and reads actual
+  owned MediaStore rows with WiFi/data OFF. A structured524,289B PNG travels in
+  three chunks; a tiny valid8x8 WebM travels in one. Both readbacks have exact
+  original bytes/SHA/MIME/size and IS_PENDING=0; image/video decoders accept them.
+  Abort and deliberately wrong SHA publish no row. These are synthetic assets,
+  not an authenticated received-message journey or large-camera codec matrix.
+- Exact owned UUID rows and part files are absent after cleanup; temporary
+  helper removed, original WiFi/data restored and normal MainActivity returned.
+  Private helper first refused its min29 signature-verification default; a
+  separate attempt explicitly verifies APKv2 as well as v3 without weakening
+  the original-signer gate. Both failed attempts remain, no device effects.
+- Stable39 publication/full public APK bytes pass13:12:57Z, mandatory=false;
+  previous38 catalog/artifact retained. Six catalog highlights pass the actual
+  parser. [Public APK](https://api.letscube.ru/releases/files/android/0.1.38/letscube-0.1.38.apk).
+  AAB is retained locally, not submitted to a store.
+- Coolify `gwkkl3aev33juahs4a1q7nkb` finished13:14:45Z. Exact sole-healthy
+  image85025f59/public HTML/entry/SW bytes match at13:15:19Z. Old entry lacked
+  `local_media_export_retired` and `localCapabilities`; the new public entry
+  contains both and matches the running container at13:15:21Z. Native and web
+  SW IDs differ because their build environments differ; each is bound to its
+  own exact asset receipt. No Windows/Apple native binary was rebuilt.
+
 ## Remaining Boundaries
 
 Native compilation, signer/Firebase/assets, installed WebView-to-plugin and
-actual saved gallery bytes remain required before Stable39. No authenticated
+actual saved gallery bytes are accepted above. No authenticated
 large-media journey, real Apple audio, broad OEM/codec matrix or killed-process
 pending-gallery recovery is inferred. Files above32MiB keep ordinary online
 export; no unlimited offline cache claim. Android before10 keeps its online

@@ -87,7 +87,7 @@ abortLocal({ id }): Promise<void>
 - [x] Add focused JVM cases; show RED before adding staging/local source.
 - [x] Implement fixed bounds/offset/hash/expiry/abort/recovery and preserve HTTPS.
 - [x] Adapt plugin to stream completed input through existing MediaExportGallery.
-- [ ] Run JVM/compile checks; mutation controls pin literal limits and wrong hash.
+- [x] Run JVM/compile checks; mutation controls pin literal limits and wrong hash.
 
 ## Task2: Local Byte Lease And Visible Save Wiring
 
@@ -109,28 +109,32 @@ transfer as an unrelated download.
 - [x] Add failing tests for chunk order/bytes, offset mismatch, retirement at each
   await, unsupported bridge, failure cleanup and exact filename/MIME.
 - [x] Mount viewer and ordinary message save; keep original/preview distinction.
-- [ ] Run affected tests/typecheck and inspect1440/390 both themes; no redesign.
-- [ ] One fresh integrated code review, fix important findings with RED->GREEN.
+- [x] Run affected tests/typecheck and inspect1440/390 both themes; no redesign.
+- [x] One fresh integrated code review, fix important findings with RED->GREEN.
 
 ## Task3: Native Acceptance And Release
 
-- [ ] Bump only next Android version/build (0.1.38/39); guarded original-signer/
+- [x] Bump only next Android version/build (0.1.38/39); guarded original-signer/
   Firebase/embedded-source build. Preserve Stable38 artifact and rollback.
-- [ ] Realme in-place guest/data retention; bounded synthetic real-WebView bridge
+- [x] Realme in-place guest/data retention; bounded synthetic real-WebView bridge
   and MediaStore export with WiFi/data off. Read exact own saved URI bytes/hash,
   remove only that fixture; restore network/helper/normal app in cleanup.
-- [ ] Publish readiness-gated Android/shared web, verify public full APK and
+- [x] Publish readiness-gated Android/shared web, verify public full APK and
   container/content parity; record exact scope and remaining Apple/large QA.
 
 ## Resume
 
-Owner: Codex coordinator. Stage: Task1/2 source repairs complete, release pending.
+Owner: Codex coordinator. Stage: bounded Tasks1--3 RELEASED at85025f59, Stable39
+and shared-web7d22d125aa0f30b1. Realme retained-data upgrade and actual offline
+PNG/WebM MediaStore byte/hash/decode/cleanup pass13:10:40Z. Public APK/hash,
+rollback38 and exact healthy web image/public-container parity pass13:15Z.
 Base `b1196535`. Final JVM25/25 and JS74/74; four JS mutants and prior four JVM
 mutants are detected. Actual cold viewer+menu1440/390 themes4/4, final changed
 dark cases2/2, omitted viewer binding fails. Actual UI8/8 after a genuine RED
 now shows spinner and visible local notices without geometry shift. Four fresh
 review findings are repaired with RED->GREEN cases. No source approval is inferred
-for unexecuted native boundaries. Next: Native39 signer/build/parity and physical
-offline gallery proof, then publication. Stable38 stays current until ready.
+for wider unexecuted native boundaries. Next: authenticated mounted large-original
+receive/open/cold-reopen/save/hash journey and real Apple audio; see the
+[actual release](../../operations/2026-10-25-offline-gallery.md#release-and-actual-native-acceptance).
 Ruling: do not repeat accepted Stable38 text/cache tests or rent a phone merely
 to duplicate them. Native export gets its own changed-boundary canary.

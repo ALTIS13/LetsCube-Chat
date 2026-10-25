@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-10-25 - Offline Android Gallery Stable39
+
+Product85025f59: final JS74/JVM25, actual mounted cold viewer/menu4+changed2,
+UI8 inspected1440/390 both themes and focused omission controls pass. Four fresh
+review findings repaired. Original signer/Firebase/QA/assets and Native39 build
+pass; Realme38->39 retains UID/data/firstInstall, guest and fatal0.
+Actual installed WebView/Capacitor/MediaStore canary with WiFi/data OFF saves
+524,289B PNG in three chunks and tiny WebM in one. Both exact bytes/hash/MIME/
+size/pending0 and image/video decoding pass; abort/wrong SHA create no row.
+Own rows/staging cleaned, helper removed, original network and normal app return
+pass13:10:40Z. Stable0.1.38/build39 full public APK hash/rollback38 pass13:12:57Z,
+mandatory=false. Healthy shared-web7d22d125aa0f30b1 image/public-container parity
+and absent-old/present-new export markers pass13:15:21Z. No SQL/PC-network change,
+authenticated native large-media journey, Apple audio or new A063 proof claimed.
+[Release proof and remaining boundaries](operations/2026-10-25-offline-gallery.md).
+
 ## 2026-10-25 - Managed Media Cache Stable38
 
 Product20b57a45/shared-webfd39a7c4346dffb7: real IDB27+7 omission controls,

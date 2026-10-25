@@ -2,7 +2,16 @@
 
 Status: active production-hardening tracker, updated 2026-10-25.
 
-**Current release, Oct25:** bounded account/session/backend-owned media IDB,
+**Current release, Oct25:** offline Android10+ original image/video gallery save
+is RELEASED at85025f59/shared-web7d22d125aa0f30b1 and Stable0.1.38/build39,
+mandatory=false/rollback38 retained. Actual Realme retained-data upgrade and
+offline installed WebView/native/MediaStore PNG/WebM bytes/hash/MIME/size/decode,
+negative cases and exact cleanup pass13:10:40Z. Original signer/Firebase/assets,
+full public APK hash and healthy exact web image/public-container parity pass.
+Authenticated mounted large-original journey, Apple device audio and conditional
+SQL remain OPEN. [Exact release and limits](operations/2026-10-25-offline-gallery.md).
+
+**Prior release, Oct25:** bounded account/session/backend-owned media IDB,
 mounted photo/original/file/voice consumers, lazy playback identity and searchable
 Data/Memory controls are RELEASED at product20b57a45/shared-webfd39a7c4346dffb7
 and Android Stable0.1.37/build38, mandatory=false/rollback37 retained.
