@@ -1,6 +1,18 @@
 # LETSCUBE — handover
 
-**Current State, 2026-10-25:** Owner Codex coordinator, canonical
+**Current QA checkpoint, 2026-10-25 15:44Z:** Owner Codex coordinator, Task3,
+runtime85025f59/Stable39. Actual ordinary-UI receiver login, mounted large-photo
+preview, explicit original open and matching original IDB/viewer SHA pass on
+Realme. Cold new-process run reaches the photo-open stage but is UNAVAILABLE;
+it does not establish cold viewer/gallery success or a confirmed cache defect.
+All owned fixture/session cleanup passes; normal non-instrumented UI logout
+leaves a stable guest form, helper absent and original network restored.
+Next: read-only exact cold row/cache/control diagnosis BEFORE any further seed;
+check the guest form before creating API fixtures. Do not replay warm/provider/
+release baselines. No new product, SQL or native release in this QA continuation.
+[Evidence, failed attempts and exact next action](operations/2026-10-25-authenticated-media-qa.md).
+
+**Current Release, 2026-10-25:** Owner Codex coordinator, canonical
 `codex/ui-motion-updates-20261019`. Offline Android gallery export is RELEASED at
 product `85025f59`, shared-web build `7d22d125aa0f30b1` and Android Stable0.1.38/
 build39, mandatory=false, rollback38 retained. Original signer/Firebase/assets,

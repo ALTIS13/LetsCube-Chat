@@ -8,8 +8,12 @@ mandatory=false/rollback38 retained. Actual Realme retained-data upgrade and
 offline installed WebView/native/MediaStore PNG/WebM bytes/hash/MIME/size/decode,
 negative cases and exact cleanup pass13:10:40Z. Original signer/Firebase/assets,
 full public APK hash and healthy exact web image/public-container parity pass.
-Authenticated mounted large-original journey, Apple device audio and conditional
-SQL remain OPEN. [Exact release and limits](operations/2026-10-25-offline-gallery.md).
+Authenticated mounted preview/explicit-original/IDB/viewer-hash now pass on
+Realme39. Cold new-process photo-open stage is UNAVAILABLE, not full cache/gallery
+acceptance or a confirmed product diagnosis. All owned cleanup and final ordinary
+guest/network/helper state pass15:44Z. Remaining cold/save, Apple device audio and
+conditional SQL stay OPEN. [QA continuation](operations/2026-10-25-authenticated-media-qa.md);
+[exact release and limits](operations/2026-10-25-offline-gallery.md).
 
 **Prior release, Oct25:** bounded account/session/backend-owned media IDB,
 mounted photo/original/file/voice consumers, lazy playback identity and searchable

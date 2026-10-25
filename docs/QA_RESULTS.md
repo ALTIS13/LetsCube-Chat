@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-10-25 - Authenticated Media Native39 Continuation
+
+Actual Realme/Stable39 ordinary receiver LoginForm creates one own fresh SID;
+mounted received preview hashes/decodes, original is absent before explicit open,
+then actual original IDB and viewer Blob both match3,608,655B PNG SHA/dimensions.
+Exact request timing is calibrated after correcting an over-restrictive private
+initiator-label oracle. Warm PID26562 passes. Cold PID31720 reaches `open` and
+returns UNAVAILABLE before its original/viewer/gallery assertions; no complete
+cold-media success or confirmed product cause is inferred. Five bounded fixture
+cohorts have verified exact API/resource/session cleanup; two never entered UI
+Auth. Temporary helper is absent, original WiFi/data bits match, and ordinary
+non-instrumented logout leaves a stable empty guest form at15:44:41Z. First204
+logout/local-state discrepancy remains unexplained; later ordinary403 exit works.
+No product patch, SQL migration, new release, personal capture or provider proof.
+[Results, diagnostic limits and next action](operations/2026-10-25-authenticated-media-qa.md).
+
 ## 2026-10-25 - Offline Android Gallery Stable39
 
 Product85025f59: final JS74/JVM25, actual mounted cold viewer/menu4+changed2,

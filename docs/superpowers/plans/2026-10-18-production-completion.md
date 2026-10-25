@@ -345,9 +345,17 @@ metadata and positional intent; preserve original bytes and explicit downloads.
 - [x] Map accepted albums, HD/original, auto-small/manual-large download/cache and
   recorder feedback evidence without replaying accepted cases.
   [Remaining workflow map](../../operations/2026-10-18-media-editor.md#remaining-media-workflows).
+- [x] Actual Stable39 ordinary receiver login and mounted preview/explicit large
+  original open: original absent before tap, then durable IDB and actual viewer
+  Blob SHA/bytes/dimensions match. Warm acceptance is bounded, not cold/save or
+  FCM acceptance. [Physical QA](../../operations/2026-10-25-authenticated-media-qa.md).
 - [ ] Execute the uncovered current physical large-original receive/open/native
   save/reopen/hash workflow with owned Auth/media and exact cleanup; patch only
   an observed failure, not an assumed missing auto-download implementation.
+  Oct25 cold new-PID case stopped at `open`; diagnose exact cached row/control
+  before another cohort. Warm baseline and release checks must not be replayed
+  merely to widen instrumentation. Final normal guest/network/helper and all
+  owned fixture cleanup pass; full cold/gallery journey remains OPEN.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
 - [x] Release bounded private media IDB and mounted photo/file/voice/viewer/settings
