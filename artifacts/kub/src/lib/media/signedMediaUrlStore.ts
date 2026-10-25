@@ -88,6 +88,7 @@ export interface SignedMediaUrlStoreOptions {
 }
 
 interface CacheEntry {
+  refused: boolean;
   url: string | null;
   lifetime: SignedUrlLifetime | null;
   /** When a failed entry may be asked about again. */
@@ -248,6 +249,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
         const url = result && !result.error ? result.signedUrl : null;
         if (url && isSignedUrlUsable(lifetime, receivedAtMs)) {
           known.set(key, {
+            refused: false,
             url,
             lifetime,
             retryAtMs: 0,
@@ -258,6 +260,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
           // Keep any buffered signature, but back off before asking again.
           const previous = known.get(key);
           known.set(key, {
+            refused: false,
             url: previous?.url ?? null,
             lifetime: previous?.lifetime ?? null,
             retryAtMs: receivedAtMs + failureCooldownMs,
@@ -267,6 +270,7 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
           // Refused, or not there. The wire does not distinguish the two, so
           // neither does this: no URL, and left alone for the cooldown.
           known.set(key, {
+            refused: true,
             url: null,
             lifetime: null,
             retryAtMs: receivedAtMs + failureCooldownMs,
@@ -383,6 +387,13 @@ export function createSignedMediaUrlStore(options: SignedMediaUrlStoreOptions) {
       const key = mediaObjectRefKey(ref);
       if (inFlight.has(key) || pending.has(key)) return false;
       return known.has(key);
+    },
+
+    /** An object-level refusal, not a dropped POST or an expired download offer. */
+    isRefused(ref: MediaObjectRef | null | undefined): boolean {
+      if (!ref) return false;
+      const entry = known.get(mediaObjectRefKey(ref));
+      return entry?.refused === true;
     },
 
     /**

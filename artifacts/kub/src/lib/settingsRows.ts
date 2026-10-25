@@ -311,6 +311,7 @@ export type SettingsRowId =
   | "message-text-size"
   | "audio"
   | "updates"
+  | "media-cache"
   | "changelog"
   | "admin";
 
@@ -393,6 +394,7 @@ export const SETTINGS_ROWS: readonly SettingsRowMeta[] = [
     label: "Звук",
     keywords: ["микрофон", "аудио", "голос", "громкость", "усиление", "чувствительность", "рация"],
   },
+  { id: "media-cache", section: "application", label: "Данные и память", keywords: ["кэш", "кеш", "cache", "офлайн", "медиа", "место", "хранилище"] },
   { id: "updates", section: "application", label: "Обновления", keywords: ["версия", "update", "загрузка", "приложение"] },
   { id: "changelog", section: "application", label: "Что нового", keywords: ["история обновлений", "история версий", "журнал изменений", "changelog", "релизы", "новые функции"] },
   { id: "admin", section: "service", label: "Админ-панель", keywords: ["управление", "модерация", "баны", "мьюты", "пользователи"] },

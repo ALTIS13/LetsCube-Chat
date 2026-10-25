@@ -49,6 +49,10 @@ import {
 export interface MediaViewerItem {
   type: "image" | "video";
   url: string;
+  /** Original network address for native export and the original filename. */
+  sourceUrl?: string;
+  /** Keep the viewer and its close/navigation controls present during cache lookup. */
+  loading?: boolean;
   title?: string;
   /** Sent without compression: `url` is the original, as it was picked. */
   original?: boolean;
@@ -190,7 +194,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
   useEffect(() => {
     setShareFile(null);
     setShareUnavailable(false);
-    if (fileAction.kind !== "share" || media?.type !== "image") return;
+    if (fileAction.kind !== "share" || media?.type !== "image" || media.loading) return;
     if (typeof navigator.share !== "function" || typeof navigator.canShare !== "function") {
       setShareUnavailable(true);
       return;
@@ -200,14 +204,14 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
       if (!response.ok) throw new Error("image unavailable");
       const blob = await response.blob();
       if (!blob.type.startsWith("image/")) throw new Error("not an image");
-      const file = new File([blob], mediaFileName(media.url, "image"), { type: blob.type });
+      const file = new File([blob], mediaFileName(media.sourceUrl ?? media.url, "image"), { type: blob.type });
       if (!navigator.canShare({ files: [file] })) throw new Error("file share unavailable");
       if (!controller.signal.aborted) setShareFile({ url: media.url, file });
     }).catch(() => {
       if (!controller.signal.aborted) setShareUnavailable(true);
     });
     return () => controller.abort();
-  }, [fileAction.kind, media?.type, media?.url]);
+  }, [fileAction.kind, media?.type, media?.url, media?.loading, media?.sourceUrl]);
 
   if (!media) return null;
   if (typeof document === "undefined") return null;
@@ -260,7 +264,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
     if (effectiveFileAction.kind === "save") {
       if (nativeExportAvailable) {
         setExporting(true);
-        void saveNativeMedia(media.url, mediaFileName(media.url, media.type))
+        void saveNativeMedia(media.sourceUrl ?? media.url, mediaFileName(media.sourceUrl ?? media.url, media.type))
           .then((result) => {
             if (!result.saved) return;
             const title = result.location === "Pictures/LETSCUBE"
@@ -276,7 +280,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
           .finally(() => setExporting(false));
         return;
       }
-      void saveMediaAs(media.url, mediaFileName(media.url, media.type));
+      void saveMediaAs(media.url, mediaFileName(media.sourceUrl ?? media.url, media.type));
       return;
     }
     // The Android shell's WebView keeps no download it is given, so the address
@@ -416,7 +420,7 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
             data-testid="media-viewer-file-action"
             data-action-kind={effectiveFileAction.kind}
             onClick={handleFile}
-            disabled={exporting}
+            disabled={exporting || media.loading}
             aria-label={exporting ? "Сохраняем файл" : fileActionName}
             title={exporting ? "Сохраняем файл" : fileActionName}
             className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
@@ -503,7 +507,12 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
               <KubIcon name="chevronRight" size={22} />
             </button>
           )}
-          {loadError ? (
+          {media.loading ? (
+            <div role="status" data-testid="media-viewer-loading" className="flex items-center gap-2 text-sm text-white/80">
+              <KubIcon name="rotate" size={18} className="motion-safe:animate-spin" />
+              Загружаем медиа…
+            </div>
+          ) : loadError ? (
             <div className="max-w-sm rounded-xl border border-white/10 bg-white/5 p-5 text-center text-white">
               <KubIcon name="warning" size={24} className="mx-auto mb-3 text-white/70" />
               <div className="mb-2 text-sm font-semibold">

@@ -44,6 +44,18 @@ function setup(storage = storageFixture(), namespace = 'https://backend.invalid'
   cache.setIdentity(identity); return { cache, owner: cache.capture(), storage };
 }
 
+test('offline media retains scalar size, quality and album semantics but never preview URLs', async () => {
+  const f = setup();
+  const row = { ...message(), type: 'image', media_metadata: { size_bytes: 8_000_000,
+    album_id: 'synthetic-album', album_index: 0, album_count: 2, uncompressed: true,
+    optimized: false, kind: 'video_message', shape: 'round', preview_url: 'https://secret.invalid/?token=x' } };
+  assert.equal(await f.owner.writeMessages(scope, [row], { hasMore: false }), true);
+  assert.deepEqual((await f.owner.readMessages(scope)).messages[0].media_metadata, {
+    size_bytes: 8_000_000, album_id: 'synthetic-album', album_index: 0, album_count: 2,
+    uncompressed: true, optimized: false, kind: 'video_message', shape: 'round',
+  });
+});
+
 test('cold restore retains received text/client identity without network or secret fields', async () => {
   const f = setup();
   assert.equal(await f.owner.writeProfile(profile()), true);

@@ -4,6 +4,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { createClient } from "@/lib/supabase/client";
 import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
 import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
+import { useCachedMediaUrl } from "@/hooks/useCachedMediaUrl";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubStableSkeleton, KubSwitch, type KubIconName } from "@/components/kub";
@@ -1907,7 +1908,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    * reads the message row, so it was not. In `"public"` mode it is
    * `openMediaRow.media_url`, which is what stood here.
    */
-  const openMediaUrl = useMessageMediaUrl(openMediaRow);
+  const offeredMediaUrl = useMessageMediaUrl(openMediaRow);
+  const openMediaUrl = useCachedMediaUrl(openMediaRow, offeredMediaUrl, { download: Boolean(openMediaRow) });
   /**
    * The row as the viewer takes it.
    *
@@ -1917,10 +1919,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
    * reached by an arrow key cannot lose the «Оригинал» badge a photo reached by
    * a tap keeps.
    */
-  const openMediaItem: MediaViewerItem | null = openMediaRow && openMediaUrl
+  const openMediaItem: MediaViewerItem | null = openMediaRow && (openMediaUrl || offeredMediaUrl)
     ? {
       type: openMediaRow.type === "video" ? "video" : "image",
-      url: openMediaUrl,
+      url: (openMediaUrl ?? offeredMediaUrl)!,
+      sourceUrl: offeredMediaUrl ?? undefined,
+      loading: !openMediaUrl,
       title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
       ...(isUncompressedMedia(openMediaRow.media_metadata)
         ? {

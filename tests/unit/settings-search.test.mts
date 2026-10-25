@@ -46,7 +46,7 @@ test("an empty query is the whole screen, in the order the screen draws it", () 
     "name", "username", "bio", "phone", "decoration",
     "push", "push-messages", "push-tasks", "push-invites",
     "status", "phone-search", "presence", "forward-origin", "blocked", "devices",
-    "theme", "message-text-size", "audio", "updates", "changelog",
+    "theme", "message-text-size", "audio", "media-cache", "updates", "changelog",
   ]);
   // Whitespace is not a query. A field holding only spaces must not empty the
   // screen it is meant to narrow.
@@ -207,7 +207,7 @@ test("the catalogue is not handed out for mutation", () => {
   // joined it (tracker item 74). The number is the point of
   // this line — a row that vanishes is invisible — so it is moved
   // deliberately rather than widened into a range.
-  assert.equal(SETTINGS_ROWS.length, 21);
+  assert.equal(SETTINGS_ROWS.length, 22);
 });
 
 test("phone findability is reachable by the question a person brings to settings", () => {

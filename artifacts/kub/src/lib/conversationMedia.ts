@@ -52,17 +52,21 @@
  * Structural, as `DatedMediaRow` in `sharedMediaBrowsing.ts` is: the generated
  * `Message` satisfies it and no type has to be imported.
  */
+import { messageMediaObjectRef } from "./media/mediaObjectRef.ts";
+
 export interface ConversationMediaRow {
   id: string;
   type?: string | null;
   media_url?: string | null;
+  media_bucket?: string | null;
+  media_path?: string | null;
   deleted_at?: string | null;
 }
 
 /** The two kinds the viewer can show. A file, a voice message and an audio are not pictures. */
 export function isConversationMediaRow(row: ConversationMediaRow): boolean {
   if (row.deleted_at) return false;
-  if (!row.media_url) return false;
+  if (!row.media_url && !messageMediaObjectRef(row)) return false;
   return row.type === "image" || row.type === "video";
 }
 

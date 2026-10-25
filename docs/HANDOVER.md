@@ -1,5 +1,15 @@
 # LETSCUBE — handover
 
+**Current State, 2026-10-25:** Owner Codex coordinator, canonical
+`codex/ui-motion-updates-20261019`. Managed binary-media cache and its searchable
+settings are implemented/reviewed; candidate Android0.1.37/build38 is NOT yet
+published. Text Stable37 remains accepted. Source/browser/IDB/pixel checks pass
+with an explicit Windows-WebKit WAV-decoder limit, not physical Apple proof.
+Next: original-signer/Firebase/parity build38, Realme retained-data upgrade and
+synthetic native cache canary, then readiness-gated shared-web/Stable publication.
+No server migration or PC-network change. Current complete scope, review repairs,
+test evidence and open limits: [managed media cache](operations/2026-10-25-media-cache.md).
+
 **Current State, 2026-10-24:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`, product `80d0584d`. Stage: offline received
 history RELEASED on shared web/build `feb80ecef14bab62` and Android Stable0.1.36/

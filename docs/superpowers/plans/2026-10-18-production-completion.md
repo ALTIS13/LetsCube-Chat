@@ -318,6 +318,11 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct25 delta:** managed binary-cache source/consumer/settings implementation is
+ready for candidate38 gates; it is not yet a published or unlimited cache.
+Reviewer repairs, mounted/offline/IDB/pixel evidence and exact native/Apple/export
+limits are in the [current record](../../operations/2026-10-25-media-cache.md).
+
 **State:** IN PROGRESS; D372 durable media representation/cancel/reload repair is
 released in webefcc/Stable28 with61/61 source checks, including23 actual
 Chromium/WebKit cases without skips. Pre-send editor is released at323d7cfc on

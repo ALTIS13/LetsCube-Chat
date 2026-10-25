@@ -47,6 +47,28 @@ function movableClock(start = T0) {
   };
 }
 
+test("binary-cache admission distinguishes an explicit object refusal from an offline signer", async () => {
+  const ref = { bucket: "media", path: "synthetic.jpg" };
+  for (const refused of [false, true]) {
+    const scheduler = manualScheduler();
+    const store = createSignedMediaUrlStore({ schedule: scheduler.schedule, now: () => T0,
+      sign: async () => { if (!refused) throw Error("synthetic offline"); return [{path:ref.path,signedUrl:null,error:"denied"}]; } });
+    assert.equal(typeof (store as unknown as { isRefused?: unknown }).isRefused, "function");
+    const isRefused = () => (store as unknown as { isRefused: (ref: typeof ref) => boolean }).isRefused(ref);
+    assert.equal(isRefused(), false); store.get(ref); await scheduler.run();
+    assert.equal(isRefused(), refused);
+  }
+});
+
+test("a delayed successful offer is not an object refusal when its download window elapsed", async () => {
+  const ref = { bucket: "media", path: "delayed.jpg" }, scheduler = manualScheduler();
+  let now = T0;
+  const store = createSignedMediaUrlStore({schedule:scheduler.schedule,now:()=>now,ttlSeconds:3600,
+    sign: async () => { now += 3600001; return [{path:ref.path,signedUrl:"https://synthetic.invalid/storage/v1/object/sign/media/delayed.jpg?token=x",error:null}]; } });
+  store.get(ref); await scheduler.run();
+  assert.equal(store.isRefused(ref),false);
+});
+
 /** Records every POST, and answers each path with a token naming the attempt. */
 function recordingSigner(options: { refuse?: Set<string>; throwOnce?: boolean } = {}) {
   const calls: Array<{ bucket: string; paths: string[] }> = [];

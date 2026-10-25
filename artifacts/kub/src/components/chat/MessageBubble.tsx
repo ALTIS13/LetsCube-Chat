@@ -49,6 +49,8 @@ import { groupReactions, type ReactionGroup } from "@/lib/messageReactions";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
 import { mediaBubbleStyle } from "@/lib/mediaBubbleLayout";
 import { inlineImageSource } from "@/lib/mediaInlineLoad";
+import { useCachedMediaUrl, useMediaVisible } from "@/hooks/useCachedMediaUrl";
+import { cachePlayedMedia } from "@/lib/mediaCache/appMediaCache";
 import { resolveOriginalPreviewUrl } from "@/hooks/useMediaVariants";
 import { useMessageMediaSource, usePlaybackUrl } from "@/hooks/useMediaObjectUrl";
 import { mediaObjectRefKey, messageMediaObjectRef } from "@/lib/media/mediaObjectRef";
@@ -1046,7 +1048,11 @@ export function MessageBubble({
    * `settled` separates "no address yet" from "there is no address", which only
    * the voice bubble needs — it is the one shape with nothing to fall back to.
    */
-  const { url: originalUrl, settled: originalSettled } = useMessageMediaSource(message);
+  const { url: remoteOriginalUrl, settled: originalSettled } = useMessageMediaSource(message);
+  const mediaVisible = useMediaVisible(bubbleRef, Boolean(message.media_bucket || message.media_url));
+  const originalUrl = useCachedMediaUrl(message, remoteOriginalUrl, {
+    download: rendersAsVoicePlayer(message), enabled: mediaVisible, maxBytes: 1_048_576,
+  });
   const originalMediaRef = messageMediaObjectRef(message);
   const mediaIdentity = originalMediaRef ? mediaObjectRefKey(originalMediaRef) : message.media_url;
   // A persisted object can have only bucket/path columns, without a legacy URL.
@@ -1054,9 +1060,13 @@ export function MessageBubble({
   const originalUnavailable = hasOriginalMedia && originalSettled && !originalUrl;
   const imagePreviewUrl = mediaVariant?.previewUrl ?? originalPreview?.url;
   const inlineOriginalUrl = inlineImageSource(null, originalUrl, message.media_metadata);
-  const imageDisplayUrl = message.type === "image"
-    ? inlineImageSource(imagePreviewUrl, originalUrl, message.media_metadata)
+  const offeredImageUrl = message.type === "image"
+    ? inlineImageSource(imagePreviewUrl, originalUrl, message.media_metadata) ?? (originalUrl?.startsWith("blob:") ? originalUrl : null)
     : originalUrl;
+  const imageDisplayUrl = useCachedMediaUrl(message.type === "image" ? message : null, offeredImageUrl, {
+    representation: "preview", download: message.type === "image" && Boolean(offeredImageUrl), enabled: mediaVisible,
+    maxBytes: 1_048_576,
+  });
   const imageDimensions = message.type === "image" && mediaVariant?.previewWidth && mediaVariant?.previewHeight
     ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
     : mediaDimensions;
@@ -1083,14 +1093,17 @@ export function MessageBubble({
         ? originalPreview.width
         : mediaDimensions?.width ?? null)
     : null;
-  const videoPosterUrl = message.type === "video" ? mediaVariant?.videoPosterUrl : undefined;
-  const videoPlaybackUrl = message.type === "video" && originalUrl
+  const videoPosterUrl = useCachedMediaUrl(message.type === "video" ? message : null, mediaVariant?.videoPosterUrl, {
+    representation: "poster", download: Boolean(mediaVariant?.videoPosterUrl), enabled: mediaVisible, maxBytes: 1_048_576,
+  });
+  const offeredVideoPlaybackUrl = message.type === "video" && originalUrl
     ? selectVideoPlaybackUrl({
       originalUrl,
       video720pUrl: mediaVariant?.video720pUrl,
       mediaMetadata: message.media_metadata,
     })
     : originalUrl;
+  const videoPlaybackUrl = useCachedMediaUrl(message.type === "video" ? message : null, offeredVideoPlaybackUrl, { representation: "playback" });
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1633,6 +1646,7 @@ export function MessageBubble({
 
             {rendersAsVoicePlayer(message) ? (
               <AudioMessage
+                onStart={() => cachePlayedMedia(message, remoteOriginalUrl)}
                 key={mediaIdentity}
                 url={originalUrl}
                 unavailable={originalUnavailable}
@@ -1640,14 +1654,14 @@ export function MessageBubble({
                 isMe={isMe}
                 playbackItem={createPlaybackItemFromMessage(message, isMe, originalUrl)}
               />
-            ) : message.type === "image" && message.media_url ? (
+            ) : message.type === "image" && hasOriginalMedia ? (
               <MediaWithCaption caption={mediaCaption} bot={botCommandsInText} members={captionMentions}>
                 <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                 <MediaImage
                   url={imageDisplayUrl}
                   originalUrl={originalUrl}
                   allowOriginalInline={Boolean(inlineOriginalUrl)}
-                  thumbUrl={mediaVariant?.thumbUrl}
+                  thumbUrl={imageDisplayUrl?.startsWith("blob:") ? undefined : mediaVariant?.thumbUrl}
                   thumbWidth={mediaVariant?.thumbWidth ?? null}
                   mainWidth={imageDisplayWidth}
                   title={message.content ?? "Фото"}
@@ -1666,15 +1680,16 @@ export function MessageBubble({
                 />
                 </UploadVeil>
               </MediaWithCaption>
-            ) : message.type === "video" && message.media_url ? (
+            ) : message.type === "video" && hasOriginalMedia ? (
               isRoundVideoMessage(message) ? (
                 <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                 <RoundVideoMessage
+                  onStart={() => cachePlayedMedia(message, offeredVideoPlaybackUrl, "playback")}
                   key={mediaIdentity}
                   url={videoPlaybackUrl}
                   originalUrl={originalUrl}
                   title={message.content ?? "Видео-сообщение"}
-                  posterUrl={videoPosterUrl}
+                  posterUrl={videoPosterUrl ?? undefined}
                   durationLabel={parseVideoMessageDuration(message.content, message)}
                   playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl)}
                   onOpen={() => {
@@ -1687,11 +1702,12 @@ export function MessageBubble({
                 <MediaWithCaption caption={mediaCaption} bot={botCommandsInText} members={captionMentions}>
                   <UploadVeil uploading={uploading} progress={uploadProgress} onCancel={onDiscardLocalMessage}>
                   <MediaVideo
+                    onStart={() => cachePlayedMedia(message, offeredVideoPlaybackUrl, "playback")}
                     key={mediaIdentity}
                     url={videoPlaybackUrl}
                     originalUrl={originalUrl}
                     title={message.content ?? "Видео"}
-                    posterUrl={videoPosterUrl}
+                    posterUrl={videoPosterUrl ?? undefined}
                     dimensions={mediaDimensions}
                     playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl)}
                     onOpen={() => {
@@ -1707,6 +1723,7 @@ export function MessageBubble({
               // the size, and a press that opens it in place or downloads it.
               // A file still on its way has nothing to open yet (D-314).
               <FileMessageRow
+                message={message}
                 content={message.content}
                 mediaMetadata={message.media_metadata}
                 url={hasOriginalMedia ? originalUrl ?? null : null}
@@ -2089,6 +2106,7 @@ function MediaVideo({
   dimensions,
   playbackItem,
   onOpen,
+  onStart,
 }: {
   url: string | null;
   originalUrl: string | null;
@@ -2097,6 +2115,7 @@ function MediaVideo({
   dimensions: MediaDimensions | null;
   playbackItem: ChatMediaPlaybackItem | null;
   onOpen: () => void;
+  onStart?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [failed, setFailed] = useState(false);
@@ -2163,6 +2182,7 @@ function MediaVideo({
         playsInline
         className="block h-full max-h-[320px] w-full bg-black object-contain"
         onPlay={(event) => {
+          onStart?.();
           if (activePlaybackItem) mediaPlayback.activate(activePlaybackItem, event.currentTarget);
         }}
         onError={handleError}
@@ -2188,6 +2208,7 @@ function RoundVideoMessage({
   durationLabel,
   playbackItem,
   onOpen,
+  onStart,
 }: {
   url: string | null;
   originalUrl: string | null;
@@ -2196,6 +2217,7 @@ function RoundVideoMessage({
   durationLabel: string | null;
   playbackItem: ChatMediaPlaybackItem | null;
   onOpen: () => void;
+  onStart?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -2231,6 +2253,7 @@ function RoundVideoMessage({
       setProgress(duration > 0 ? Math.min(1, Math.max(0, video.currentTime / duration)) : 0);
     };
     const onPlay = () => {
+      onStart?.();
       setPlaying(true);
       if (activePlaybackItem) activateMediaPlayback(activePlaybackItem, video);
       sync();

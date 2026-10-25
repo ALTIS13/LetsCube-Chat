@@ -23,6 +23,9 @@ import { safeOpenChat } from "@/lib/safeOpenChat";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { useAppStore } from "@/store/app.store";
 import { hiddenMessagesLive } from "@/lib/hiddenMessagesLive";
+import { mediaObjectUrls } from "@/lib/mediaCache/objectUrls";
+import { managedMedia } from "@/lib/mediaCache/appMediaCache";
+import type { CacheableMessage } from "@/lib/mediaCache/appMediaCache";
 import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { nextToggleSpeed, playerMoment, speedLabel } from "@/lib/chatTopCard";
 import {
@@ -44,6 +47,7 @@ export interface ChatMediaPlaybackItem {
   chatId: string;
   kind: ChatMediaPlaybackKind;
   url: string;
+  media?: CacheableMessage;
   title: string;
   subtitle?: string | null;
   /** When the message was sent, for the player's row: «Никита Фермер 06 сент. в 18:20». */
@@ -178,6 +182,14 @@ function MediaPlaybackEngine({
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
   const currentItemRef = useRef<ChatMediaPlaybackItem | null>(null);
+  const cachedUrlLeaseRef = useRef<{url:string;release:()=>void} | null>(null);
+  const playRequestRef = useRef(0);
+  const retainCachedUrl = useCallback((url: string | null) => {
+    if (cachedUrlLeaseRef.current?.url === url) return;
+    const next = url ? { url, release: mediaObjectUrls.retain(url) } : null;
+    cachedUrlLeaseRef.current?.release(); cachedUrlLeaseRef.current = next;
+  }, []);
+  useEffect(() => () => retainCachedUrl(null), [retainCachedUrl]);
   const retiredItemsRef = useRef(new Set<string>());
   const permanentRetiredItemsRef = useRef(new Set<string>());
   const hiddenRetiredItemsRef = useRef(new Set<string>());
@@ -423,6 +435,7 @@ function MediaPlaybackEngine({
     }
     setError(null);
     setVisible(true);
+    retainCachedUrl(item.url);
     currentItemRef.current = item;
     activeElementRef.current = element;
     setCurrentItem(item);
@@ -439,27 +452,42 @@ function MediaPlaybackEngine({
 
   const play = useCallback((item: ChatMediaPlaybackItem, element?: HTMLMediaElement | null) => {
     if (!canAdmitItem(item)) return;
-    const media = element ?? mediaElementForItem(item);
-    if (!media || !item.url) return;
-    activate(item, media);
-    if (media.src !== item.url) {
-      media.src = item.url;
-      media.load();
-    }
-    media.playbackRate = playbackRate;
-    media.volume = volume;
-    setIsPlaying(true);
-    void media.play().catch((error) => {
-      if (currentItemRef.current !== item || activeElementRef.current !== media) return;
-      setIsPlaying(false);
-      setError("Не удалось воспроизвести медиа.");
-      reportError(error, {
-        category: "media_playback_failed",
-        mediaKind: item.kind,
-        staged: item.isStaged,
+    const request = ++playRequestRef.current;
+    const start = (item: ChatMediaPlaybackItem) => {
+      if (request !== playRequestRef.current || !canAdmitItem(item)) return;
+      const media = element ?? mediaElementForItem(item);
+      if (!media || !item.url) return;
+      activate(item, media);
+      if (media.src !== item.url) {
+        media.src = item.url;
+        media.load();
+      }
+      media.playbackRate = playbackRate;
+      media.volume = volume;
+      setIsPlaying(true);
+      void media.play().catch((error) => {
+        if (currentItemRef.current !== item || activeElementRef.current !== media) return;
+        setIsPlaying(false);
+        setError("Не удалось воспроизвести медиа.");
+        reportError(error, {
+          category: "media_playback_failed",
+          mediaKind: item.kind,
+          staged: item.isStaged,
+        });
+        setVisible(true);
       });
-      setVisible(true);
-    });
+    };
+    if (!element && item.media && !item.url.startsWith("blob:")) {
+      const scope = managedMedia.scope(item.media, item.kind === "video" || item.kind === "video_message" ? "playback" : "original");
+      if (scope) {
+        const held = managedMedia.hold(scope);
+        void held.load(null, false).then(url => {
+          if (held.current()) start(url ? { ...item, url } : item);
+        }).finally(() => held.release());
+        return;
+      }
+    }
+    start(item);
   }, [activate, canAdmitItem, mediaElementForItem, playbackRate, volume]);
 
   const pause = useCallback(() => {
@@ -513,6 +541,8 @@ function MediaPlaybackEngine({
   }, [canNext, play, playlist, playlistIndex]);
 
   const close = useCallback(() => {
+    playRequestRef.current++;
+    retainCachedUrl(null);
     cancelPendingPosition();
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
@@ -537,6 +567,12 @@ function MediaPlaybackEngine({
     setDuration(0);
     setError(null);
   }, [cancelPendingPosition, stopProgressLoop]);
+
+  useEffect(() => managedMedia.subscribeRetirement(event => {
+    if (event.partition !== managedMedia.partition()) return;
+    const current = currentItemRef.current;
+    if (current && (event.chatId === null || event.chatId === current.chatId)) close();
+  }), [close]);
 
   const registerChat = useCallback((openChatId: string, items: ChatMediaPlaybackItem[]) => {
     if (accessRevokedChatsRef.current.has(openChatId)) return;
@@ -706,6 +742,7 @@ function MediaPlaybackEngine({
     } else if (suppressedErrorItemIdRef.current === itemId) {
       suppressedErrorItemIdRef.current = null;
     }
+    if (currentItemRef.current?.id === itemId) retainCachedUrl(nextUrl);
     setCurrentItem((current) => replacePlaybackItemUrl(current, itemId, nextUrl));
     setError(null);
   }, [currentItem?.id]);

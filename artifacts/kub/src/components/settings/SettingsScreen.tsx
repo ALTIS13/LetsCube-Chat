@@ -36,6 +36,7 @@ import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistrib
 import { SettingsChangelog } from "@/components/settings/SettingsChangelog";
 import { PwaUpdateStatusControl } from "@/components/PwaUpdateStatusControl";
 import { StorageSection } from "@/components/settings/StorageSection";
+import { ManagedMediaCacheSection } from "@/components/settings/ManagedMediaCacheSection";
 import { WindowsStartupSection } from "@/components/settings/WindowsStartupSection";
 import { IosCallsSection } from "@/components/settings/IosCallsSection";
 import { SessionDevicesSection } from "@/components/settings/SessionDevicesSection";
@@ -50,6 +51,7 @@ import { STATUS_OPTIONS } from "@/lib/presenceStatus";
 import { phoneFindSummary } from "@/lib/phoneFindability";
 import {
   SETTINGS_SECTION_TITLES,
+  SETTINGS_ROWS,
   audioSummary,
   decorationSummary,
   presenceHint,
@@ -124,7 +126,7 @@ const MESSAGE_PREVIEW_OPTIONS: ReadonlyArray<{ value: MessagePreviewChoice; labe
 ];
 
 /** The heavy sections, which stay unmounted until their row is opened. */
-type DisclosureId = "phone" | "decoration" | "audio" | "application" | "changelog" | "blocked" | "devices" | "status" | "phone-search" | "message-preview";
+type DisclosureId = "phone" | "decoration" | "audio" | "application" | "changelog" | "blocked" | "devices" | "status" | "phone-search" | "message-preview" | "media-cache";
 
 export interface SettingsScreen {
   ready: boolean;
@@ -1102,6 +1104,12 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               <AudioSettingsSection />
             </DisclosureRow>
           )}
+          {shows("media-cache") && (
+            <DisclosureRow id="media-cache" icon="folderOpen" title="Данные и память" value="Медиа на устройстве"
+              open={openSections.has("media-cache")} onToggle={toggleSection}>
+              <ManagedMediaCacheSection />
+            </DisclosureRow>
+          )}
           {shows("updates") && (
             <DisclosureRow
               id="application"
@@ -1183,16 +1191,8 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
     // A section whose every row was filtered out draws nothing — not an empty
     // heading over a blank strip, which is what a search that matched a section
     // title and none of its rows would otherwise leave behind.
-    const sectionHasRows: Record<SettingsSectionId, boolean> = {
-      profile: ["name", "username", "bio", "phone", "decoration"].some((id) => shows(id as SettingsRowId)),
-      notifications: ["push", "push-messages", "push-tasks", "push-invites"].some((id) => shows(id as SettingsRowId)),
-      privacy: ["presence", "blocked", "devices"].some((id) => shows(id as SettingsRowId)),
-      application: ["theme", "message-text-size", "audio", "updates", "changelog"].some((id) => shows(id as SettingsRowId)),
-      service: shows("admin"),
-    };
-
     return visibleSettingsSections({ isStaff })
-      .filter((id) => sectionHasRows[id])
+      .filter((id) => SETTINGS_ROWS.some(row => row.section === id && shows(row.id)))
       .map((id) => <Fragment key={id}>{sectionContent[id]}</Fragment>);
   };
 

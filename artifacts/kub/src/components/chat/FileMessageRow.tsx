@@ -17,6 +17,8 @@ import {
 import { saveMediaAs } from "@/lib/messageMediaActions";
 import { FormattedText, type MemberMentionsInText } from "@/lib/formatText";
 import { cn } from "@/lib/utils";
+import { useCachedMediaUrl } from "@/hooks/useCachedMediaUrl";
+import type { CacheableMessage } from "@/lib/mediaCache/appMediaCache";
 
 /**
  * A file in a conversation, as Telegram draws one (tracker item 33,
@@ -51,7 +53,8 @@ const PREVIEW_ICON: Record<DocumentPreview, KubIconName> = {
 export function FileMessageRow({
   content,
   mediaMetadata,
-  url,
+  url: offeredUrl,
+  message,
   unavailable = false,
   members = null,
 }: {
@@ -59,9 +62,13 @@ export function FileMessageRow({
   mediaMetadata: unknown;
   /** Null while the file is still on its way, or while its address is being resolved. */
   url: string | null;
+  message?: CacheableMessage;
   unavailable?: boolean;
   members?: MemberMentionsInText | null;
 }) {
+  const [requested, setRequested] = useState(false);
+  const [savePending, setSavePending] = useState(false);
+  const url = useCachedMediaUrl(message, offeredUrl, { download: requested });
   const facts = useMemo(() => documentFacts({ content, mediaMetadata }), [content, mediaMetadata]);
   const preview = useMemo(
     () =>
@@ -81,9 +88,16 @@ export function FileMessageRow({
 
   const press = () => {
     if (!url) return;
+    if (!requested && message) { setRequested(true); setSavePending(true); return; }
     if (preview) setOpen(true);
     else void saveMediaAs(url, facts.name);
   };
+  useEffect(() => {
+    if (!savePending || !url) return;
+    setSavePending(false);
+    if (preview) setOpen(true);
+    else void saveMediaAs(url, facts.name);
+  }, [url, savePending, preview, facts.name]);
 
   return (
     <>
@@ -92,8 +106,8 @@ export function FileMessageRow({
         ref={fileRef}
         type="button"
         onClick={press}
-        disabled={unavailable || !url}
-        aria-busy={!url && !unavailable}
+        disabled={unavailable || !url || savePending}
+        aria-busy={savePending || (!url && !unavailable)}
         data-testid="file-message"
         data-file-preview={preview ?? "download"}
         aria-label={unavailable ? `Файл недоступен: ${facts.name}` : preview ? `Открыть: ${facts.name}` : `Скачать: ${facts.name}`}

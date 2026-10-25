@@ -82,7 +82,8 @@ function messageProjection(value: unknown, chatId: string, depth = 0): MessageWi
   const type = row.type;
   if (!["text", "image", "video", "audio", "file", "sticker", "system"].includes(String(type))) throw Error("OFFLINE_SNAPSHOT_INVALID");
   const metadata = row.media_metadata && typeof row.media_metadata === "object" && !Array.isArray(row.media_metadata)
-    ? pick(row.media_metadata as Row, ["width", "height", "duration", "duration_ms", "size", "mime_type", "file_name", "filename", "is_voice", "is_round"]) : null;
+    ? pick(row.media_metadata as Row, ["width", "height", "duration", "duration_ms", "size", "size_bytes", "mime_type", "file_name", "filename", "is_voice", "is_round",
+      "album_id", "album_index", "album_count", "uncompressed", "optimized", "original_size_bytes", "original_mime_type", "kind", "shape"]) : null;
   // Metadata leaves are scalar; never copy arbitrary nested provider payloads.
   if (metadata) for (const key of Object.keys(metadata)) {
     if (!["string", "number", "boolean"].includes(typeof metadata[key]) || String(metadata[key]).length > 1024) delete metadata[key];

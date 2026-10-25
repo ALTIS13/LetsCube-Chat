@@ -28,9 +28,10 @@ interface AudioMessageProps {
   duration?: number;
   isMe: boolean;
   playbackItem?: ChatMediaPlaybackItem | null;
+  onStart?: () => void;
 }
 
-export function AudioMessage({ url, unavailable = false, duration = 0, isMe, playbackItem }: AudioMessageProps) {
+export function AudioMessage({ url, unavailable = false, duration = 0, isMe, playbackItem, onStart }: AudioMessageProps) {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [durationSeconds, setDurationSeconds] = useState(0);
@@ -262,6 +263,7 @@ export function AudioMessage({ url, unavailable = false, duration = 0, isMe, pla
   };
 
   const handlePlay = () => {
+    onStart?.();
     setPlaying(true);
     if (playbackItem && audioRef.current) mediaPlayback.activate(playbackItem, audioRef.current);
     startProgressLoop();

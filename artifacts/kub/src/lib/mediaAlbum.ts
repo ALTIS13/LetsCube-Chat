@@ -1,5 +1,6 @@
 import type { MessageWithSender } from "../types/database.ts";
 import { resolveMessageActor } from "./messageActor.ts";
+import { messageMediaObjectRef } from "./media/mediaObjectRef.ts";
 
 export type MediaAlbumGroup =
   | { kind: "single"; messages: [MessageWithSender]; startIndex: number; albumId?: never }
@@ -18,7 +19,7 @@ const ALBUM_ID = /^[A-Za-z0-9][A-Za-z0-9-]{6,78}[A-Za-z0-9]$/;
 function albumIdentity(message: MessageWithSender): AlbumIdentity | null {
   if (
     (message.type !== "image" && message.type !== "video") ||
-    !message.media_url || !message.chat_id || message.deleted_at || message.failed
+    (!message.media_url && !messageMediaObjectRef(message)) || !message.chat_id || message.deleted_at || message.failed
   ) return null;
 
   const metadata = message.media_metadata;

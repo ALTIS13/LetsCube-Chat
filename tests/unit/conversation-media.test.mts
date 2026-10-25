@@ -60,6 +60,12 @@ test("a deleted message is not in the sequence", () => {
   assert.equal(isConversationMediaRow(row({ deleted_at: "2026-09-20T10:00:00Z" })), false);
 });
 
+test("offline object references remain in the viewer without persisting a URL", () => {
+  const cached = { ...row({ media_url: null }), media_bucket: "media", media_path: "synthetic/photo.jpg" };
+  assert.equal(isConversationMediaRow(cached), true);
+  assert.deepEqual(conversationMediaRows([cached]).map(item => item.id), [cached.id]);
+});
+
 test("the conversation's order is kept, never re-sorted", () => {
   const a = row({ id: "a" });
   const text = row({ id: "t", type: "text", media_url: null });

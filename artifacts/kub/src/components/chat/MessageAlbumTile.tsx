@@ -1,4 +1,5 @@
-import React, { useState, useSyncExternalStore } from "react";
+import React, { useRef, useState, useSyncExternalStore } from "react";
+import { useCachedMediaUrl, useMediaVisible } from "@/hooks/useCachedMediaUrl";
 import { KubIcon } from "@/components/kub";
 import { useMessageMediaSource } from "@/hooks/useMediaObjectUrl";
 import { resolveOriginalPreviewUrl, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
@@ -60,7 +61,10 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
   onOpenGroupReadReceipts,
   onCancelUpload,
 }: MessageAlbumTileProps) {
-  const { url: originalUrl, settled } = useMessageMediaSource(message);
+  const { url: remoteOriginalUrl, settled } = useMessageMediaSource(message);
+  const originalUrl = useCachedMediaUrl(message, remoteOriginalUrl);
+  const tileRef = useRef<HTMLDivElement | null>(null);
+  const visible = useMediaVisible(tileRef, true);
   const uploadedPreviewUrl = useSyncExternalStore(
     subscribeToMediaUrls,
     () => message.type === "image" ? resolveOriginalPreviewUrl(message)?.url ?? null : null,
@@ -73,11 +77,15 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
   const fallbackUrl = message.type === "image" && previewUrl && failedImageUrls.has(previewUrl)
     ? inlineImageSource(null, originalUrl, message.media_metadata)
     : null;
-  const displayUrl = previewUrl && !failedImageUrls.has(previewUrl)
+  const offeredUrl = previewUrl && !failedImageUrls.has(previewUrl)
     ? previewUrl
     : fallbackUrl && !failedImageUrls.has(fallbackUrl)
       ? fallbackUrl
       : null;
+  const displayUrl = useCachedMediaUrl(message, offeredUrl, {
+    representation: message.type === "image" ? "preview" : "poster",
+    download: Boolean(offeredUrl), enabled: visible, maxBytes: 1_048_576,
+  });
   const failedPreview = Boolean(previewUrl && failedImageUrls.has(previewUrl));
   const caption = getVisibleMediaCaption(message);
   const onOpenMention = useMemberMentionActions(message.chat_id, isSelectionMode || Boolean(message.deleted_at));
@@ -100,6 +108,7 @@ export const MessageAlbumTile = React.memo(function MessageAlbumTile({
 
   return (
     <div
+      ref={tileRef}
       data-message-bubble="true"
       data-message-album-tile="true"
       className={cn(

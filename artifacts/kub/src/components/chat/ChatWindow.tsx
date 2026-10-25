@@ -53,6 +53,9 @@ import {
 import { useMessages } from "@/hooks/useMessages";
 import { resolveOriginalPreviewUrl, useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
+import { useCachedMediaUrl } from "@/hooks/useCachedMediaUrl";
+import { messageMediaUrl } from "@/lib/media/mediaUrl";
+import { messageMediaObjectRef } from "@/lib/media/mediaObjectRef";
 import { conversationMediaIndex, conversationMediaRows } from "@/lib/conversationMedia";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
 import { mediaOriginality } from "@/lib/mediaOriginality";
@@ -1950,11 +1953,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const conversationMedia = useMemo(() => conversationMediaRows(conversation), [conversation]);
   const openMediaIndex = conversationMediaIndex(conversationMedia, openMediaId);
   const openMediaRow = openMediaIndex === null ? null : conversationMedia[openMediaIndex] ?? null;
-  const openMediaUrl = useMessageMediaUrl(openMediaRow);
-  const openMediaItem: MediaViewerItem | null = openMediaRow && openMediaUrl
+  const offeredMediaUrl = useMessageMediaUrl(openMediaRow);
+  const openMediaUrl = useCachedMediaUrl(openMediaRow, offeredMediaUrl, { download: Boolean(openMediaRow) });
+  const openMediaItem: MediaViewerItem | null = openMediaRow && (openMediaUrl || offeredMediaUrl)
     ? {
       type: openMediaRow.type === "video" ? "video" : "image",
-      url: openMediaUrl,
+      url: (openMediaUrl ?? offeredMediaUrl)!,
+      sourceUrl: offeredMediaUrl ?? undefined,
+      loading: !openMediaUrl,
       title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
       originality: mediaOriginality(openMediaRow.media_metadata),
       ...(isUncompressedMedia(openMediaRow.media_metadata)
@@ -2507,7 +2513,8 @@ function createMediaPlaybackItem(
   currentUserId: string | null,
   mediaVariant?: MessageMediaVariantUrls,
 ): ChatMediaPlaybackItem | null {
-  if (!message.media_url || message.deleted_at) return null;
+  const address = messageMediaUrl(message);
+  if ((!address && !messageMediaObjectRef(message)) || message.deleted_at) return null;
   if (message.type !== "audio" && message.type !== "video") return null;
   const kind: ChatMediaPlaybackItem["kind"] = message.type === "video"
     ? isRoundVideoMessageContent(message)
@@ -2523,14 +2530,15 @@ function createMediaPlaybackItem(
   return {
     id: message.id,
     chatId,
+    media: { chat_id: chatId, media_bucket: message.media_bucket, media_path: message.media_path, media_url: message.media_url },
     kind,
     url: message.type === "video"
       ? selectVideoPlaybackUrl({
-        originalUrl: message.media_url,
+        originalUrl: address ?? "",
         video720pUrl: mediaVariant?.video720pUrl,
         mediaMetadata: message.media_metadata,
       })
-      : message.media_url,
+      : address ?? "",
     title: kind === "video_message"
       ? "Видеосообщение"
       : kind === "voice"

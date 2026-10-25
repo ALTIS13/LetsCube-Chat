@@ -1,6 +1,14 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-24.
+Status: active production-hardening tracker, updated 2026-10-25.
+
+**Current candidate, Oct25:** bounded account/session/backend-owned media IDB,
+mounted photo/original/file/voice consumers, lazy playback identity and searchable
+Data/Memory controls are implemented; original Stable37 remains until release.
+Core27+7 controls and producer12; main63, mounted8PASS/1 explicit Windows-WebKit
+WAV-decoder skip, UI20+5 controls and inspected1440/390 themes. Review repairs are
+recorded, not inferred from build success. Native38/Realme/live publication pending.
+[Exact scope, evidence and limits](operations/2026-10-25-media-cache.md).
 
 **Current release, Oct24:** corrected80d0584d is RELEASED on shared web/build
 feb80ecef14bab62 and Android Stable0.1.36/build37, mandatory=false/rollback35.

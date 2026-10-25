@@ -34,6 +34,12 @@ test("adjacent visual rows with an opaque sender album ID make one ordered group
   assert.equal(groupVisibleMediaAlbums(rows)[0]?.albumId, "a-message");
 });
 
+test("cold offline path-only photos preserve the album instead of splitting it", () => {
+  const rows = [media("one", 0, { media_url: null, media_bucket: "media", media_path: "one.jpg" }),
+    media("two", 1, { media_url: null, media_bucket: "media", media_path: "two.jpg" })];
+  assert.equal(groupVisibleMediaAlbums(rows)[0]?.kind, "album");
+});
+
 test("missing and failed items leave only adjacent surviving pairs grouped", () => {
   assert.deepEqual(groups([media("one", 0), media("two", 1, { failed: true }), media("three", 2)]), [
     ["one"], ["two"], ["three"],
