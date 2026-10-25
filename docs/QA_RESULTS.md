@@ -1,5 +1,22 @@
 # QA Results
 
+## 2026-10-25 - Managed Media Cache Stable38
+
+Product20b57a45/shared-webfd39a7c4346dffb7: real IDB27+7 omission controls,
+pre-download producer12, final affected63+album/conversation25, mounted8PASS/1
+explicit Windows-WebKit WAV positive-control skip, UI20+5 mutations and inspected
+1440/390 themes pass. Actual viewer-loading8/8 passes. Independent privacy review
+findings repaired; typecheck/production build and public/container parity pass.
+Native38 signer/Firebase/QA flags/assets pass; Realme37->38 guest/UID/data/
+firstInstall/fatal0 pass. Synthetic scoped native engine cold-restores exact PNG/
+WAV hashes, decodes/plays without network, rejects held writes after retirement
+and leaves zero fixture bytes; helper/network/normal return cleanup pass10:46Z.
+No authenticated native or actual Apple audio acceptance inferred. Stable0.1.37/
+build38 full public APK hash passes10:48:44Z; mandatory=false, rollback37 retained.
+Initial seven-highlight publication was refused before mutation; a validated
+six-highlight attempt published the unchanged artifact. No SQL/PC network change.
+[Exact proof, limits and next workflow](operations/2026-10-25-media-cache.md#release-and-native-proof).
+
 ## 2026-10-24 - Corrected Offline Cache Stable37
 
 Product80d0584d: affected58/58, actual real-shape Chromium1440/390+WebKit3903/3,

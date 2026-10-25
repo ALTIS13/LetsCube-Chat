@@ -46,7 +46,7 @@ this document coordinates their remaining deliverables, not a replacement design
 - At most three bounded workers, disjoint write scopes, no recursive delegation.
 - Before push inspect `origin/main..HEAD` separately and resolve imports against
   each commit's tree. Main pushes deploy; verify exact image and public/content
-  parity. Published artifacts are immutable; current Stable34 and rollback33 are
+  parity. Published artifacts are immutable; current Stable38 and rollback37 are
   retained. Use the next version/build for new embedded-client code.
 
 ## Review Focus
@@ -318,10 +318,12 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
-**Oct25 delta:** managed binary-cache source/consumer/settings implementation is
-ready for candidate38 gates; it is not yet a published or unlimited cache.
-Reviewer repairs, mounted/offline/IDB/pixel evidence and exact native/Apple/export
-limits are in the [current record](../../operations/2026-10-25-media-cache.md).
+**Oct25 delta:** bounded managed binary cache, consumers and settings are RELEASED
+at product20b57a45/shared-webfd39a7c4346dffb7 and Android Stable0.1.37/build38.
+Original signer/Firebase/parity, Realme data retention, synthetic native cold
+image/audio engine proof and full public APK hash pass; rollback37 retained.
+Reviewer repairs, mounted/offline/IDB/pixel evidence and remaining native/Apple/
+export limits are in the [current record](../../operations/2026-10-25-media-cache.md).
 
 **State:** IN PROGRESS; D372 durable media representation/cancel/reload repair is
 released in webefcc/Stable28 with61/61 source checks, including23 actual
@@ -341,6 +343,10 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   an observed failure, not an assumed missing auto-download implementation.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
+- [x] Release bounded private media IDB and mounted photo/file/voice/viewer/settings
+  integration, with durable privacy retirement, SHA-256 integrity, separate
+  preview/original representations and actual browser/native engine cold proof.
+  Android offline gallery export and the wider authenticated journey stay open.
 - [x] Implement/release the pre-send photo/video editor as a separate slice:
   maintained MIT cropper and installed Mediabunny, explicit unsupported/error
   states, no raw privacy-edit fallback. Source/UI/bytes/native upgrade/public

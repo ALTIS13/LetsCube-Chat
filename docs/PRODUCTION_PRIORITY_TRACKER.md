@@ -2,15 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-25.
 
-**Current candidate, Oct25:** bounded account/session/backend-owned media IDB,
+**Current release, Oct25:** bounded account/session/backend-owned media IDB,
 mounted photo/original/file/voice consumers, lazy playback identity and searchable
-Data/Memory controls are implemented; original Stable37 remains until release.
+Data/Memory controls are RELEASED at product20b57a45/shared-webfd39a7c4346dffb7
+and Android Stable0.1.37/build38, mandatory=false/rollback37 retained.
 Core27+7 controls and producer12; main63, mounted8PASS/1 explicit Windows-WebKit
 WAV-decoder skip, UI20+5 controls and inspected1440/390 themes. Review repairs are
-recorded, not inferred from build success. Native38/Realme/live publication pending.
+recorded, not inferred from build success. Original signer/Firebase/assets,
+Realme37->38 guest/data retention, synthetic native cold image/audio engine proof
+and full public APK hash pass; web healthy/public-container parity pass. Actual
+viewer-loading8/8 pixels pass. Android offline gallery export, Apple device audio,
+large-original authenticated native journey and conditional SQL remain OPEN.
 [Exact scope, evidence and limits](operations/2026-10-25-media-cache.md).
 
-**Current release, Oct24:** corrected80d0584d is RELEASED on shared web/build
+**Prior release, Oct24:** corrected80d0584d is RELEASED on shared web/build
 feb80ecef14bab62 and Android Stable0.1.36/build37, mandatory=false/rollback35.
 D390--D392 repaired: affected58, real-shape Chromium/WebKit3, typecheck/review and
 built-PWA cold/expired/reconnect pass. Actual A06337 saves100 rows, restores100

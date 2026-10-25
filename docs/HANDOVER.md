@@ -1,14 +1,20 @@
 # LETSCUBE — handover
 
 **Current State, 2026-10-25:** Owner Codex coordinator, canonical
-`codex/ui-motion-updates-20261019`. Managed binary-media cache and its searchable
-settings are implemented/reviewed; candidate Android0.1.37/build38 is NOT yet
-published. Text Stable37 remains accepted. Source/browser/IDB/pixel checks pass
-with an explicit Windows-WebKit WAV-decoder limit, not physical Apple proof.
-Next: original-signer/Firebase/parity build38, Realme retained-data upgrade and
-synthetic native cache canary, then readiness-gated shared-web/Stable publication.
-No server migration or PC-network change. Current complete scope, review repairs,
-test evidence and open limits: [managed media cache](operations/2026-10-25-media-cache.md).
+`codex/ui-motion-updates-20261019`. Managed binary-media cache and searchable
+Data/Memory settings are RELEASED at product `20b57a45`: healthy shared-web
+build `fd39a7c4346dffb7` with public/container parity and Android Stable0.1.37/
+build38, mandatory=false, rollback37 retained. Complete public APK hash passes
+10:48:44Z. Original signer/Firebase/assets, Realme37->38 UID/data/firstInstall
+retention and guest/fatal0 pass. A synthetic native engine canary cold-reads,
+hashes, decodes image/audio and plays audio in a new offline process; cross-clear,
+zero remaining fixture bytes, helper removal, network restore and normal return
+pass10:46:24Z. No authenticated native media journey or new A063 proof is implied.
+Source/browser/IDB/1440+390 pixels pass, including actual viewer loading8/8.
+Next: uncovered physical large-original receive/open/save/reopen/hash journey,
+offline Android gallery export and actual Apple audio; conditional SQL bandwidth
+optimization stays open. No SQL or PC-network change. Full scope and limits:
+[managed media cache](operations/2026-10-25-media-cache.md).
 
 **Current State, 2026-10-24:** Owner: Codex coordinator, canonical branch
 `codex/ui-motion-updates-20261019`, product `80d0584d`. Stage: offline received
