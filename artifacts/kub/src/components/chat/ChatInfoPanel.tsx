@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { publicMediaObjectUrl } from "@/lib/media/mediaUrl";
+import { publicMediaObjectUrl, ensureMessageMediaUrl } from "@/lib/media/mediaUrl";
+import { mediaViewerExportMetadata } from "@/lib/mediaFileAction";
 import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { useCachedMediaUrl } from "@/hooks/useCachedMediaUrl";
 import { useAppStore } from "@/store/app.store";
@@ -1924,6 +1925,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe, voice, chatRoles }:
       type: openMediaRow.type === "video" ? "video" : "image",
       url: (openMediaUrl ?? offeredMediaUrl)!,
       sourceUrl: offeredMediaUrl ?? undefined,
+      ...mediaViewerExportMetadata(openMediaRow),
+      resolveSourceUrl: () => ensureMessageMediaUrl(openMediaRow),
       loading: !openMediaUrl,
       title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
       ...(isUncompressedMedia(openMediaRow.media_metadata)

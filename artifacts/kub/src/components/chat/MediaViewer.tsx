@@ -51,6 +51,9 @@ export interface MediaViewerItem {
   url: string;
   /** Original network address for native export and the original filename. */
   sourceUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  resolveSourceUrl?: () => Promise<string | null>;
   /** Keep the viewer and its close/navigation controls present during cache lookup. */
   loading?: boolean;
   title?: string;
@@ -189,6 +192,18 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
     [media?.type, nativeExportAvailable],
   );
   const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<{ url: string; kind: "success" | "error"; title: string } | null>(null);
+  const visibleMediaUrl = useRef(media?.url ?? null);
+  useEffect(() => {
+    visibleMediaUrl.current = media?.url ?? null;
+    setExportNotice(null);
+    return () => { visibleMediaUrl.current = null; };
+  }, [media?.url]);
+  useEffect(() => {
+    if (!exportNotice) return;
+    const timer = window.setTimeout(() => setExportNotice(null), exportNotice.kind === "error" ? 5000 : 3000);
+    return () => window.clearTimeout(timer);
+  }, [exportNotice]);
   const [shareFile, setShareFile] = useState<{ url: string; file: File } | null>(null);
   const [shareUnavailable, setShareUnavailable] = useState(false);
   useEffect(() => {
@@ -204,14 +219,14 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
       if (!response.ok) throw new Error("image unavailable");
       const blob = await response.blob();
       if (!blob.type.startsWith("image/")) throw new Error("not an image");
-      const file = new File([blob], mediaFileName(media.sourceUrl ?? media.url, "image"), { type: blob.type });
+      const file = new File([blob], media.fileName ?? mediaFileName(media.sourceUrl ?? media.url, "image"), { type: blob.type });
       if (!navigator.canShare({ files: [file] })) throw new Error("file share unavailable");
       if (!controller.signal.aborted) setShareFile({ url: media.url, file });
     }).catch(() => {
       if (!controller.signal.aborted) setShareUnavailable(true);
     });
     return () => controller.abort();
-  }, [fileAction.kind, media?.type, media?.url, media?.loading, media?.sourceUrl]);
+  }, [fileAction.kind, media?.type, media?.url, media?.loading, media?.sourceUrl, media?.fileName]);
 
   if (!media) return null;
   if (typeof document === "undefined") return null;
@@ -249,6 +264,13 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
   // opposite edges, so one going does not move the other, and a control that is
   // present but does nothing is worse than no control at all.
   const showArrows = Boolean(sequence) && !zoomed;
+  const downloadFileName = media.fileName ?? mediaFileName(media.sourceUrl ?? media.url, media.type);
+
+  const reportExport = (kind: "success" | "error", title: string, url: string) => {
+    if (visibleMediaUrl.current === url) setExportNotice({ url, kind, title });
+    else showActionFeedback({ kind, title, key: "media-viewer-file" });
+  };
+  const fileStatus = exporting ? "Сохраняем файл" : exportNotice?.url === media.url ? exportNotice.title : null;
 
   const handleFile = () => {
     if (effectiveFileAction.kind === "share" && shareFile?.url === media.url) {
@@ -263,8 +285,9 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
     }
     if (effectiveFileAction.kind === "save") {
       if (nativeExportAvailable) {
+        setExportNotice(null);
         setExporting(true);
-        void saveNativeMedia(media.sourceUrl ?? media.url, mediaFileName(media.sourceUrl ?? media.url, media.type))
+        void saveNativeMedia(media.sourceUrl ?? media.url, downloadFileName, { localUrl: media.url, mimeType: media.mimeType, resolveSourceUrl: media.resolveSourceUrl })
           .then((result) => {
             if (!result.saved) return;
             const title = result.location === "Pictures/LETSCUBE"
@@ -272,15 +295,15 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
               : result.location === "Movies/LETSCUBE"
                 ? "Видео сохранено в галерею LETSCUBE"
                 : "Файл сохранён";
-            showActionFeedback({ kind: "success", title, key: "media-viewer-file" });
+            reportExport("success", title, media.url);
           })
           .catch(() => {
-            showActionFeedback({ kind: "error", title: "Не удалось сохранить файл", key: "media-viewer-file" });
+            reportExport("error", "Не удалось сохранить файл", media.url);
           })
           .finally(() => setExporting(false));
         return;
       }
-      void saveMediaAs(media.url, mediaFileName(media.sourceUrl ?? media.url, media.type));
+      void saveMediaAs(media.url, downloadFileName);
       return;
     }
     // The Android shell's WebView keeps no download it is given, so the address
@@ -421,11 +444,12 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
             data-action-kind={effectiveFileAction.kind}
             onClick={handleFile}
             disabled={exporting || media.loading}
+            aria-busy={exporting}
             aria-label={exporting ? "Сохраняем файл" : fileActionName}
             title={exporting ? "Сохраняем файл" : fileActionName}
             className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <KubIcon name={effectiveFileAction.icon} size={16} />
+            <KubIcon name={exporting ? "spinner" : effectiveFileAction.icon} size={16} />
             {/*
               A control that takes a person out of LETSCUBE keeps its word at
               every width (D-147). Share also keeps its word on an iPhone: the
@@ -462,6 +486,19 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
         </div>
 
         <div className={cn("relative flex min-h-0 flex-1 items-center justify-center bg-black", !zoomable && "p-2 sm:p-4")}>
+          {fileStatus && (
+            <div className="pointer-events-none absolute inset-x-2 top-2 z-30 flex justify-center">
+              <div
+                role={!exporting && exportNotice?.kind === "error" ? "alert" : "status"}
+                aria-live={!exporting && exportNotice?.kind === "error" ? "assertive" : "polite"}
+                data-testid="media-viewer-export-status"
+                className="flex max-w-full items-center gap-2 bg-black/80 px-3 py-2 text-sm text-white"
+              >
+                <KubIcon name={exporting ? "spinner" : exportNotice?.kind === "error" ? "alert" : "checkCircle"} size={16} className="shrink-0" />
+                <span className="min-w-0 whitespace-normal break-words">{fileStatus}</span>
+              </div>
+            </div>
+          )}
           {/*
             The two controls that move through the run, at the edges of the
             stage rather than in the header.

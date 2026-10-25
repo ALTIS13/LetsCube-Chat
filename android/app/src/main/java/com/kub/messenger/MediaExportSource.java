@@ -18,6 +18,18 @@ final class MediaExportSource {
         this.mimeType = mimeType;
     }
 
+    static MediaExportSource local(String name, String mimeType) {
+        if (name == null || !name.matches("[A-Za-z0-9 ._()-]{1,120}")) {
+            throw new IllegalArgumentException("Invalid media export input");
+        }
+        int dot = name.lastIndexOf('.');
+        String expected = dot < 1 ? null : mimeTypeFor(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+        if (expected == null || !expected.equals(mimeType)) {
+            throw new IllegalArgumentException("Unsupported local media type");
+        }
+        return new MediaExportSource(null, name, expected);
+    }
+
     static MediaExportSource parse(String url, String name) {
         if (url == null || name == null || !name.matches("[A-Za-z0-9 ._()-]{1,120}")) {
             throw new IllegalArgumentException("Invalid media export input");

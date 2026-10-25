@@ -1,4 +1,5 @@
 import { selectRussianPluralForm } from "./messageMediaSections.ts";
+import { messageMediaObjectRef, type MediaObjectRefMessage } from "./media/mediaObjectRef.ts";
 
 /**
  * Which actions a message offers, and in what order — Telegram's menus, as the
@@ -80,15 +81,16 @@ export interface MessageActionContext {
 }
 
 /** What a message is, for the menu: the shape of its content, not its storage type. */
-export function messageActionKind(message: {
+export function messageActionKind(message: MediaObjectRefMessage & {
   type: string;
   media_url?: string | null;
   content?: string | null;
 }): MessageActionKind {
-  if (message.type === "image" && message.media_url) return "photo";
-  if (message.type === "video" && message.media_url) return "video";
-  if (message.type === "audio" && message.media_url) return "voice";
-  if (message.type === "file" && message.media_url) return "file";
+  const hasMedia = Boolean(message.media_url || messageMediaObjectRef(message));
+  if (message.type === "image" && hasMedia) return "photo";
+  if (message.type === "video" && hasMedia) return "video";
+  if (message.type === "audio" && hasMedia) return "voice";
+  if (message.type === "file" && hasMedia) return "file";
   return "text";
 }
 

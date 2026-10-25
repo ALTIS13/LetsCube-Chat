@@ -1,5 +1,14 @@
 # LETSCUBE — handover
 
+**Active Work, 2026-10-25:** Coordinator implementing the approved offline-gallery
+continuation on `codex/ui-motion-updates-20261019`, base `b1196535`. Candidate
+0.1.38/build39 is NOT published. Local sender/native staging, cold media menus
+and visible viewer feedback are implemented; one integrated review's four gaps
+are repaired (JVM25, final JS74, mounted4+changed2, inspected UI8). Next: signed
+Native39 build/parity, Realme offline gallery byte/cleanup proof, then release.
+Stable38 below remains current; no SQL or PC-network change.
+[Current source/evidence and limits](operations/2026-10-25-offline-gallery.md).
+
 **Current State, 2026-10-25:** Owner Codex coordinator, canonical
 `codex/ui-motion-updates-20261019`. Managed binary-media cache and searchable
 Data/Memory settings are RELEASED at product `20b57a45`: healthy shared-web

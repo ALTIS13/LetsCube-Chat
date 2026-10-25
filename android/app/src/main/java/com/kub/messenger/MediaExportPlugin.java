@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.DocumentsContract;
+import android.util.Base64;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -25,6 +26,98 @@ import javax.net.ssl.HttpsURLConnection;
 @CapacitorPlugin(name = "MediaExport")
 public class MediaExportPlugin extends Plugin {
     private final ExecutorService transfers = Executors.newSingleThreadExecutor();
+    private MediaExportStaging localStaging;
+
+    @PluginMethod public void localCapabilities(PluginCall call) {
+        call.resolve(new JSObject().put("version", Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? 1 : 0)
+            .put("maxBytes", 33_554_432).put("chunkBytes", 262_144));
+    }
+
+    @PluginMethod public void beginLocal(PluginCall call) {
+        localTransfer(call, () -> {
+            requireLocalGallery();
+            MediaExportSource source = MediaExportSource.local(call.getString("fileName"), call.getString("mimeType"));
+            String id = staging().begin(source, exactNumber(call, "size"), call.getString("sha256"));
+            return new JSObject().put("id", id);
+        });
+    }
+
+    @PluginMethod public void appendLocal(PluginCall call) {
+        localTransfer(call, () -> {
+            requireLocalGallery();
+            long offset = exactNumber(call, "offset");
+            byte[] bytes = localChunk(call.getString("data"));
+            staging().append(call.getString("id"), offset, bytes);
+            return new JSObject().put("written", offset + bytes.length);
+        });
+    }
+
+    @PluginMethod public void finishLocal(PluginCall call) {
+        localTransfer(call, () -> {
+            requireLocalGallery();
+            try (MediaExportStaging.Completed completed = staging().finish(call.getString("id"));
+                 InputStream input = completed.openInput()) {
+                MediaExportSource source = completed.source();
+                MediaExportGallery.save(getContext().getContentResolver(), source, input);
+                return new JSObject().put("saved", true).put("location", source.galleryFolder());
+            }
+        });
+    }
+
+    @PluginMethod public void abortLocal(PluginCall call) {
+        localTransfer(call, () -> {
+            staging().abort(call.getString("id"));
+            return new JSObject();
+        });
+    }
+
+    private interface LocalTransfer { JSObject run() throws Exception; }
+
+    private void localTransfer(PluginCall call, LocalTransfer action) {
+        try {
+            transfers.execute(() -> {
+                try { call.resolve(action.run()); }
+                catch (Exception error) { call.reject("Could not save the local media file", "MEDIA_LOCAL_TRANSFER"); }
+            });
+        } catch (RejectedExecutionException error) {
+            call.reject("Could not save the local media file", "MEDIA_LOCAL_TRANSFER");
+        }
+    }
+
+    private MediaExportStaging staging() throws IOException {
+        if (localStaging == null) localStaging = new MediaExportStaging(getContext().getCacheDir().getCanonicalFile(), System::currentTimeMillis);
+        return localStaging;
+    }
+
+    private static void requireLocalGallery() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) throw new IllegalArgumentException("Local gallery unavailable");
+    }
+
+    private static long exactNumber(PluginCall call, String key) {
+        Object value = call.getData().opt(key);
+        if (!(value instanceof Number)) throw new IllegalArgumentException("Invalid local size");
+        double number = ((Number) value).doubleValue();
+        if (!Double.isFinite(number) || number < 0 || number > 33_554_432 || number != Math.rint(number)) {
+            throw new IllegalArgumentException("Invalid local size");
+        }
+        return (long) number;
+    }
+
+    private static byte[] localChunk(String text) {
+        if (text == null || text.length() == 0 || text.length() > 349_528 || text.length() % 4 != 0) {
+            throw new IllegalArgumentException("Invalid local chunk");
+        }
+        int padding = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+        for (int i = 0; i < text.length() - padding; i++) {
+            char c = text.charAt(i);
+            if (!(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z') && !(c >= '0' && c <= '9') && c != '+' && c != '/') {
+                throw new IllegalArgumentException("Invalid local chunk");
+            }
+        }
+        byte[] bytes = Base64.decode(text, Base64.NO_WRAP);
+        if (bytes.length < 1 || bytes.length > 262_144) throw new IllegalArgumentException("Invalid local chunk");
+        return bytes;
+    }
 
     @PluginMethod public void save(PluginCall call) {
         final MediaExportSource source;
@@ -146,6 +239,11 @@ public class MediaExportPlugin extends Plugin {
     }
 
     @Override protected void handleOnDestroy() {
+        try {
+            transfers.execute(() -> { if (localStaging != null) localStaging.close(); });
+        } catch (RejectedExecutionException ignored) {
+            // Already shut down; startup cleanup owns any expired temporary file.
+        }
         transfers.shutdown();
     }
 }

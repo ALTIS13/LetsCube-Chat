@@ -52,6 +52,7 @@ import { requestContentReport } from "./ReportDialog";
 import { messageLink } from "@/lib/messageLink";
 import { copyImageToClipboard, mediaDownloadName, saveMediaAs } from "@/lib/messageMediaActions";
 import { canSaveNativeMedia, saveNativeMedia } from "@/lib/platform/nativeMediaExport";
+import { managedMedia } from "@/lib/mediaCache/appMediaCache";
 import { ensureMessageMediaUrl } from "@/lib/media/mediaUrl";
 import { QUICK_REACTION } from "@/lib/messageReactions";
 import {
@@ -1022,7 +1023,19 @@ export function MessageList({
      * shape there; a render's is not. Resolves immediately in `"public"`
      * mode, where it is `message.media_url`.
      */
-    const mediaAddress = () => ensureMessageMediaUrl(message);
+    const withMediaAddress = async (run: (url: string) => unknown | Promise<unknown>) => {
+      const cacheScope = managedMedia.scope(message, "original");
+      const held = cacheScope ? managedMedia.hold(cacheScope) : null;
+      try {
+        const local = await held?.load(null, false);
+        if (held && !held.current()) throw Error("media_retired");
+        const url = local ?? await ensureMessageMediaUrl(message);
+        if (!url || (held && !held.current())) throw Error("media_unavailable");
+        await run(url);
+      } catch {
+        showActionFeedback({ kind: "error", title: action === "saveAs" ? "Не удалось сохранить файл" : "Не удалось открыть файл", key: "message-media" });
+      } finally { held?.release(); }
+    };
     switch (action) {
       case "reply":
         handlers.onReply(message);
@@ -1036,26 +1049,19 @@ export function MessageList({
         handlers.onTogglePin?.(message);
         return;
       case "copy":
-        if (messageActionKind(message) === "photo" && message.media_url) {
-          void mediaAddress().then((url) => {
-            if (url) void copyImageToClipboard(url);
-          });
+        if (messageActionKind(message) === "photo") {
+          void withMediaAddress(copyImageToClipboard);
         } else copyText();
         return;
       case "copyText":
         copyText();
         return;
       case "copyImage":
-        if (message.media_url) {
-          void mediaAddress().then((url) => {
-            if (url) void copyImageToClipboard(url);
-          });
-        }
+        void withMediaAddress(copyImageToClipboard);
         return;
       case "saveAs":
-        if (message.media_url) {
-          void mediaAddress().then((url) => {
-            if (!url) return;
+        if (messageActionKind(message) !== "text") {
+          void withMediaAddress(async (url) => {
             const fileName = mediaDownloadName({
               type: message.type,
               content: message.content,
@@ -1063,7 +1069,11 @@ export function MessageList({
               createdAt: message.created_at,
             });
             if (canSaveNativeMedia() && (message.type === "image" || message.type === "video")) {
-              void saveNativeMedia(url, fileName)
+              await saveNativeMedia(url, fileName, {
+                localUrl: url,
+                mimeType: mediaMimeType(message) ?? undefined,
+                resolveSourceUrl: () => ensureMessageMediaUrl(message),
+              })
                 .then((result) => {
                   if (result.saved) showActionFeedback({
                     kind: "success",
@@ -1072,11 +1082,10 @@ export function MessageList({
                       : "Видео сохранено в галерею LETSCUBE",
                     key: "message-save",
                   });
-                })
-                .catch(() => showActionFeedback({ kind: "error", title: "Не удалось сохранить файл", key: "message-save" }));
+                });
               return;
             }
-            void saveMediaAs(url, fileName);
+            await saveMediaAs(url, fileName);
           });
         }
         return;

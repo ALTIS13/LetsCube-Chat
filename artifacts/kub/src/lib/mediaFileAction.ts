@@ -30,6 +30,7 @@
  */
 
 import type { DistributionTarget } from "./platform/distribution.ts";
+import { messageMediaObjectRef, type MediaObjectRefMessage } from "./media/mediaObjectRef.ts";
 
 export type MediaFileActionKind = "save" | "open" | "share";
 
@@ -118,6 +119,17 @@ export function mediaFileName(url: string, kind: MediaFileKind): string {
     return segment;
   }
   return kind === "image" ? "letscube-photo.jpg" : "letscube-video.mp4";
+}
+
+/** Stable original metadata must not depend on a temporary signed address. */
+export function mediaViewerExportMetadata(message: MediaObjectRefMessage & { type: string; media_metadata?: unknown }) {
+  const metadata = message.media_metadata;
+  const value = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>).mime_type : undefined;
+  return {
+    fileName: mediaFileName(messageMediaObjectRef(message)?.path ?? message.media_url ?? "", message.type === "video" ? "video" : "image"),
+    mimeType: typeof value === "string" ? value : undefined,
+  };
 }
 
 function decodeSegment(value: string): string {

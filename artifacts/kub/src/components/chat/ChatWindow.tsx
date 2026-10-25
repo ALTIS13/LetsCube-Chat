@@ -54,7 +54,8 @@ import { useMessages } from "@/hooks/useMessages";
 import { resolveOriginalPreviewUrl, useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { useMessageMediaUrl } from "@/hooks/useMediaObjectUrl";
 import { useCachedMediaUrl } from "@/hooks/useCachedMediaUrl";
-import { messageMediaUrl } from "@/lib/media/mediaUrl";
+import { messageMediaUrl, ensureMessageMediaUrl } from "@/lib/media/mediaUrl";
+import { mediaViewerExportMetadata } from "@/lib/mediaFileAction";
 import { messageMediaObjectRef } from "@/lib/media/mediaObjectRef";
 import { conversationMediaIndex, conversationMediaRows } from "@/lib/conversationMedia";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
@@ -1960,6 +1961,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       type: openMediaRow.type === "video" ? "video" : "image",
       url: (openMediaUrl ?? offeredMediaUrl)!,
       sourceUrl: offeredMediaUrl ?? undefined,
+      ...mediaViewerExportMetadata(openMediaRow),
+      resolveSourceUrl: () => ensureMessageMediaUrl(openMediaRow),
       loading: !openMediaUrl,
       title: openMediaRow.content ?? (openMediaRow.type === "video" ? "Видео" : "Фото"),
       originality: mediaOriginality(openMediaRow.media_metadata),

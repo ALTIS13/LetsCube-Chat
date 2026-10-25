@@ -1,6 +1,6 @@
 type Owner = { partition: string; chatId: string };
 export function createMediaObjectUrls(options: { create: (blob: Blob) => string; revoke: (url: string) => void }) {
-  const entries = new Map<string, { owner: Owner; refs: number }>();
+  const entries = new Map<string, { owner: Owner; refs: number; blob: Blob }>();
   const releaseOf = (url: string) => {
     let released = false;
     return () => {
@@ -11,8 +11,13 @@ export function createMediaObjectUrls(options: { create: (blob: Blob) => string;
   };
   return {
     create(blob: Blob, owner: Owner) {
-      const url = options.create(blob); entries.set(url, { owner: { ...owner }, refs: 1 });
+      const url = options.create(blob); entries.set(url, { owner: { ...owner }, refs: 1, blob });
       return { url, release: releaseOf(url) };
+    },
+    acquire(url: string) {
+      const entry = entries.get(url); if (!entry) return null;
+      entry.refs++;
+      return { blob: entry.blob, current: () => entries.get(url) === entry, release: releaseOf(url) };
     },
     retain(url: string) {
       const entry = entries.get(url); if (!entry) return () => {};
