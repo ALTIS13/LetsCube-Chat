@@ -1,8 +1,8 @@
 # Cold History Scope And Recorder Feedback
 
-Owner: Codex coordinator. Stage: source reviewed and pixels accepted; native
-candidate acceptance pending. Baseline fe40b5e5, runtime85025f59/Stable39.
-No production SQL, Auth, native installation or deployment in this source stage.
+Owner: Codex coordinator. Stage: RELEASED on shared web and Android Stable40.
+Product97e07de8, baseline fe40b5e5.
+No production SQL or Auth changes in this slice.
 
 ## Reproduced Causes
 
@@ -73,10 +73,43 @@ tests/unit/cold-media-open-20261026.test.mjs and
 tests/unit/ui-micro-feedback-20261026.test.mjs. Private synthetic evidence remains
 in .ops-private/cold-media-oct26/ and .ops-private/ui-oct26-audit/.
 
+## Android Release
+
+Android0.1.39/build40 is published optional/mandatory=false at10:21:13Z onOct26.
+Rollback39 and its previous catalog backup are retained. Complete public APK
+size7,834,565B and SHA256
+`59c136ba52afb5e24dd6f0f341c0900dfee4d76c6a91fe7e74c2a3ed15573ad9`
+match the retained artifact. Build reports sw.js306979fc2d779db2, built17.66s and
+Gradle29s; signer unchanged, four Firebase values match, all QA flags false,
+APK/AAB/source assets and DEX parity pass, known-secret scan passes.
+
+Actual Realme39->40 at10:19:07Z retains UID/dataDir/firstInstall, opens normal
+guest UI in the foreground and has fatalCount0. No clear/uninstall, QA helper,
+Auth fixture, phone network or PC networking change occurs. The bounded unlock
+helper refused its system-focus check after wake/dismiss; no PIN was entered.
+The subsequent strict installer observed the device already unlocked. Device
+returns HOME. This is upgrade/startup evidence, not authenticated cold-media QA.
+
+Private source/runtime acceptance, artifact, device and public receipts are in
+.ops-private/cold-media-release40-20261026/. Publisher compares the exact prior39
+catalog under its lock, preserves rollback and rejects intent replay. Owner
+authority is the standing reviewed-release permission, not a new approval gate.
+
+Product commit97e07de8 is on origin/main and both maintained checkouts. Its own
+outgoing tree resolves142 alias imports in8 source/test files. Coolify deployment
+qxfdmhrket4ej8qq0bpspl5x completed10:24:05Z. Actual sole healthy image97e07de8,
+shared-web build03bc17207bc9d508 and public/container HTML/entry/SW hashes pass.
+Before/after both-scope markers prove absent onfe40 and present in the new
+served entry at10:24:55Z, with a different content SHA and the same bytes as the
+container. Web receipt is .ops-private/web-preview-install-20261018/live-97e07de8.json;
+old/local/new marker receipts are in the private release40 folder.
+
+Shared iPhone PWA and Windows remote renderer receive this web delta. Windows
+shell0.2.14 remains unsigned/unchanged; native Apple release and a physical iPhone
+check are not implied. Android embeds its separately checked production bundle.
+
 ## Remaining
 
-Build the next immutable Android candidate,
-verify data-retaining upgrade and actual affected runtime behavior, then publish
-the validated delta. Keep the wider authenticated cold-original/save journey,
+Keep the wider authenticated cold-original/save journey,
 Apple audio, background calls and broad UI/motion backlog open. Do not replay
 unchanged warm/provider/Stable39 engine baselines.

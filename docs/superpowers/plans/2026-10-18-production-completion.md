@@ -320,8 +320,10 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 **Oct26 source delta:** cold default group history and explicit-channel scope
 selection are repaired with display-only discovery; service22/coupled9/affected197
-and typecheck pass. Review/pixels pass; native candidate40 acceptance remains before
-release. Existing physical cold/save limit is unchanged.
+and typecheck pass. Review/pixels, original signer/Firebase/parity, retained-data
+Realme39->40 guest/fatal0, full public APK and actual healthy shared-web/content
+parity pass. RELEASED97e07de8/Stable0.1.39/build40; mandatory=false/rollback39.
+Existing physical cold/save limit is unchanged.
 [Evidence and boundaries](../../operations/2026-10-26-cold-history-scope.md).
 
 **Oct25 gallery delta:** local Android10+ original image/video gallery export is
@@ -351,6 +353,9 @@ metadata and positional intent; preserve original bytes and explicit downloads.
 - [x] Map accepted albums, HD/original, auto-small/manual-large download/cache and
   recorder feedback evidence without replaying accepted cases.
   [Remaining workflow map](../../operations/2026-10-18-media-editor.md#remaining-media-workflows).
+- [x] Repair/release cold default group cache discovery and selected-channel
+  isolation without cached authority or network/send changes (Stable40/shared web).
+  Exact legacy reads, write ordering, caller mutation and privacy fences pass.
 - [x] Actual Stable39 ordinary receiver login and mounted preview/explicit large
   original open: original absent before tap, then durable IDB and actual viewer
   Blob SHA/bytes/dimensions match. Warm acceptance is bounded, not cold/save or
@@ -478,7 +483,7 @@ participant lifecycle and group-call state; no duplicate room/call on reconnect.
 
 **Oct26 bounded delta:** stale voice short-press text after switching to video
 is reproduced and repaired; feedback5 and final1440/390/both-theme pixels pass.
-Publication pending. It does
+Released97e07de8/shared web and Stable40 with actual rollout/content proof. It does
 not close the wider native motion backlog.
 [Current repair](../../operations/2026-10-26-cold-history-scope.md).
 
@@ -515,6 +520,9 @@ ownership, readable defaults/scale and reduced-motion preference.
 - [ ] Use available Mobbin/Figma/Rive only for a specific missing reference or
   implementation need; do not spend subscription minutes on repeated exploration.
 - [ ] Publish reviewed UI slices and record physical checks separately.
+
+Bounded recorder-feedback slice is released onOct26; this wider checkbox remains
+open for the other interface/motion work, not a reason to replay the accepted fix.
 
 ## Task9: Product Depth (#17,19--20,27,36--38,92)
 

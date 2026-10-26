@@ -1,13 +1,16 @@
 # LETSCUBE — handover
 
-**Current checkpoint, 2026-10-26:** Owner Codex coordinator, Task3/Task8. Cold
-group history scope mismatch and selected-channel/root alias are reproduced and
-repaired in source without changing network queries or topic authority. Service22,
-coupled consumers9 (including4 omissions) and affected197 pass; typecheck passes.
-Recorder voice-to-video feedback5 and final1440/390/both-theme pixels pass; review
-is clean. Android0.1.39/build40 metadata is prepared; native checks/publication
-are pending. Stable39 remains unchanged. Next: finish those checks and release
-the bounded delta; physical cold-original/save is NOT inferred from source proof.
+**Current checkpoint, 2026-10-26 10:24Z:** Owner Codex coordinator, Task3/Task8.
+Cold group history scope and selected-channel/root alias repairs plus recorder
+voice-to-video feedback are RELEASED at97e07de8/shared-web03bc17207bc9d508 and
+Android0.1.39/build40. Service22/coupled9/affected197, feedback5, typecheck,
+independent review and final1440/390/both-theme pixels pass. Original signer/
+Firebase/parity, Realme39->40 retained-data guest/fatal0 and full public APK hash
+pass; mandatory=false/rollback39 retained. Actual sole healthy image, public/
+container parity and old/new scope markers pass10:24:55Z. No SQL/Auth or PC
+network changes. Next: finite exact native40 cold row/control/cache diagnosis
+before any new owned fixture; guest admission precedes seed. Physical
+cold-original/save is NOT inferred from source/guest proof.
 [Implementation and limits](operations/2026-10-26-cold-history-scope.md).
 
 **Current QA checkpoint, 2026-10-25 15:44Z:** Owner Codex coordinator, Task3,
