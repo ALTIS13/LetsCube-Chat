@@ -54,6 +54,7 @@ import { channelPreviewCache } from "@/lib/channelPreviewCache";
 import { patchHeldMessage } from "@/lib/messageMerge";
 import { chatIdInFilters, heldChatIdsKey } from "@/lib/realtimeChatFilters";
 import { offlineHistory } from "@/lib/historyCache/appOfflineHistory";
+import { sameTimestampInstant } from "@/lib/readMarkWatermark";
 
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 const CHAT_SUMMARY_DEBOUNCE_MS = 250;
@@ -256,7 +257,7 @@ export function useChats() {
     const nextIds = new Set(rows.map(chat => chat.id));
     for (const chat of saved ?? []) {
       const current = rows.find(row => row.id === chat.id);
-      if (!nextIds.has(chat.id) || (current?.cleared_at && current.cleared_at !== chat.cleared_at)) dropped.push(chat.id);
+      if (!nextIds.has(chat.id) || (current?.cleared_at && !sameTimestampInstant(current.cleared_at, chat.cleared_at))) dropped.push(chat.id);
     }
     serverListReadyRef.current = false;
     // Each purge retires *all* old handles. Reacquire only after the last purge.
@@ -516,7 +517,7 @@ export function useChats() {
       const dropped = [...previousChats, ...enriched].filter(chat => !nextIds.has(chat.id)).map(chat => chat.id);
       // A clear mark applies even to an inactive chat with retained disk pages.
       for (const chat of nextChats) {
-        if (chat.cleared_at && previousChats.find(old => old.id === chat.id)?.cleared_at !== chat.cleared_at) dropped.push(chat.id);
+        if (chat.cleared_at && !sameTimestampInstant(previousChats.find(old => old.id === chat.id)?.cleared_at, chat.cleared_at)) dropped.push(chat.id);
       }
       if (cacheRevision === cacheRevisionRef.current) void persistChats(nextChats, isCurrentAccount, dropped);
       setRead(listReadSucceeded(userId));
@@ -795,14 +796,15 @@ export function useChats() {
         { event: "UPDATE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
         (payload: { new: MembershipRowLike }) => {
           if (!isCurrent()) return;
+          if (payload.new?.user_id && payload.new.user_id !== userId) return;
           if (!payload.new?.chat_id) return;
           const previous = useAppStore.getState().chats.find((chat) => chat.id === payload.new.chat_id);
-          if ((payload.new.hidden_at && previous?.hidden_at !== payload.new.hidden_at)
-            || ("cleared_at" in payload.new && previous?.cleared_at !== payload.new.cleared_at)) {
+          if ((payload.new.hidden_at && !sameTimestampInstant(previous?.hidden_at, payload.new.hidden_at))
+            || ("cleared_at" in payload.new && !sameTimestampInstant(previous?.cleared_at, payload.new.cleared_at))) {
             void invalidateCachedChat(payload.new.chat_id);
           }
           if ("cleared_at" in payload.new) {
-            if (previous?.cleared_at !== payload.new.cleared_at) {
+            if (!sameTimestampInstant(previous?.cleared_at, payload.new.cleared_at)) {
               clearedAtCache.evictChat(payload.new.chat_id);
               channelPreviewCache.evict(payload.new.chat_id);
             }

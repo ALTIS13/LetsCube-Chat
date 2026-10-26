@@ -1,7 +1,10 @@
 # History Write Clock And Physical Cold QA
 
-Owner: Codex coordinator. Stage: clock repair reviewed; candidate41 preparation.
-Stable remains0.1.39/build40. No SQL migration.
+Owner: Codex coordinator. Stage: actual candidate42 cold failure and completed
+same42 producer-only diagnostic; exact native cause remains unresolved.
+Stable remains0.1.39/build40; candidates41/42 are NOT published. Realme42 is
+normal guest after cleanup; A06337 is untouched. Full physical cold/save is OPEN.
+No SQL migration or shared-web release follows from these candidate results.
 
 ## Actual Native40 Result
 
@@ -80,7 +83,7 @@ would hide real rollback. No server or permission authority comes from the clock
   is implied by these source results. Read-clock races and the separate logout
   discrepancy are not silently marked resolved.
 
-Next: build the next immutable candidate0.1.40/build41, retain
+Next at that source checkpoint: build candidate0.1.40/build41, retain
 package/signer/data, and exercise the missing physical cold/save criterion.
 Only observed, cleaned runtime evidence can close that criterion. Reuse valid
 baseline coverage and preserve all original refused receipts.
@@ -108,7 +111,7 @@ post-logout guest witness refuses (so full PASS refuses too). One known normal
 menu/exit repeat restores a stable guest at11:53:29Z. No storage/app-data clear,
 personal-content capture, SQL mutation or A063 change is performed.
 
-Current action: diagnose the actual hook-to-disk admission/projection boundary
+Next at that checkpoint: diagnose the actual hook-to-disk admission/projection boundary
 before another native candidate. The reviewed clock fix remains committed,
 not rolled back or mislabeled as the sole cause. Runtime records are private
 under gallery-auth-native41-20261026/LIVE-RUN.md; all owned processes/fixtures are
@@ -142,5 +145,124 @@ that run. No visual layout or SQL change is involved.
 Read-only actual two-QA-profile types/timestamps/UUIDs and client-column defaults
 show no proven projection mismatch. Synthetic malformed-profile refusal is not
 claimed as the native cause. Neither source race alone proves the exact native41
-timing; candidate0.1.41/build42 and actual cold proof remain next. Candidate41
-was never published; catalog prior/rollback stays40, while Realme currently has41.
+timing. Candidate0.1.41/build42 was the next physical check; its actual outcome
+and the subsequent same42 witness are recorded below. Candidate41 was never
+published; the catalog remains Stable40.
+
+## Candidate42 Physical Follow-Up
+
+Candidate0.1.41/build42 at6a677c28 includes both reviewed source repairs. The
+actual owned cohort68046c4d still finishes UNAVAILABLE: the cold history
+page/pointer and timeline row are absent while original/preview binary bytes
+remain. This is not full cold viewer/gallery acceptance, and neither the clock
+repair nor the post-finally privacy repair is certified as the cause of the
+specific native failure. No candidate42 publication or further guessed product
+patch follows from this result.
+
+All owned Auth/API/helper/network cleanup passes; old sessions are retained,
+new owned sessions retired and the exact fixture footprint removed. Normal
+non-instrumented guest restoration passes12:36:01Z. Private records remain in
+`.ops-private/gallery-auth-native42-20261026/coordinator-result42.json` and
+`normal-guest42-restored.json`; the consumed API ledger is in
+`gallery-fixture42-20261026`. Do not replay that cohort or its stable ticket.
+
+## Same42 Producer Diagnostic
+
+One different, finite same42 producer-boundary witness completes12:57:06Z at
+unchanged6a677c28/build42. Its status is
+`OBSERVED_PRODUCER_ONLY_NOT_MEDIA_ACCEPTANCE`, not a cold/media PASS. Ordinary
+empty-guest admission precedes the fresh owned SDK/RLS fixture and one ordinary
+installed LoginForm Auth42 lifetime. The passive JS watch runs before opening
+the owned chat; no new product build, cold restart, original opening/download,
+gallery save, provider test, fault injection or personal capture occurs.
+
+The witness is calibrated against real SHA/get/put and an actual completed
+IndexedDB transaction, with unchanged calibration digest and a cleaned temporary
+DB. Wrappers remain intact; overflow and observer errors are zero. In its bounded
+observed window:
+
+- `fixturePayloadHashesUnattributed` and `pointerPayloadHashesUnattributed` are0.
+  These are counters, not captured payloads or digest values.
+- Owner gets20/hits20 and owner put attempts4 show owner-store activity; put
+  attempts are not claimed as completed transactions.
+- Page gets1/hits0 and pointer gets1/hits0; page/pointer put attempts are0.
+  Page/pointer transaction-complete and abort counters are also0.
+- The own image row and React fiber are present. Observed row/sender IDs have
+  UUID shape, required created/updated timestamps are valid, and pending/failed/
+  checking are false. `reply=array`/`replyId=missing` is recorded as shape only,
+  not a proven projection incompatibility.
+
+This narrows the observed boundary to no watched history payload publication or
+page/pointer put attempt despite a rendered own row. It does not establish which
+source admission gate ran or refused, or prove that either repaired source race
+caused the earlier native outcome. The coordinator investigates that source gate
+in parallel; no additional product fix or new cold/original replay is inferred.
+
+The watch is restored and its calibration DB clean. Helper removal, normal app
+return and unchanged network pass; native is quiescent and no fixture cleanup
+remains. Auth cleanup retains old SIDs, removes the new own SID and retires its
+bindings. Exact owned API cleanup is complete. The original coordinator result
+retains `normalGuest: UNAVAILABLE`; a later separate normal, non-instrumented UI
+logout witness passes with stable guest at13:11:23Z. No app-data clear, broad
+session revoke or authentication injection is used.
+
+Safe metadata receipts and the current private run record are in
+`.ops-private/history-native42-producer-20261026/coordinator-result.json`,
+`normal-guest-producer42-restored.json` and `LIVE-RUN.md`. They contain no message
+bodies, personal identifiers or token values. The APIproducer ticket is consumed;
+reuse its settled cleanup evidence, not another seed. Stable0.1.39/build40 and
+shared web remain unchanged; candidates41/42 are NOT published. Realme42 is now
+normal guest, A06337 is untouched, and full physical cold/save remains OPEN.
+
+## Unrelated Retirement And Semantic Clear Marks
+
+The next two finite same42 native gate probes are UNAVAILABLE, not product
+acceptance. R1 builds its helper but fails before installation because the
+coordinator retains the old producer filename. A real coordinator-to-device
+constructor contract test now covers that boundary. R1's exact API cleanup
+passes; normal UI/Auth cleanup recovery and stable guest pass14:24:11Z. R2 installs
+and removes its owned helper, but obtains no debug socket or gate verdict. Its
+Auth lifetime, exact API footprint, normal return and unchanged network settle;
+stable non-instrumented guest passes14:33:19Z. No forward was created, no content
+was captured and no native publication follows. Consumed tickets are not replayed.
+Private receipts remain under history-native42-gates[-r2]-20261026. These probes
+do not certify the cause of the earlier native missing-page outcome.
+
+Separately, an actual-hook/service/IndexedDB test reproduces unrelated-chat
+retirement before a queued publication. Chat A stays visible and its account/
+scope/privacy callback remains true, but retiring B invalidates every service
+handle; A's write correctly returns false before hashing and no page follows.
+The message hook now consumes that generation event and requests one existing
+bounded recovery. It evicts the clear-boundary answer and re-reads actual server
+and hidden-message authority before publication; it never retries retired rows
+against a newly captured handle. Twenty events coalesce into one head read.
+Offline, unmount and account-retirement controls remain inert.
+
+Review caught two retry hazards before rollout. A terminal403 must purge RAM/
+disk without scheduling itself again, including through another document's real
+BroadcastChannel. Both the local loop and the two-document ping-pong go RED.
+A scope-local access-refusal latch is set before purge, cancels pending recovery,
+and suppresses cache-event retries until a new scope or fully validated successful
+head. Ordinary reconnect/retry still revalidates and releases the latch on success.
+Final recovery13 cases pass (11 plus the two added restored-access cases), with
+five compiled mutations killed. This is browser/source proof, not native proof.
+
+The membership callback also retired cache for the same timestamp represented
+with Z versus +00:00, while the delta reducer treated distinct microseconds as
+equal. A shared sameTimestampInstant uses the existing timestampMicros parser:
+null/undefined agree, equivalent offsets agree, a one-microsecond change does not,
+and distinct malformed strings do not collapse. Saved-list, fresh-list and live
+clear/hide comparisons use that rule; a foreign-user UPDATE is ignored. Timestamp8
+focused cases include three killed mutations; the agent's affected52 pass.
+
+Coordinator affected checks:147 initially146 pass/one stale static assertion.
+The assertion already fails on unchanged6a because its departures dependency list
+omits authSessionSource. Its corrected exact binding/cache-authority assertion
+and timestamp cases pass18/18. Separate hidden-batch/tuple/browser cohort106/106
+passes; final typecheck passes. Independent final review finds no blocker. No
+layout, SQL, RLS, global logout, PC network, A063 or rental change is involved.
+Web rollout is prepared next; Android40 remains Stable and41/42 are unpublished.
+Final actual web build emits62bfb74614f37c48 and built in12.62s; public-role scan
+finds no service_role token. Before/local source markers pass0/0/0/0 to1/1/1/1
+for clock/privacy/recovery/microsecond equality. These markers are deployment
+custody controls, not substitutes for the behavioral cases above.

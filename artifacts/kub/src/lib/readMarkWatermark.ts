@@ -34,6 +34,14 @@ export function timestampMicros(value: string | null | undefined): number | null
   return wholeSecondsMs * 1000 + micros;
 }
 
+/** Format-independent equality; missing marks agree, distinct invalid strings do not. */
+export function sameTimestampInstant(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a == null && b == null;
+  const aMicros = timestampMicros(a);
+  return aMicros !== null && aMicros === timestampMicros(b);
+}
+
 /** The later of two timestamps, as the string it was given. An unreadable one loses. */
 export function laterTimestamp(a: string | null | undefined, b: string | null | undefined): string | null {
   const aMicros = timestampMicros(a);

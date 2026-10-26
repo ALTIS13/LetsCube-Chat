@@ -236,6 +236,7 @@ export function useMessages(
   const hookLifetimeRef = useRef<symbol | null>(null);
   const [offlineSnapshot, setOfflineSnapshot] = useState<(OfflineMessageSnapshot & { key: string; epoch: number }) | null>(null);
   const offlineReadRef = useRef<symbol | null>(null);
+  const cacheAccessRefusedRef = useRef(false);
   // A pending topology read still uses the existing conservative network scope.
   // Disk display must instead honor the user's exact selected channel.
   const offlineTopicId = options.offlineRequestedTopicId ?? topicId;
@@ -258,12 +259,6 @@ export function useMessages(
     });
     return () => { if (offlineReadRef.current === ticket) offlineReadRef.current = null; };
   }, [chatId, userId, accountEpoch, offlineKey]);
-
-  useEffect(() => offlineHistory.subscribe(retiredChatId => {
-    if (retiredChatId !== null && retiredChatId !== chatId) return;
-    offlineReadRef.current = null;
-    setOfflineSnapshot(null);
-  }), [chatId]);
 
   // Retire async producers synchronously, even when the account and chat stay selected.
   useLayoutEffect(() => {
@@ -323,6 +318,7 @@ export function useMessages(
   const historyScopeOwnerRef = useRef<symbol | null>(null);
   useLayoutEffect(() => {
     historyScopeOwnerRef.current = Symbol();
+    cacheAccessRefusedRef.current = false;
     rawHistoryCursorRef.current = null;
     olderRequestOwnerRef.current = null;
     loadingOlderRef.current = false;
@@ -458,6 +454,23 @@ export function useMessages(
     });
   }, [scheduleRecoveryReconcile]);
 
+  useEffect(() => {
+    const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
+    return offlineHistory.subscribe(retiredChatId => {
+      if (!sameAccount()) return;
+      if (retiredChatId === null || retiredChatId === chatId) {
+        offlineReadRef.current = null;
+        setOfflineSnapshot(null);
+      }
+      if (cacheAccessRefusedRef.current) return;
+      // Storage leases share an account generation: retiring B can refuse A's
+      // pending write. Re-read fresh boundaries, never reissue the retired rows.
+      if (!chatId || authSessionSource !== "sdk" || navigator.onLine === false) return;
+      clearedAtCache.evictChat(chatId);
+      scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
+    });
+  }, [chatId, userId, accountEpoch, authSessionSource, scheduleRecoveryReconcile]);
+
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
     if (authSessionSource === "cache") return;
@@ -549,6 +562,12 @@ export function useMessages(
         if (status === 401 || status === 403 || ["42501", "PGRST301", "PGRST302"].includes(error.code)) {
           offlineReadRef.current = null;
           setOfflineSnapshot(null);
+          // Persist the refusal across local AND remote retirement broadcasts.
+          // Ordinary reconnect/retry still revalidates; cache events cannot loop.
+          cacheAccessRefusedRef.current = true;
+          if (recoveryTimerRef.current !== null) clearTimeout(recoveryTimerRef.current);
+          recoveryTimerRef.current = null;
+          recoveryTimerDueRef.current = null;
           void offlineHistory.capture()?.invalidateChat(chatId);
           setMessages(chatId, []);
           setVerifiedChatId(null);
@@ -638,6 +657,7 @@ export function useMessages(
         setHasMoreOlder(nextHasMoreOlder);
         setOlderError(null);
         setHistoryError(null);
+        cacheAccessRefusedRef.current = false;
         verifiedAccountEpochRef.current = useAppStore.getState().accountEpoch;
         setVerifiedChatId(chatId);
         setVerifyingChatId(null);

@@ -1,5 +1,19 @@
 # LETSCUBE — handover
 
+**Current checkpoint, 2026-10-26:** Owner Codex coordinator, Task3.
+Source repairs now cover unrelated-chat cache-handle retirement and semantic
+microsecond clear/hide marks. Recovery rechecks server/privacy boundaries and
+coalesces bursts; a scope-local terminal access fence stops local and real
+two-document403 retry loops without blocking ordinary reconnect. New recovery13
+and timestamp8 cases/mutations pass, affected checks and typecheck pass; final
+web release verification is next. No native cause or full cold/save is claimed.
+Gate probes were UNAVAILABLE (R1 helper-path harness failure; R2 no debug socket),
+not product proof. All owned fixture/Auth/helper cleanup and stable normal guest
+pass14:33:19Z. Realme42 is guest; A06337 untouched; no rental or SQL migration.
+Stable Android40 stays published, candidates41/42 remain unpublished. Next:
+reviewed web rollout, then a corrected bounded native gate/cold acceptance before
+another APK publication. [Evidence and limits](operations/2026-10-26-history-write-clock.md#unrelated-retirement-and-semantic-clear-marks).
+
 **Current source checkpoint, 2026-10-26:** Owner Codex coordinator, Task3.
 Post-finally privacy-generation loss during disk hashing is reproduced: visible
 received row, refused cache write, no durable page. A central captured-owner

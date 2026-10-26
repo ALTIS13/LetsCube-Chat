@@ -318,17 +318,37 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct26 source continuation:** unrelated-chat retirement and equivalent clear
+timestamp spellings are independently RED/GREEN repaired. Bounded fresh recovery
+retains storage/privacy fences; terminal403 does not self-retry or bounce between
+real documents, and ordinary reconnect can restore access. New recovery13 and
+timestamp8 cases/mutations pass, plus affected checks/typecheck. Web rollout is
+next, not a native acceptance claim. Gate R1/R2 are UNAVAILABLE; all owned cleanup
+and stable normal guest pass14:33:19Z. Android Stable40 is unchanged. Full physical
+cold/save remains OPEN. [Current report](../../operations/2026-10-26-history-write-clock.md#unrelated-retirement-and-semantic-clear-marks).
+
+**Oct26 13:11Z actual checkpoint:** Candidate42 at6a677c28 still has no cold
+history page/pointer while binary media remains. One completed same42 passive
+producer-only diagnostic sees0 fixture/pointer payload digests,0 page/pointer put
+attempts,20 owner gets/4 put attempts and a present own row with valid field
+shapes. Neither source repair proves the native cause. All owned cleanup and
+separate normal guest restoration pass13:11:23Z. Stable40/shared web remain;
+candidates41/42 are NOT published, Realme42 is guest and A06337 untouched.
+Full physical cold/save stays OPEN. Next is bounded source-gate investigation,
+not another unchanged cold/original replay or guessed product patch.
+[Evidence and limits](../../operations/2026-10-26-history-write-clock.md#same42-producer-diagnostic).
+
 **Oct26 physical follow-up:** Realme40 actual warm original/viewer hash passes;
 cold newPID has binary bytes but no timeline row. All exact cleanup/normal guest
 passes. A legitimate concurrent-write clock race is independently reproduced and
-repaired in source (122 affected/typecheck); candidate41/review and full physical
-cold/save remain before closure. [Current work](../../operations/2026-10-26-history-write-clock.md).
+repaired in source (122 affected/typecheck). Later candidate/producer results
+above leave full physical cold/save open. [Current work](../../operations/2026-10-26-history-write-clock.md).
 
 Candidate41 is NOT published: actual cold still lacks the history page while
 binary bytes remain, with all exact cleanup/guest restoration settled. A second
 post-finally privacy/disk race is reproduced and repaired (10 focused cases,
-three mutants, typecheck; affected182+actual-helper harness9). Candidate42 and
-actual cold proof are next, not a claim that the native41 cause is fully proven.
+three mutants, typecheck; affected182+actual-helper harness9). Candidate42 also
+fails actual cold persistence; the source repairs do not prove the native cause.
 
 **Oct26 source delta:** cold default group history and explicit-channel scope
 selection are repaired with display-only discovery; service22/coupled9/affected197
@@ -375,10 +395,12 @@ metadata and positional intent; preserve original bytes and explicit downloads.
 - [ ] Execute the uncovered current physical large-original receive/open/native
   save/reopen/hash workflow with owned Auth/media and exact cleanup; patch only
   an observed failure, not an assumed missing auto-download implementation.
-  Oct25 cold new-PID case stopped at `open`; diagnose exact cached row/control
-  before another cohort. Warm baseline and release checks must not be replayed
-  merely to widen instrumentation. Final normal guest/network/helper and all
-  owned fixture cleanup pass; full cold/gallery journey remains OPEN.
+  Oct25 cold new-PID case stopped at `open`; Oct26 candidates41/42 still have no
+  durable history page despite retained binary media. The completed same42
+  producer-only witness does not close this workflow. Diagnose the source gate
+  before another cohort; do not replay warm/original/release baselines merely to
+  widen instrumentation. Final normal guest/network/helper and all owned fixture
+  cleanup pass; full cold/gallery journey remains OPEN.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
 - [x] Release bounded private media IDB and mounted photo/file/voice/viewer/settings

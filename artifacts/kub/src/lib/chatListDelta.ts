@@ -1,5 +1,6 @@
 import { isIncomingMessage } from "./messageActor.ts";
 import { sameData } from "./structuralSharing.ts";
+import { sameTimestampInstant } from "./readMarkWatermark.ts";
 
 /**
  * What one Realtime event changes in the chat list, worked out without asking
@@ -134,8 +135,7 @@ function timeOf(value: string | null | undefined): number {
  * for it.
  */
 function sameInstant(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return (a || null) === (b || null);
-  return timeOf(a) === timeOf(b);
+  return sameTimestampInstant(a, b);
 }
 
 /** The value already held when it is the same instant, so an unchanged field keeps its string. */
