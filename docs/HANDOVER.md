@@ -1,5 +1,15 @@
 # LETSCUBE — handover
 
+**Current checkpoint, 2026-10-26:** Owner Codex coordinator, Task3/Task8. Cold
+group history scope mismatch and selected-channel/root alias are reproduced and
+repaired in source without changing network queries or topic authority. Service22,
+coupled consumers9 (including4 omissions) and affected197 pass; typecheck passes.
+Recorder voice-to-video feedback5 and final1440/390/both-theme pixels pass; review
+is clean. Android0.1.39/build40 metadata is prepared; native checks/publication
+are pending. Stable39 remains unchanged. Next: finish those checks and release
+the bounded delta; physical cold-original/save is NOT inferred from source proof.
+[Implementation and limits](operations/2026-10-26-cold-history-scope.md).
+
 **Current QA checkpoint, 2026-10-25 15:44Z:** Owner Codex coordinator, Task3,
 runtime85025f59/Stable39. Actual ordinary-UI receiver login, mounted large-photo
 preview, explicit original open and matching original IDB/viewer SHA pass on

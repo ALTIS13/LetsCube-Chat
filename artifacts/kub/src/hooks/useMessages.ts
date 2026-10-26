@@ -164,6 +164,7 @@ export function useMessages(
   chatId: string | null,
   topicId: string | null | undefined = undefined,
   generalTopicIds: string[] = [],
+  options: { offlineDefaultScopeUnknown?: boolean; offlineRequestedTopicId?: string } = {},
 ) {
   const [loading, setLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -235,7 +236,11 @@ export function useMessages(
   const hookLifetimeRef = useRef<symbol | null>(null);
   const [offlineSnapshot, setOfflineSnapshot] = useState<(OfflineMessageSnapshot & { key: string; epoch: number }) | null>(null);
   const offlineReadRef = useRef<symbol | null>(null);
-  const offlineKey = JSON.stringify([chatId, topicId === undefined ? "all" : topicId, generalTopicIds]);
+  // A pending topology read still uses the existing conservative network scope.
+  // Disk display must instead honor the user's exact selected channel.
+  const offlineTopicId = options.offlineRequestedTopicId ?? topicId;
+  const offlineDefaultScopeUnknown = options.offlineDefaultScopeUnknown === true && offlineTopicId === null;
+  const offlineKey = JSON.stringify([chatId, offlineTopicId === undefined ? "all" : offlineTopicId, generalTopicIds, offlineDefaultScopeUnknown]);
 
   useEffect(() => {
     const ticket = Symbol();
@@ -244,7 +249,9 @@ export function useMessages(
     if (!chatId || !userId) return;
     const owner = offlineHistory.capture();
     const sameAccount = captureMessageAccount(userId, accountEpoch, hookLifetimeRef);
-    if (owner?.userId === userId) void owner.readMessages({ chatId, topicId, generalTopicIds }).then(saved => {
+    if (owner?.userId === userId) void (offlineDefaultScopeUnknown
+      ? owner.readDefaultMessages(chatId)
+      : owner.readMessages({ chatId, topicId: offlineTopicId, generalTopicIds })).then(saved => {
       if (saved && offlineReadRef.current === ticket && sameAccount() && verifiedChatIdRef.current !== chatId) {
         setOfflineSnapshot({ ...saved, key: offlineKey, epoch: accountEpoch });
       }

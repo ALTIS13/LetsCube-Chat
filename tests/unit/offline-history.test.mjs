@@ -102,6 +102,110 @@ test('scope is exact; corruption, pending and foreign-chat rows cannot restore',
   }
 });
 
+test('last verified default group history is discoverable while cold channel topology is unknown', async () => {
+  const f = setup();
+  const photo = { ...message(), type: 'image', media_bucket: 'media', media_path: 'synthetic/original.png',
+    media_metadata: { width: 1024, height: 1024, size_bytes: 3608655, uncompressed: true } };
+  assert.equal(await f.owner.writeMessages(scope, [photo], { hasMore: false }), true);
+  const cold = setup(f.storage);
+  assert.equal(await cold.owner.readMessages({ ...scope, topicId: null }), null, 'exact scope reads must stay exact');
+  assert.equal(typeof cold.owner.readDefaultMessages, 'function', 'cold group needs its verified display scope');
+  const restored = await cold.owner.readDefaultMessages(scope.chatId);
+  assert.equal(restored.messages[0].id, id(4));
+  assert.equal(restored.messages[0].type, 'image');
+  assert.equal(restored.messages[0].media_path, 'synthetic/original.png');
+  assert.equal(restored.messages[0].media_url, null);
+});
+
+test('explicit topic snapshots never replace the last verified default view', async () => {
+  const f = setup(), general = { ...scope, topicId: null, generalTopicIds: [id(30)] };
+  assert.equal(await f.owner.writeMessages(general, [{ ...message(), topic_id: id(30) }], { hasMore: true }), true);
+  assert.equal(await f.owner.writeMessages({ ...scope, topicId: id(31) }, [{ ...message(9), topic_id: id(31) }], { hasMore: false }), true);
+  assert.equal(typeof f.owner.readDefaultMessages, 'function');
+  const restored = await setup(f.storage).owner.readDefaultMessages(scope.chatId);
+  assert.equal(restored.messages[0].id, id(4));
+  assert.equal(restored.messages[0].topic_id, id(30));
+  assert.equal(restored.hasMore, true);
+  assert.equal(await f.owner.readMessages({ ...scope, topicId: id(32) }), null);
+});
+
+test('default display discovery retains account, session, backend and clear fences', async () => {
+  const f = setup(); await f.owner.writeMessages(scope, [message()], { hasMore: false });
+  assert.equal(typeof f.owner.readDefaultMessages, 'function');
+  assert.equal(await setup(f.storage, 'https://other.invalid').owner.readDefaultMessages(scope.chatId), null);
+  const old = f.owner;
+  await old.invalidateChat(scope.chatId);
+  assert.equal(await old.readDefaultMessages(scope.chatId), null);
+  assert.equal(await old.writeMessages(scope, [message()], { hasMore: false }), false);
+  assert.equal(await f.cache.capture().readDefaultMessages(scope.chatId), null);
+  f.cache.setIdentity({ ...identity, sessionId: id(60) });
+  assert.equal(await f.cache.capture().readDefaultMessages(scope.chatId), null);
+});
+
+test('a failed default page write cannot publish a pointer to an older different scope', async () => {
+  const storage = storageFixture(), f = setup(storage);
+  await f.owner.writeMessages(scope, [message()], { hasMore: false });
+  assert.equal(typeof f.owner.readDefaultMessages, 'function');
+  const write = storage.write;
+  storage.write = async (lease, key, ...rest) => key === `messages:${scope.chatId}:[null,[]]` ? false : write(lease, key, ...rest);
+  assert.equal(await f.owner.writeMessages({ ...scope, topicId: null }, [message(9)], { hasMore: false }), false);
+  const restored = await setup(storage).owner.readDefaultMessages(scope.chatId);
+  assert.equal(restored.messages[0].id, id(4));
+});
+
+test('default pointer ordering follows invocation even when the earlier scope write is held', async () => {
+  const storage = storageFixture(), f = setup(storage), write = storage.write;
+  let release, began;
+  const started = new Promise(resolve => { began = resolve; });
+  storage.write = async (lease, key, ...rest) => {
+    if (key === `messages:${scope.chatId}:["all",[]]`) {
+      await new Promise(resolve => { release = resolve; began(); });
+    }
+    return write(lease, key, ...rest);
+  };
+  const first = f.owner.writeMessages(scope, [message()], { hasMore: false });
+  await started;
+  const last = f.owner.writeMessages({ ...scope, topicId: null }, [message(9)], { hasMore: false });
+  release(); assert.equal(await first, true); assert.equal(await last, true);
+  assert.equal(typeof f.owner.readDefaultMessages, 'function');
+  assert.equal((await setup(storage).owner.readDefaultMessages(scope.chatId)).messages[0].id, id(9));
+});
+
+test('explicit channel cache identity does not depend on unknown unrelated general channels', async () => {
+  const f = setup(), channel = { ...scope, topicId: id(30), generalTopicIds: [id(31)] };
+  await f.owner.writeMessages(channel, [{ ...message(), topic_id: id(30) }], { hasMore: false });
+  const restored = await setup(f.storage).owner.readMessages({ ...channel, generalTopicIds: [] });
+  assert.equal(restored?.messages[0].id, id(4));
+  assert.equal(await f.owner.readMessages({ ...channel, topicId: id(32), generalTopicIds: [] }), null);
+});
+
+test('caller scope mutation after enqueue cannot redirect a default pointer', async () => {
+  const f = setup(), input = { ...scope };
+  const pending = f.owner.writeMessages(input, [message()], { hasMore: false });
+  input.chatId = id(60);
+  assert.equal(await pending, true);
+  assert.equal((await f.owner.readDefaultMessages(scope.chatId))?.messages[0].id, id(4));
+  assert.equal(await f.owner.readDefaultMessages(id(60)), null);
+});
+
+test('an exact legacy explicit-channel record still restores when its original metadata is known', async () => {
+  const f = setup(), channel = { ...scope, topicId: id(30), generalTopicIds: [id(31)] };
+  await f.owner.writeMessages(channel, [{ ...message(), topic_id: id(30) }], { hasMore: false });
+  const [entry, saved] = [...f.storage.records.entries()][0];
+  const [owner] = JSON.parse(entry);
+  const legacyKey = `messages:${scope.chatId}:` + JSON.stringify([id(30), [id(31)]]);
+  const envelope = JSON.parse(saved.payload);
+  envelope.key = legacyKey;
+  const payload = JSON.stringify(envelope);
+  f.storage.records.delete(entry);
+  f.storage.records.set(JSON.stringify([owner, legacyKey]), {
+    ...saved, payload, digest: createHash('sha256').update(payload).digest('hex'),
+  });
+  assert.equal((await setup(f.storage).owner.readMessages(channel))?.messages[0].id, id(4));
+  assert.equal(await f.owner.readMessages({ ...channel, generalTopicIds: [] }), null, 'never guess unknown legacy metadata');
+  assert.equal(await f.owner.readDefaultMessages(scope.chatId), null, 'legacy explicit content is not a default view');
+});
+
 test('fresh display projections keep attachment slots and replies without signed URLs', async () => {
   const f = setup();
   const media = { ...message(), type: 'image', media_bucket: 'chat-media', media_path: 'fixture/image.webp',

@@ -15,6 +15,8 @@ export interface OfflineHistoryOwner {
   readChats(): Promise<ChatWithLastMessage[] | null>;
   writeChats(value: ChatWithLastMessage[], isCurrent?: () => boolean): Promise<boolean>;
   readMessages(scope: OfflineMessageScope): Promise<OfflineMessageSnapshot | null>;
+  /** Last observed default view, for display while channel topology is unknown. */
+  readDefaultMessages(chatId: string): Promise<OfflineMessageSnapshot | null>;
   writeMessages(scope: OfflineMessageScope, rows: MessageWithSender[], page: { hasMore: boolean }, isCurrent?: () => boolean): Promise<boolean>;
   invalidateChat(chatId: string): Promise<void>;
   invalidate(): Promise<void>;
@@ -137,11 +139,24 @@ function chatProjection(value: unknown): ChatWithLastMessage {
   };
 }
 
-function messageKey(scope: OfflineMessageScope): string {
+function messageKey(scope: OfflineMessageScope, legacy = false): string {
   uuid(scope.chatId);
   if (scope.topicId) uuid(scope.topicId);
   return `messages:${scope.chatId}:` + JSON.stringify([scope.topicId === undefined ? "all" : scope.topicId,
-    [...new Set(scope.generalTopicIds.map(uuid))].sort()]);
+    typeof scope.topicId === "string" && !legacy ? [] : [...new Set(scope.generalTopicIds.map(uuid))].sort()]);
+}
+
+function defaultScopeKey(chatId: string): string {
+  return `messages:${uuid(chatId)}:default-scope`;
+}
+
+function defaultScope(value: unknown, chatId: string): OfflineMessageScope {
+  const row = record(value);
+  if (row.chatId !== uuid(chatId) || !["all", "root"].includes(String(row.mode))
+    || !Array.isArray(row.generalTopicIds) || row.generalTopicIds.length > 1000) throw Error("OFFLINE_DEFAULT_SCOPE");
+  const ids = row.generalTopicIds.map(uuid);
+  if (new Set(ids).size !== ids.length) throw Error("OFFLINE_DEFAULT_SCOPE");
+  return { chatId, topicId: row.mode === "all" ? undefined : null, generalTopicIds: ids };
 }
 
 function scopedMessage(value: unknown, scope: OfflineMessageScope): MessageWithSender {
@@ -165,6 +180,7 @@ export function createOfflineHistory({ storage, namespace, now = Date.now }: {
   let retirementFailed = false;
   const listeners = new Set<(chatId: string | null, broadcast: boolean) => void>();
   const writes = new Map<string, Promise<boolean>>();
+  const defaultWrites = new Map<string, Promise<boolean>>();
   const notify = (chatId: string | null, broadcast = true) => { for (const listener of listeners) listener(chatId, broadcast); };
   let pendingRetirement: Promise<unknown> = Promise.resolve();
   const partition = (id: AuthSessionIdentity) => `${namespace}|offline-v1|${id.sessionId ?? "legacy"}`;
@@ -214,6 +230,22 @@ export function createOfflineHistory({ storage, namespace, now = Date.now }: {
         .catch(() => { retirementFailed = true; });
       await pendingRetirement;
     };
+    const readMessages = async (scope: OfflineMessageScope): Promise<OfflineMessageSnapshot | null> => {
+      try {
+        const held = { ...scope, generalTopicIds: [...scope.generalTopicIds] };
+        const key = messageKey(held);
+        const project = (value: unknown) => {
+          const row = record(value);
+          if (!Array.isArray(row.messages) || row.messages.length > MAX_MESSAGES || typeof row.hasMore !== "boolean") throw Error("OFFLINE_MESSAGES");
+          return { messages: row.messages.map(item => scopedMessage(item, held)), hasMore: row.hasMore };
+        };
+        const snapshot = await read(key, project);
+        // Explicit topics do not depend on unrelated general-channel metadata.
+        // Retain exact legacy reads when that old metadata is still available.
+        const legacyKey = messageKey(held, true);
+        return snapshot ?? (legacyKey !== key ? await read(legacyKey, project) : null);
+      } catch { return null; }
+    };
     return {
       userId: owner.userId,
       readProfile: () => read("profile", value => {
@@ -226,16 +258,33 @@ export function createOfflineHistory({ storage, namespace, now = Date.now }: {
         if (!Array.isArray(value) || value.length > 1000) throw Error("OFFLINE_CHATS"); return value.map(chatProjection);
       }),
       writeChats: (value, current) => write("chats", () => value.slice(0, 1000).map(chatProjection), current),
-      readMessages: scope => {
-        try { return read(messageKey(scope), value => {
-          const row = record(value);
-          if (!Array.isArray(row.messages) || row.messages.length > MAX_MESSAGES || typeof row.hasMore !== "boolean") throw Error("OFFLINE_MESSAGES");
-          return { messages: row.messages.map(item => scopedMessage(item, scope)), hasMore: row.hasMore };
-        }); } catch { return Promise.resolve(null); }
+      readMessages,
+      readDefaultMessages: async chatId => {
+        try {
+          const scope = await read(defaultScopeKey(chatId), value => defaultScope(value, chatId));
+          return scope ? readMessages(scope) : null;
+        } catch { return null; }
       },
       writeMessages: (scope, rows, page, current) => {
-        try { return write(messageKey(scope), () => ({ messages: rows.slice(-MAX_MESSAGES).map(row => scopedMessage(row, scope)),
-          hasMore: page.hasMore || rows.length > MAX_MESSAGES }), current); } catch { return Promise.resolve(false); }
+        try {
+          const key = messageKey(scope);
+          const value = { messages: rows.slice(-MAX_MESSAGES).map(row => scopedMessage(row, scope)),
+            hasMore: page.hasMore || rows.length > MAX_MESSAGES };
+          if (typeof scope.topicId === "string") return write(key, () => value, current);
+          const index = { chatId: scope.chatId, mode: scope.topicId === undefined ? "all" : "root",
+            generalTopicIds: [...new Set(scope.generalTopicIds.map(uuid))].sort() };
+          const queueKey = JSON.stringify([ns, owner.userId, scope.chatId]);
+          // Publish only a committed page. Default-scope changes share FIFO order;
+          // an older all/root writer must not replace the newer display pointer.
+          const task = (defaultWrites.get(queueKey) ?? Promise.resolve(false)).then(async () => {
+            if (!active() || (current && !current())) return false;
+            if (!await write(key, () => value, current)) return false;
+            return write(defaultScopeKey(index.chatId), () => index, current);
+          }).catch(() => false);
+          defaultWrites.set(queueKey, task);
+          void task.then(() => { if (defaultWrites.get(queueKey) === task) defaultWrites.delete(queueKey); });
+          return task;
+        } catch { return Promise.resolve(false); }
       },
       invalidateChat: async chatId => {
         if (!active()) return;

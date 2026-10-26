@@ -527,6 +527,9 @@ export function MessageInput({
   }, []);
 
   const showRecorderModeFeedback = useCallback((mode: "voice" | "video") => {
+    if (shortHintTimerRef.current) clearTimeout(shortHintTimerRef.current);
+    shortHintTimerRef.current = null;
+    setShortHint(null);
     if (modeFeedbackTimerRef.current) clearTimeout(modeFeedbackTimerRef.current);
     setModeFeedback(mode);
     modeFeedbackTimerRef.current = setTimeout(() => setModeFeedback(null), feedbackDuration("info"));

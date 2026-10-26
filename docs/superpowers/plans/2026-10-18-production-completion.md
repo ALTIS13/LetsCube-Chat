@@ -318,6 +318,12 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct26 source delta:** cold default group history and explicit-channel scope
+selection are repaired with display-only discovery; service22/coupled9/affected197
+and typecheck pass. Review/pixels pass; native candidate40 acceptance remains before
+release. Existing physical cold/save limit is unchanged.
+[Evidence and boundaries](../../operations/2026-10-26-cold-history-scope.md).
+
 **Oct25 gallery delta:** local Android10+ original image/video gallery export is
 RELEASED at85025f59/shared-web7d22d125aa0f30b1 and Stable0.1.38/build39. Actual
 Realme WebView/native/MediaStore offline PNG/WebM bytes/hash/MIME/size/decode,
@@ -469,6 +475,12 @@ participant lifecycle and group-call state; no duplicate room/call on reconnect.
   only accepted delivery paths.
 
 ## Task8: Interface and Motion (#18,30--31,34,93)
+
+**Oct26 bounded delta:** stale voice short-press text after switching to video
+is reproduced and repaired; feedback5 and final1440/390/both-theme pixels pass.
+Publication pending. It does
+not close the wider native motion backlog.
+[Current repair](../../operations/2026-10-26-cold-history-scope.md).
 
 **State:** IN PROGRESS for the wider UI stream; D-370 itself is FIXED/RELEASED.
 Shared-DOM readiness/omission tests, both engines/themes, actual installed-PWA

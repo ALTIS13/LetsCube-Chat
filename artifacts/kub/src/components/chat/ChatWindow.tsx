@@ -243,7 +243,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage, clearChatForMe,
     loadOlderMessages, ensureMessageLoaded, refetch: refetchMessages,
-  } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
+  } = useMessages(chatId, messageTopicId, messageGeneralTopicIds, {
+    offlineDefaultScopeUnknown: topicScopeUnknown && selectedTopicId === null,
+    offlineRequestedTopicId: topicScopeUnknown && selectedTopicId !== null ? selectedTopicId : undefined,
+  });
 
   /**
    * The bot this chat holds, if it holds one (D-126, D-127).
