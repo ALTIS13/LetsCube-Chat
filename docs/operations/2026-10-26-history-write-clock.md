@@ -266,3 +266,12 @@ Final actual web build emits62bfb74614f37c48 and built in12.62s; public-role sca
 finds no service_role token. Before/local source markers pass0/0/0/0 to1/1/1/1
 for clock/privacy/recovery/microsecond equality. These markers are deployment
 custody controls, not substitutes for the behavioral cases above.
+
+Shared web is RELEASED atb895ac44bfe5ff5e2711f15d9883a07461f62d6f. Actual sole
+healthy image, public/container index/SW/JS hashes and four bidirectional markers
+pass14:59:10Z; running web build is1a033713e0aa2780. Public guest startup at1440/
+390 in both themes passes4 cases with zero page errors, no screenshots/recording
+or Auth/mutation requests. Android catalog remains0.1.39/build40/mandatory=false;
+no41/42 release, new native cold acceptance or authenticated production cache
+acceptance is inferred. Git main and the implementation branch contain the
+reviewed source; all101 aliases across three outgoing commit trees resolved.

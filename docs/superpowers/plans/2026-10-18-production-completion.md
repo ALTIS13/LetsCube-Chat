@@ -322,8 +322,10 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 timestamp spellings are independently RED/GREEN repaired. Bounded fresh recovery
 retains storage/privacy fences; terminal403 does not self-retry or bounce between
 real documents, and ordinary reconnect can restore access. New recovery13 and
-timestamp8 cases/mutations pass, plus affected checks/typecheck. Web rollout is
-next, not a native acceptance claim. Gate R1/R2 are UNAVAILABLE; all owned cleanup
+timestamp8 cases/mutations pass, plus affected checks/typecheck. Shared web is
+RELEASED atb895ac44/build1a033713e0aa2780; actual healthy image/public-container
+parity/four before-after markers pass14:59Z, public guest startup4 passes.
+This is not a native acceptance claim. Gate R1/R2 are UNAVAILABLE; all owned cleanup
 and stable normal guest pass14:33:19Z. Android Stable40 is unchanged. Full physical
 cold/save remains OPEN. [Current report](../../operations/2026-10-26-history-write-clock.md#unrelated-retirement-and-semantic-clear-marks).
 

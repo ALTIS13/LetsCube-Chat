@@ -1,18 +1,22 @@
 # LETSCUBE — handover
 
-**Current checkpoint, 2026-10-26:** Owner Codex coordinator, Task3.
+**Current checkpoint, 2026-10-26 14:59Z:** Owner Codex coordinator, Task3.
 Source repairs now cover unrelated-chat cache-handle retirement and semantic
 microsecond clear/hide marks. Recovery rechecks server/privacy boundaries and
 coalesces bursts; a scope-local terminal access fence stops local and real
 two-document403 retry loops without blocking ordinary reconnect. New recovery13
-and timestamp8 cases/mutations pass, affected checks and typecheck pass; final
-web release verification is next. No native cause or full cold/save is claimed.
+and timestamp8 cases/mutations pass, affected checks and typecheck pass. These
+repairs plus clock/privacy fixes are RELEASED on shared web atb895ac44/build
+1a033713e0aa2780: healthy sole image, public/container parity and all four
+before/after markers pass14:59Z. Four public guest startup geometry/theme cases
+pass without JS errors or captures. No native cause/full cold/save is claimed.
 Gate probes were UNAVAILABLE (R1 helper-path harness failure; R2 no debug socket),
 not product proof. All owned fixture/Auth/helper cleanup and stable normal guest
 pass14:33:19Z. Realme42 is guest; A06337 untouched; no rental or SQL migration.
-Stable Android40 stays published, candidates41/42 remain unpublished. Next:
-reviewed web rollout, then a corrected bounded native gate/cold acceptance before
-another APK publication. [Evidence and limits](operations/2026-10-26-history-write-clock.md#unrelated-retirement-and-semantic-clear-marks).
+Stable Android40 stays published (fresh catalog0.1.39/build40/mandatory=false),
+candidates41/42 remain unpublished. Next: corrected bounded native startup/gate
+diagnosis and actual cold acceptance of the next candidate before APK publication;
+do not repeat unchanged warm/provider baselines. [Evidence and limits](operations/2026-10-26-history-write-clock.md#unrelated-retirement-and-semantic-clear-marks).
 
 **Current source checkpoint, 2026-10-26:** Owner Codex coordinator, Task3.
 Post-finally privacy-generation loss during disk hashing is reproduced: visible
