@@ -324,6 +324,12 @@ passes. A legitimate concurrent-write clock race is independently reproduced and
 repaired in source (122 affected/typecheck); candidate41/review and full physical
 cold/save remain before closure. [Current work](../../operations/2026-10-26-history-write-clock.md).
 
+Candidate41 is NOT published: actual cold still lacks the history page while
+binary bytes remain, with all exact cleanup/guest restoration settled. A second
+post-finally privacy/disk race is reproduced and repaired (10 focused cases,
+three mutants, typecheck; affected182+actual-helper harness9). Candidate42 and
+actual cold proof are next, not a claim that the native41 cause is fully proven.
+
 **Oct26 source delta:** cold default group history and explicit-channel scope
 selection are repaired with display-only discovery; service22/coupled9/affected197
 and typecheck pass. Review/pixels, original signer/Firebase/parity, retained-data

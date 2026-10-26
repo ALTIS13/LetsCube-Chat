@@ -84,3 +84,63 @@ Next: build the next immutable candidate0.1.40/build41, retain
 package/signer/data, and exercise the missing physical cold/save criterion.
 Only observed, cleaned runtime evidence can close that criterion. Reuse valid
 baseline coverage and preserve all original refused receipts.
+
+## Candidate41 Physical Follow-Up
+
+Candidate0.1.40/build41 atf010036b is built with the original signer, Firebase4,
+QAfalse and APK/AAB/source parity. Realme40->41 retains UID/data/firstInstall;
+guest/fatal0 passes. Full retained APK is7,834,625B/SHA256
+dd3238ecb2acbed40b7ef9abee06e28850ac70aa0e35585c92417e4a402d6051.
+This candidate is NOT published; Stable40 and the shared web remain unchanged.
+
+The single new owned cohort07a8847b finishes UNAVAILABLE at11:52Z. An exact
+fixture-chat-prefix read, calibrated with the actual service/IndexedDB, now
+separates owner/page/message from the default pointer. WarmPID19528 renders the
+row and opens/hash-checks the original, but page/message/pointer are absent.
+ColdPID24073 again has no row/page/message/pointer, while owner and both binary
+cache representations exist. This confirms the missing history persistence
+boundary; the clock repair alone does not close it. Do not claim this physical
+journey passes, publish41, or replay another unchanged cohort.
+
+Network/helper/normal-return cleanup, Auth41 new-SID/binding retirement with old
+sessions retained and exact API rows/media/purge cleanup all pass. A separate
+post-logout guest witness refuses (so full PASS refuses too). One known normal
+menu/exit repeat restores a stable guest at11:53:29Z. No storage/app-data clear,
+personal-content capture, SQL mutation or A063 change is performed.
+
+Current action: diagnose the actual hook-to-disk admission/projection boundary
+before another native candidate. The reviewed clock fix remains committed,
+not rolled back or mislabeled as the sole cause. Runtime records are private
+under gallery-auth-native41-20261026/LIVE-RUN.md; all owned processes/fixtures are
+settled. A read-only two-QA-profile shape check returns only types/lengths/booleans.
+
+## Post-Finally Privacy Publication Gap
+
+A real-hook/real-service/IndexedDB test reproduces a second source mechanism.
+The successful REST head has already run its finally and renders the received
+row. Its optional disk publication is still hashing when the first hides-channel
+join changes the privacy generation. The unchanged ticket correctly refuses the
+write, but nobody observes false. The300ms follow-up cannot use a pre-join hidden
+verdict as live proof, so no saved page/default pointer follows. RED observes one
+visible row, write=false, one hidden read and no durable default snapshot.
+
+The central persistReceivedHistory helper retains the caller-captured owner and
+scope/privacy predicates for all three publishers: head, older page and delayed
+live snapshot. Only a false write with a still-current scope/account, an expired
+privacy ticket and an online device schedules the existing bounded recovery.
+That recovery performs a fresh REST/hidden-ID read before publishing. Storage
+failure alone, offline, unmount or account retirement cannot request recovery;
+no hidden verdict, generation fence or clear retirement is bypassed.
+
+Final focused cases10/10 pass, including three killed mutations. The causal
+case now has a saved snapshot and two actual hidden reads. Typecheck passes.
+The affected191-case run found three AST harness failures because it extracted
+fetchMessages without its new actual helper; loading that actual callback, not
+a stub, repairs the harness and its focused9/9 passes. Other182 cases pass in
+that run. No visual layout or SQL change is involved.
+
+Read-only actual two-QA-profile types/timestamps/UUIDs and client-column defaults
+show no proven projection mismatch. Synthetic malformed-profile refusal is not
+claimed as the native cause. Neither source race alone proves the exact native41
+timing; candidate0.1.41/build42 and actual cold proof remain next. Candidate41
+was never published; catalog prior/rollback stays40, while Realme currently has41.

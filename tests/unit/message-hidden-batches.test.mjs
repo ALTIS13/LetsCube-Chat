@@ -84,6 +84,8 @@ function actual(text = source) {
     const captureHistoryRead = ${callback('captureHistoryRead')};
     const rememberRawHistoryBoundary = ${callback('rememberRawHistoryBoundary')};
     const scheduleRecoveryReconcile = ${callback('scheduleRecoveryReconcile')};
+    ${pick.has(n => ts.isVariableDeclaration(n) && n.name.getText() === 'persistReceivedHistory')
+      ? `const persistReceivedHistory = ${callback('persistReceivedHistory')};` : ''}
     globalThis.commitHistoryScope = ${scopeEffect};
     globalThis.commitRecoveryScope = ${recoveryEffect};` : '';
   const helpers = ['fetchHiddenMessageIdSet', 'captureMessageAccount', 'messageBelongsToTopic',

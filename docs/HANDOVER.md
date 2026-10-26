@@ -1,5 +1,26 @@
 # LETSCUBE — handover
 
+**Current source checkpoint, 2026-10-26:** Owner Codex coordinator, Task3.
+Post-finally privacy-generation loss during disk hashing is reproduced: visible
+received row, refused cache write, no durable page. A central captured-owner
+publisher now requests fresh bounded privacy reconciliation only for that exact
+online/current-scope refusal. Final10 cases/three mutants/typecheck pass; affected
+182 plus repaired actual-helper AST harness9 pass. No guessed projection patch.
+Next: immutable0.1.41/build42 candidate and actual cold proof. Candidate41 failed
+and was NOT published; Stable/rollback remains40, Realme currently41/normal guest.
+All owned41 resources settled; A06337 untouched. No SQL or PC network changes.
+[Cause, verification and physical limits](operations/2026-10-26-history-write-clock.md#post-finally-privacy-publication-gap).
+
+**Current checkpoint, 2026-10-26 11:53Z:** Owner Codex coordinator, Task3.
+Candidate0.1.40/build41 atf010036b is built/Realme-upgraded with signer/Firebase/
+parity/data retention passing, NOT published. Its actual cold cohort still loses
+the history row: exact owner exists, page/message/pointer absent, binary preview/
+original retained. Clock repair alone is insufficient. All owned Auth/API/phone
+cleanup plus bounded normal-guest restoration pass. Stable40/shared web unchanged.
+Next: actual hook-to-disk admission/projection diagnosis before any new cohort.
+No SQL mutation, personal capture, PC network or A063 change.
+[Current evidence and limits](operations/2026-10-26-history-write-clock.md#candidate41-physical-follow-up).
+
 **Current checkpoint, 2026-10-26 11:19Z:** Owner Codex coordinator, Task3.
 Actual Realme40 warm original/viewer hash passes; cold newPID loses the received
 timeline row while preview/original binary keys remain. Full cold/save is still

@@ -52,7 +52,7 @@ import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import { clearedAtCache } from "@/lib/clearedAtCache";
 import { hiddenMessagesLive } from "@/lib/hiddenMessagesLive";
 import { offlineHistory } from "@/lib/historyCache/appOfflineHistory";
-import type { OfflineMessageSnapshot } from "@/lib/historyCache/offline";
+import type { OfflineHistoryOwner, OfflineMessageScope, OfflineMessageSnapshot } from "@/lib/historyCache/offline";
 import {
   DELETE_FOR_EVERYONE_RPC,
   deletionBatches,
@@ -446,6 +446,18 @@ export function useMessages(
     recoveryTimerDueRef.current = dueAt;
   }, []);
 
+  const persistReceivedHistory = useCallback((owner: OfflineHistoryOwner | null, scope: OfflineMessageScope,
+    rows: MessageWithSender[], hasMore: boolean, isCurrent: () => boolean, privacyIsCurrent: () => boolean) => {
+    // Keep the caller's owner: reacquiring after a clear could revive retired rows.
+    void owner?.writeMessages(scope, rows, { hasMore }, () => isCurrent() && privacyIsCurrent()).then(saved => {
+      // The hides channel may join after the REST finally, while disk hashing
+      // yields. Only a fresh privacy read can replace that refused publication.
+      if (!saved && isCurrent() && !privacyIsCurrent() && navigator.onLine !== false) {
+        scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
+      }
+    });
+  }, [scheduleRecoveryReconcile]);
+
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
     if (authSessionSource === "cache") return;
@@ -633,9 +645,9 @@ export function useMessages(
         setOfflineSnapshot(null);
         // Disk is optional and never holds up the server answer. Only the
         // privacy-filtered received projection is persisted, never the outbox.
-        void offlineHistory.capture()?.writeMessages({ chatId, topicId, generalTopicIds },
-          reconciledMessages.filter(message => !isLocalOnlyMessage(message)), { hasMore: nextHasMoreOlder },
-          () => isCurrent() && privacyReadIsCurrent());
+        persistReceivedHistory(offlineHistory.capture(), { chatId, topicId, generalTopicIds },
+          reconciledMessages.filter(message => !isLocalOnlyMessage(message)), nextHasMoreOlder,
+          isCurrent, privacyReadIsCurrent);
         fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
         historyVerificationRef.current = committedMessages && sameData(committedMessages, reconciledMessages) ? {
           chatId, topicId, generalTopicIds,
@@ -667,7 +679,7 @@ export function useMessages(
         if (!privacyReadIsCurrent()) scheduleRecoveryReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
       }
     }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch, authSessionSource, captureHistoryRead, rememberRawHistoryBoundary, scheduleRecoveryReconcile]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat, userId, accountEpoch, authSessionSource, captureHistoryRead, rememberRawHistoryBoundary, scheduleRecoveryReconcile, persistReceivedHistory]);
   // The latest read, for the channel below. The channel is the chat's, not the
   // scope's — its filter is the chat and its handlers read the scope from refs —
   // so a scope that resolves or changes must not leave and rejoin it: every
@@ -919,8 +931,8 @@ export function useMessages(
       rememberRawHistoryBoundary(fetched, localClearedAt, isCurrent);
       const merged = mergeMessagesById(visibleFetched, visibleExisting);
       setMessages(activeChatId, merged);
-      void offlineHistory.capture()?.writeMessages({ chatId: activeChatId, topicId: activeTopicId, generalTopicIds: activeGeneralTopicIds },
-        merged.filter(message => !isLocalOnlyMessage(message)), { hasMore: nextHasMoreOlder }, () => isCurrent() && privacyReadIsCurrent());
+      persistReceivedHistory(offlineHistory.capture(), { chatId: activeChatId, topicId: activeTopicId, generalTopicIds: activeGeneralTopicIds },
+        merged.filter(message => !isLocalOnlyMessage(message)), nextHasMoreOlder, isCurrent, privacyReadIsCurrent);
       hasMoreOlderRef.current = nextHasMoreOlder;
       setHasMoreOlder(nextHasMoreOlder);
       return { loaded: visibleFetched.length };
@@ -938,7 +950,7 @@ export function useMessages(
         setLoadingOlder(false);
       }
     }
-  }, [rememberHiddenMessageIds, setMessages, supabase, captureHistoryRead, rememberRawHistoryBoundary]);
+  }, [rememberHiddenMessageIds, setMessages, supabase, captureHistoryRead, rememberRawHistoryBoundary, persistReceivedHistory]);
 
   const fetchMessageById = useCallback(async (messageId: string): Promise<EnsureMessageLoadedResult> => {
     const activeChatId = chatIdRef.current;
@@ -2060,11 +2072,12 @@ export function useMessages(
       messageBelongsToTopic(message, topicId, generalTopicIds));
     if (!hiddenMessagesLive.canSkip(chatId, getMessageAndReplyIds(received))) return;
     const timer = setTimeout(() => {
-      void owner?.writeMessages({ chatId, topicId, generalTopicIds }, received, { hasMore: hasMoreOlder },
-        () => sameAccount() && privacyCurrent());
+      persistReceivedHistory(owner, { chatId, topicId, generalTopicIds }, received, hasMoreOlder,
+        () => sameAccount() && chatIdRef.current === chatId && topicIdRef.current === topicId && generalTopicIdsRef.current === generalTopicIds,
+        privacyCurrent);
     }, 300);
     return () => clearTimeout(timer);
-  }, [boundaryVerified, chatId, userId, accountEpoch, chatMessages, topicId, generalTopicIds, hasMoreOlder]);
+  }, [boundaryVerified, chatId, userId, accountEpoch, chatMessages, topicId, generalTopicIds, hasMoreOlder, persistReceivedHistory]);
 
   useEffect(() => {
     const retire = (event: Event) => {
