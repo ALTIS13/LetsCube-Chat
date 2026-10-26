@@ -318,6 +318,12 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct26 physical follow-up:** Realme40 actual warm original/viewer hash passes;
+cold newPID has binary bytes but no timeline row. All exact cleanup/normal guest
+passes. A legitimate concurrent-write clock race is independently reproduced and
+repaired in source (122 affected/typecheck); candidate41/review and full physical
+cold/save remain before closure. [Current work](../../operations/2026-10-26-history-write-clock.md).
+
 **Oct26 source delta:** cold default group history and explicit-channel scope
 selection are repaired with display-only discovery; service22/coupled9/affected197
 and typecheck pass. Review/pixels, original signer/Firebase/parity, retained-data

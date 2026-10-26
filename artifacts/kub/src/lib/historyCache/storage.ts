@@ -13,7 +13,7 @@ export interface HistoryCacheValue {
 export interface HistoryCacheStorage {
   capture(namespace: string, ownerId: string): Promise<HistoryCacheLease>;
   read(lease: HistoryCacheLease, scope: string, now?: number): Promise<HistoryCacheValue | null>;
-  write(lease: HistoryCacheLease, scope: string, value: Pick<HistoryCacheValue, "payload" | "digest">, now: number): Promise<boolean>;
+  write(lease: HistoryCacheLease, scope: string, value: Pick<HistoryCacheValue, "payload" | "digest">, now: number | (() => number)): Promise<boolean>;
   invalidate(namespace: string, ownerId: string, scope?: string): Promise<void>;
   invalidatePrefix?(namespace: string, ownerId: string, prefix: string): Promise<void>;
 }
@@ -182,25 +182,33 @@ export function browserHistoryCacheStorage(factory: IDBFactory | undefined = glo
     },
 
     async write(lease, scope, value, now) {
-      lease = snapshotLease(lease, scope, now);
+      if (typeof now !== "number" && typeof now !== "function") throw invalid();
+      const clock = typeof now === "function" ? now : null;
+      lease = snapshotLease(lease, scope, typeof now === "number" ? now : 0);
       if (!value || typeof value.payload !== "string" || typeof value.digest !== "string"
         || !/^[0-9a-f]{64}$/i.test(value.digest)) return false;
       const owner = ownerKey(lease.namespace, lease.ownerId);
       const row: ScopeRow = { key: scopeKey(lease.namespace, lease.ownerId, scope), ownerKey: owner,
-        scope, payload: value.payload, digest: value.digest.toLowerCase(), verifiedAt: now };
+        scope, payload: value.payload, digest: value.digest.toLowerCase(), verifiedAt: typeof now === "number" ? now : 0 };
       const overhead = rowBytes({ key: owner, generation: lease.generation });
       if (rowBytes(row) + overhead > MAX_BYTES || !await matchesDigest(row.payload, row.digest)) return false;
       return transact<boolean>("readwrite", (store, request, set) => {
         request(store.get(owner), (ownerRow: OwnerRow | undefined) => {
           if (!ownerRow || generation(ownerRow) !== lease.generation) { set(false); return; }
+          // The exclusive transaction is active now. Another document may have
+          // committed while digest/lock acquisition awaited; that is not rollback.
+          if (clock) row.verifiedAt = clock();
+          snapshotLease(lease, scope, row.verifiedAt);
+          if (rowBytes(row) + overhead > MAX_BYTES) { set(false); return; }
+          const writeNow = row.verifiedAt;
           request(ownerScopeRows(store, lease.namespace, lease.ownerId), (rows: ScopeRow[]) => {
             const retained: ScopeRow[] = [];
             const prune: string[] = [];
             for (const item of rows) {
-              if (!canonicalScopeRow(item, lease.namespace, lease.ownerId) || now - item.verifiedAt >= TTL_MS) {
+              if (!canonicalScopeRow(item, lease.namespace, lease.ownerId) || writeNow - item.verifiedAt >= TTL_MS) {
                 prune.push(item.key); continue;
               }
-              if (item.verifiedAt > now) { set(false); return; }
+              if (item.verifiedAt > writeNow) { set(false); return; }
               if (item.key !== row.key) retained.push(item);
             }
             for (const key of prune) store.delete(key);

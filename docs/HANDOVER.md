@@ -1,5 +1,17 @@
 # LETSCUBE — handover
 
+**Current checkpoint, 2026-10-26 11:19Z:** Owner Codex coordinator, Task3.
+Actual Realme40 warm original/viewer hash passes; cold newPID loses the received
+timeline row while preview/original binary keys remain. Full cold/save is still
+UNAVAILABLE. Exact Auth/API/phone cleanup and final stable normal guest pass.
+A separate real two-document storage clock race is reproduced and repaired in
+source:122 affected tests/typecheck and16 final clock/boundary cases pass;
+independent review is addressed. Candidate0.1.40/build41 is next.
+Do not equate source cause with proof of the specific phone outcome. Stable40
+and shared web remain unchanged. Next: candidate/device
+acceptance, not another unchanged seed. No SQL or PC network change.
+[Actual findings, cleanup and current repair](operations/2026-10-26-history-write-clock.md).
+
 **Current checkpoint, 2026-10-26 10:24Z:** Owner Codex coordinator, Task3/Task8.
 Cold group history scope and selected-channel/root alias repairs plus recorder
 voice-to-video feedback are RELEASED at97e07de8/shared-web03bc17207bc9d508 and

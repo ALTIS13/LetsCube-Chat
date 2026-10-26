@@ -216,7 +216,7 @@ export function createOfflineHistory({ storage, namespace, now = Date.now }: {
           if (!active() || !isCurrent()) return false;
           const held = await lease(); if (!active() || !isCurrent()) return false;
           const hash = await digest(payload); if (!active() || !isCurrent()) return false;
-          return await storage.write(held, key, { payload, digest: hash }, now()) && active() && isCurrent();
+          return await storage.write(held, key, { payload, digest: hash }, now) && active() && isCurrent();
         }).catch(() => false);
         writes.set(queueKey, task);
         try { return await task; } finally { if (writes.get(queueKey) === task) writes.delete(queueKey); }
