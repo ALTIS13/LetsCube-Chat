@@ -326,6 +326,15 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct28 Stable45 follow-up:** edited video is excluded from both repeat encoding
+and the governing quality row. Actual caller/File/DTO/retry7, mounted4 inspected
+390/1440/both themes and review pass. This bounded correction is RELEASED on
+shared web83665f6c/build7665504522c1be96 and Android0.1.44/build45. Original
+signer/Firebase/parity, Realme44->45 retention/full hash and complete public APK
+pass. Notification after-dispatch/both-renderer and stale catalog recovery are
+separate included slices; AE's actual updater reaches the OS Play Protect scan,
+not full installation acceptance. [Exact scope and remaining work](../../operations/2026-10-28-stable45-followup.md).
+
 **Oct28 physical release:** the authenticated large-photo receive/open/new-PID
 offline history/original/native-save/after-save-cache/hash journey is accepted
 on RealmeAndroid15 and RELEASED in Stable0.1.42/build43. All owned cleanup and
@@ -420,6 +429,9 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   workflows remain below, rather than being inferred from this photo case.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
+- [x] Release the bounded baked-video double-encode and misleading quality count/
+  slider repair with actual caller/retry bytes and mounted row evidence (Stable45).
+  This does not close the wider media/send/editor/Apple-audio workflow matrix.
 - [x] Release bounded private media IDB and mounted photo/file/voice/viewer/settings
   integration, with durable privacy retirement, SHA-256 integrity, separate
   preview/original representations and actual browser/native engine cold proof.

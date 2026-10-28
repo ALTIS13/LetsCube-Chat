@@ -2,7 +2,20 @@
 
 Status: active production-hardening tracker, updated 2026-10-28.
 
-**Current release, Oct28 19:33Z:** AndroidStable0.1.43/build44, mandatory=false,
+**Current release, Oct28 20:36Z:** AndroidStable0.1.44/build45, mandatory=false,
+complete public APK SHA/length verified; rollback44 retained. Stale-ready catalog
+recovery and baked-video/slider correction are included. Exact post-dispatch
+notification close preserves newer cards and task/invite cleanup through both
+renderers. Source/native/UI/pixel/review and original signer/Firebase/parity pass.
+Realme44->45 retains data, guest/fatal0 and full installed hash. Sole healthy
+web83665f6c/build7665504522c1be96 and worker, public/container hashes, old/new
+protocol markers and backed-up mounted Edge one-file switch/health pass. AE's
+actual Download/ready/permission/system Update reaches a pending Play Protect
+scan; full installation is UNAVAILABLE, not accepted. Helpers removed, actual44
+normal return/identity/full hash/fatal0 pass. No SQL, new provider/Apple or wider
+tester#85/media closure. [Release and exact limits](operations/2026-10-28-stable45-followup.md).
+
+**Prior release, Oct28 19:33Z:** AndroidStable0.1.43/build44, mandatory=false,
 full public APK hash verified; previous43 retained. INONE/API33's modern archive
 metadata collection defect is reproduced and repaired without relaxing signer
 checks. AE40->44 manual/data-retaining bootstrap and actual fixed native identity/

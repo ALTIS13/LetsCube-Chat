@@ -1,5 +1,29 @@
 # QA Results
 
+## 2026-10-28 - Stable45 Follow-Up
+
+Stale native ready/catalog recovery10 and affected105 pass; final UI callback/
+copy31 plus actual status pixels4 pass. Exact dispatched notification close222
+passes with both renderers/task/invite positives, privacy and loaded mutants.
+Edited-video caller/File/DTO/retry7 plus mounted390/1440/both-theme4 pass;
+coordinator inspected all four pixels and reran final24+7=31. Typechecks/API build,
+syntax, own-commit imports31, diff and independent reviews pass. A test-only EOF
+cleanup supersedes the first local candidate; final83665f6c is rebuilt and
+custody-checked, original signer/Firebase4/QAfalse/APK-AAB web/config/DEX parity.
+Realme44->45 retention/guest/fatal0/full installed hash passes. Public Stable45
+whole APK SHA/length passes20:36:52Z, mandatory=false/rollback44 retained. Exact
+healthy web/build7665504522c1be96 and worker, public/container hashes/old-new guard
+markers, backed-up one-file Edge switch/mounted SHA/health pass. No SQL change.
+
+AE first attempt refuses before clicking, cause unclassified. Fresh actual
+catalog available admits the second: Download/ready/source permission/system
+Update reaches Play Protect scan. Normal Check does not finish within420 samples;
+full44->45 is UNAVAILABLE, not a success. No Google protection/phone VPN change
+or target ADB installation. Exact helper cleanup and corrected separate actual44
+hash/identity/ordinary foreground/fatal0 readback pass20:54Z. Filename/focus-oracle
+refusals are retained, not product regressions. No new FCM, Apple, authenticated
+send/codec or all-tester closure. [Evidence and limits](operations/2026-10-28-stable45-followup.md).
+
 ## 2026-10-28 - OEM Updater Stable44
 
 Actual INONE/API33 old40 normal download of43 failsSIGNER. Whole public43

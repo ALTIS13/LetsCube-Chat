@@ -1,14 +1,20 @@
 # LETSCUBE — handover
 
-**Current execution checkpoint, 2026-10-28:** Owner Codex coordinator. Source
-continuation afterStable44: stale ready-catalog recovery10/10, affected105/105,
-final download/copy UI31/31 and390/1440/both-theme pixels4/4 pass. Edited-video
-quality/caller/DTO correction is under integration; notification after-dispatch
-guard is being completed with exact task/invite identity across both renderers.
-No next version is yet published. Next: finish those reviewed slices, freeze45,
-build/sign/Firebase/retention checks, then genuine AE44->45 ordinary updater.
-Do not substitute another manual bootstrap or repeat accepted cold-media QA.
-[Current recovery](operations/2026-10-28-stale-update-recovery.md).
+**Current execution checkpoint, 2026-10-28:** Owner Codex coordinator. Stable
+Android0.1.44/build45 is published, mandatory=false/full public APK hash verified
+20:36:52Z, rollback44 retained. Reviewed stale catalog recovery, exact post-dispatch
+notification close through both renderers and baked-video quality correction are
+included. Original signer/Firebase4/parity, Realme44->45 retention/guest/fatal0,
+shared-web83665f6c/build7665504522c1be96, exact healthy worker and backed-up
+one-file Edge switch/mounted hash/health pass. AE's genuine Download/ready/source
+permission/system Update reaches Play Protect's scan, which exceeds the bounded
+controller; full installation remains UNAVAILABLE, not PASS. Both helpers are
+removed; actual44 full hash/retained identity/normal foreground/fatal0 pass20:54Z.
+First no-click refusal and host-oracle failures are retained separately. No
+target ADB install, Google protection disable, phone VPN or DB change. Next:
+remaining Task3 send/editor/Apple audio and identified tester cases; revisit the
+OS scan only with new evidence. Do not replay accepted cold-media/provider QA.
+[Current release and physical boundary](operations/2026-10-28-stable45-followup.md).
 
 Published baseline: Android0.1.43/build44 and shared-webb115e903/build9e1a29680bf352c5,
 mandatory=false/full public APK hash and healthy image/parity verified. Actual
