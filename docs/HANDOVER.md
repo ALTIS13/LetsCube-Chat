@@ -1,19 +1,21 @@
 # LETSCUBE — handover
 
-**Current priority checkpoint, 2026-10-28 19:36Z:** Owner Codex coordinator,
-Android updater/OEM plus Task2 intake. Actual INONE/API33 build40 normal download
-ofStable43 failsSIGNER; verified public bytes reveal modern archive signingInfo
-missing unless both collection flags are requested. Source repair retains strict
-modern signer checks; new8/8 and affected87/87 controls pass. Independent browser
-read/close race repaired78/78. Android0.1.43/build44 is Stable, mandatory=false,
-full public APK hash verified; prior43 retained. AE40->44 manual bootstrap and
-actual fixed native archive identity/pin pass; Realme43->44 guest/fatal0 passes.
-Old affected native installs need one manual data-retaining replacement; do not
-call that self-update acceptance. Exact helper/archive cleanup and normal AE
-return pass. Shared-webf56c4e7f/build9e1a29680bf352c5 healthy sole image, public/
-container parity and old/new close-guard controls pass. Next: higher-version
-natural update/OEM lifecycle and remaining identified tester cases, not redoing
-accepted cold-media QA. [Cause and limits](operations/2026-10-28-android-oem-updater.md).
+**Current execution checkpoint, 2026-10-28:** Owner Codex coordinator. Source
+continuation afterStable44: stale ready-catalog recovery10/10, affected105/105,
+final download/copy UI31/31 and390/1440/both-theme pixels4/4 pass. Edited-video
+quality/caller/DTO correction is under integration; notification after-dispatch
+guard is being completed with exact task/invite identity across both renderers.
+No next version is yet published. Next: finish those reviewed slices, freeze45,
+build/sign/Firebase/retention checks, then genuine AE44->45 ordinary updater.
+Do not substitute another manual bootstrap or repeat accepted cold-media QA.
+[Current recovery](operations/2026-10-28-stale-update-recovery.md).
+
+Published baseline: Android0.1.43/build44 and shared-webb115e903/build9e1a29680bf352c5,
+mandatory=false/full public APK hash and healthy image/parity verified. Actual
+INONE/API33 signer fix, AE manual40->44 retention/fixed identity/pin and Realme
+43->44 guest/fatal0 are accepted; helper/archive cleanup and normal return pass.
+Older affected native versions need one manual data-retaining replacement, not
+self-update acceptance. [Release and limits](operations/2026-10-28-android-oem-updater.md).
 
 **Current checkpoint, 2026-10-28 18:46Z:** Owner Codex coordinator, Task3.
 Android0.1.42/build43 is RELEASED/Stable, mandatory=false, full public APK hash

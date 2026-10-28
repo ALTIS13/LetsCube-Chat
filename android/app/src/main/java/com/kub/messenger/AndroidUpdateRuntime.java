@@ -244,7 +244,18 @@ final class AndroidUpdateRuntime {
         }
         worker.execute(() -> {
             try {
-                AndroidUpdatePolicy.require(expected.same(catalog(owner)), "STALE_RELEASE");
+                AndroidUpdatePolicy.Release fresh = catalog(owner);
+                if (!expected.same(fresh)) {
+                    synchronized (this) {
+                        if (!current(owner)) { refused.accept(status()); return; }
+                        boolean available = AndroidUpdatePolicy.newer(fresh, installed());
+                        boolean deleted = (!partial.exists() || partial.delete()) & (!ready.exists() || ready.delete());
+                        if (!deleted) throw new IOException("FILE");
+                        release = available ? fresh : null; bytes = 0;
+                        finish(owner, available ? "available" : "current", available ? "STALE_RELEASE" : null);
+                        refused.accept(status()); return;
+                    }
+                }
                 verify(ready, expected);
                 synchronized (this) {
                     if (!current(owner)) { refused.accept(status()); return; }

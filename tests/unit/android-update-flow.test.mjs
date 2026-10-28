@@ -285,6 +285,20 @@ test('failed and paused downloads expose retry/resume instead of browser fallbac
   await page.getByTestId('android-update-cancel').click();
   assert.equal((await page.evaluate(() => window.fixture.calls())).filter(c => c.name === 'cancel').length, 1);
 });
+
+for (const compact of [false, true]) test(`newer catalog offers an explicit new download without an obsolete install: ${compact ? 'compact' : 'settings'}`, async t => {
+  const page = await fixture(t);
+  if (compact) await page.evaluate(() => window.fixture.banner());
+  await page.evaluate(() => window.fixture.state({ phase: 'available', version: '0.1.33', bytes: 0, error: 'STALE_RELEASE' }));
+  const notice = page.getByTestId('android-update-state');
+  assert.ok((await notice.textContent()).includes(compact ? 'Скачайте новую версию' : 'Доступна более новая версия. Скачайте её для установки.'));
+  assert.equal(await page.getByTestId('android-update-install').count(), 0);
+  assert.equal((await page.evaluate(() => window.fixture.calls())).filter(c => c.name === 'start' || c.name === 'install').length, 0);
+  await page.getByTestId('android-update-download').click();
+  const calls = await page.evaluate(() => window.fixture.calls());
+  assert.equal(calls.filter(c => c.name === 'start').length, 1);
+  assert.equal(calls.filter(c => c.name === 'install').length, 0);
+});
 test('a held old native status cannot restore ready after explicit cancellation', async t => {
   const page = await fixture(t);
   await page.evaluate(() => window.fixture.state({ phase: 'ready', bytes: 100, canInstall: true }));

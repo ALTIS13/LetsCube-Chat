@@ -31,9 +31,9 @@ for (const width of [390, 1440]) for (const theme of ["dark", "light"] as const)
     const port = page.getByTestId("message-scroll-container");
     const before = await port.boundingBox();
     expect(before).not.toBeNull();
-    for (const phase of ["checking", "downloading", "ready", "current"]) {
+    for (const phase of ["checking", "downloading", "ready", "available", "current"]) {
       await page.evaluate(phase => {
-        (window as unknown as Record<string, unknown>).__updateState = { phase, version: "0.1.32", bytes: 4300, total: 10000, canInstall: phase === "ready", error: null };
+        (window as unknown as Record<string, unknown>).__updateState = { phase, version: phase === "available" ? "0.1.33" : "0.1.32", bytes: phase === "available" ? 0 : 4300, total: 10000, canInstall: phase === "ready", error: phase === "available" ? "STALE_RELEASE" : null };
         window.dispatchEvent(new Event("focus"));
       }, phase);
       const notice = page.getByTestId("android-update-state");
@@ -42,6 +42,11 @@ for (const width of [390, 1440]) for (const theme of ["dark", "light"] as const)
         await expect(notice).toHaveAttribute("data-phase", phase);
         expect(await notice.evaluate(e => getComputedStyle(e).position)).toBe("fixed");
         expect(await notice.evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+        if (phase === "available") {
+          await expect(notice).toContainText("Скачайте новую версию");
+          await expect(notice.getByTestId("android-update-download")).toBeVisible();
+          await expect(notice.getByTestId("android-update-install")).toHaveCount(0);
+        }
         await page.screenshot({ path: info.outputPath(`native-update-${phase}-${width}-${theme}.png`), animations: "disabled" });
       }
       const after = await port.boundingBox();

@@ -73,7 +73,7 @@ export function AndroidUpdateStatus({ compact = false, onBeforeInstall }: {
   const installError = installFailure === "blocked" ? (compact ? "Есть незавершённые действия" : "Завершите текущие действия и повторите установку")
     : installFailure === "call" ? "Звонок изменился. Подтвердите снова" : installFailure === "prepare" ? "Повторите установку" : null;
   const error = installError ?? (state.error === "INSTALL_CANCELLED" ? (compact ? "Файл сохранён" : "Установка отменена. Загруженный файл сохранён.")
-    : state.error === "STALE_RELEASE" ? "Вышла другая версия. Отмените загрузку и проверьте обновления снова."
+    : state.error === "STALE_RELEASE" ? (state.phase === "available" ? (compact ? "Скачайте новую версию" : "Доступна более новая версия. Скачайте её для установки.") : "Вышла другая версия. Отмените загрузку и проверьте обновления снова.")
     : state.error ? (compact ? "Не удалось. Повторите" : "Проверка или загрузка не завершена. Повторите действие; приложение и ваши данные сохранены.") : null);
   const title = confirmed ? "Звонок прервётся" : compact && state.phase === "ready" ? "Готово к установке"
     : compact && state.phase === "failed" ? "Не удалось обновить" : COPY[state.phase];
