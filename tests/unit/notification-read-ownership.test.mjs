@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import test from "node:test";
 import ts from "typescript";
+import { browserNotificationReadBoundary } from "../../artifacts/kub/src/lib/browserNotificationPresentation.ts";
 
 const root = new URL("../../artifacts/kub/src/", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), "utf8").replaceAll("\r\n", "\n");
@@ -143,7 +144,7 @@ function fixture({ hook = source, sync = syncSource, feed = feedSource, initial 
     "@/lib/rpcAvailability": compile(read("lib/rpcAvailability.ts"), {}, { console: { warn() {} } }),
     "@/lib/messageNotificationProjection": compile(read("lib/messageNotificationProjection.ts"), {}),
     "@/lib/messageAlertDecisions": compile(read("lib/messageAlertDecisions.ts"), {}),
-    "@/lib/browserNotificationPresentation": { notificationPresentationTag: row => row.kind.includes("message") ? `message:chat:${row.payload.chat_id}` : null,
+    "@/lib/browserNotificationPresentation": { browserNotificationReadBoundary, notificationPresentationTag: row => row.kind.includes("message") ? `message:chat:${row.payload.chat_id}` : null,
       async closeBrowserNotification(tag) { closed.push(tag); }, async updateBrowserAppBadge() {} },
     "@/lib/platform/desktop": { isDesktopApp: () => false, getDesktopBridge: () => null },
     "@/lib/platform/capabilities": { isNativeAndroid: () => native },

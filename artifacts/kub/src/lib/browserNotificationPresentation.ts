@@ -5,6 +5,47 @@ type NotificationPresentationLike = {
   payload: unknown;
 };
 
+export type BrowserNotificationReadBoundary = {
+  notificationId: string;
+  chatId: string;
+  messageId: string;
+} | {
+  notificationId: string;
+  subjectKind: "task" | "invite";
+  subjectId: string;
+};
+
+export function browserNotificationReadBoundary(
+  item: NotificationPresentationLike & { id: string; user_id: string; read_at: string | null },
+  ownerId: string | null,
+): BrowserNotificationReadBoundary | null {
+  if (!notificationUuid(ownerId) || item.user_id !== ownerId || !item.read_at || !notificationUuid(item.id)) return null;
+  const payload = item.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const row = payload as Record<string, unknown>;
+  if (item.kind.includes("message")) {
+    if (!notificationUuid(row.chat_id) || !notificationUuid(row.message_id)) return null;
+    return { notificationId: item.id, chatId: row.chat_id, messageId: row.message_id };
+  }
+  const subjectKind = item.kind.startsWith("task_") ? "task" : item.kind === "group_invite" ? "invite" : null;
+  const subjectId = subjectKind === "task" ? row.task_id : row.invite_id;
+  return subjectKind && notificationUuid(subjectId) ? { notificationId: item.id, subjectKind, subjectId } : null;
+}
+
+function notificationUuid(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value);
+}
+
+function notificationReadBoundaryTag(value: BrowserNotificationReadBoundary): string | null {
+  if (Object.keys(value).length !== 3 || !notificationUuid(value.notificationId)) return null;
+  if ("chatId" in value && "messageId" in value && notificationUuid(value.chatId) && notificationUuid(value.messageId)) {
+    return `message:chat:${value.chatId}`;
+  }
+  if ("subjectKind" in value && "subjectId" in value && (value.subjectKind === "task" || value.subjectKind === "invite")
+    && notificationUuid(value.subjectId)) return `${value.subjectKind}:${value.subjectId}`;
+  return null;
+}
+
 export function notificationPresentationTag(
   item: NotificationPresentationLike,
 ): string | null {
@@ -31,13 +72,17 @@ export function notificationPresentationTag(
 export async function closeBrowserNotification(
   tag: string,
   isCurrent: () => boolean = () => true,
+  expected: BrowserNotificationReadBoundary | null = null,
 ): Promise<void> {
+  if (!expected || notificationReadBoundaryTag(expected) !== tag) return;
+  // Snapshot before readiness yields; a queued close only owns this exact card.
+  const boundary = { ...expected };
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator) || !isCurrent())
     return;
   try {
     const registration = await navigator.serviceWorker.ready;
     if (!isCurrent()) return;
-    registration.active?.postMessage({ type: "KUB_CLOSE_NOTIFICATION", tag });
+    registration.active?.postMessage({ type: "KUB_CLOSE_NOTIFICATION_IF_MATCH", v: 1, tag, expected: boundary });
   } catch {
     // Notification read state remains authoritative even if presentation cleanup is unavailable.
   }

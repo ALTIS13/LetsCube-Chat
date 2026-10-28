@@ -355,7 +355,7 @@ const omissionCases=[
   ['declarative notification bridge',omitted('event.data ? event.data.json() : declarativePushPayload(event.notification)','event.data ? event.data.json() : {}'),async w=>{
     await install(w);await w.push(undefined,{data:declarativeData()});assert.equal(w.requests.length,1);
   }],
-  ['declarative metadata whitelist',omitted('!previewExact(data, Object.hasOwn(data, "web_preview") ? [...keys, "web_preview"] : keys)','false'),async w=>{
+  ['declarative metadata whitelist',omitted('!previewExact(data, Object.hasOwn(data, "web_preview") ? [...notificationKeys, "web_preview"] : notificationKeys)','false'),async w=>{
     await install(w);await w.push(undefined,{data:{...declarativeData(),body:'UNTRUSTED EXTRA BODY'}});generic(w);assert.equal(w.requests.length,0);
   }],
   ['declarative metadata field types',omitted('typeof data.renotify !== "boolean"','false'),async w=>{

@@ -3,7 +3,7 @@ import test from 'node:test';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
-import {closeBrowserNotification, notificationPresentationTag} from '../../artifacts/kub/src/lib/browserNotificationPresentation.ts';
+import {browserNotificationReadBoundary, closeBrowserNotification, notificationPresentationTag} from '../../artifacts/kub/src/lib/browserNotificationPresentation.ts';
 import * as projection from '../../artifacts/kub/src/lib/messageNotificationProjection.ts';
 
 const hookUrl=new URL('../../artifacts/kub/src/hooks/useNotifications.ts',import.meta.url);
@@ -31,7 +31,9 @@ function compileHelper(text){
 const OWNER='10000000-0000-4000-8000-000000000001';
 const CHAT='20000000-0000-4000-8000-000000000001';
 const OTHER='20000000-0000-4000-8000-000000000002';
-const notice=(id,chat=CHAT,read=false)=>({id,user_id:OWNER,kind:'message',read_at:read?'2026-10-28T12:00:00Z':null,payload:{chat_id:chat}});
+const noticeId=name=>'30000000-0000-4000-8000-'+({old:'000000000001',new:'000000000002',other:'000000000003'}[name]);
+const notice=(name,chat=CHAT,read=false)=>({id:noticeId(name),user_id:OWNER,kind:'message',read_at:read?'2026-10-28T12:00:00Z':null,
+  payload:{chat_id:chat,message_id:noticeId(name)}});
 
 async function fixture(run,{close=closeBrowserNotification,effect=effectJs}={}){
   let release,current=true;const messages=[],pending=[];
@@ -42,7 +44,7 @@ async function fixture(run,{close=closeBrowserNotification,effect=effectJs}={}){
   const context={module,exports:module.exports,userId:OWNER,readOwner:owner,items:[],unreadCount:0,
     unreadPresentationTagsRef:{current:new Map()},alertRowsRef:{current:{owner,rows:new Map()}},
     isCurrentReadOwner:()=>current,isNativeAndroid:()=>false,isDesktopApp:()=>false,
-    notificationPresentationTag,updateBrowserAppBadge:async()=>{},
+    browserNotificationReadBoundary,notificationPresentationTag,updateBrowserAppBadge:async()=>{},
     closeBrowserNotification(...args){const p=close(...args);pending.push(p);return p;}};
   vm.runInNewContext(effect,context);
   const render=(rows,paint=true)=>{
@@ -58,8 +60,18 @@ async function fixture(run,{close=closeBrowserNotification,effect=effectJs}={}){
 
 test('actual effect closes the confirmed read tag when no replacement arrived',()=>fixture(async f=>{
   f.render([notice('old')]);f.render([notice('old',CHAT,true)]);await f.settle();
-  assert.deepEqual(f.messages,[{type:'KUB_CLOSE_NOTIFICATION',tag:'message:chat:'+CHAT}]);
+  assert.deepEqual(f.messages,[{type:'KUB_CLOSE_NOTIFICATION_IF_MATCH',v:1,tag:'message:chat:'+CHAT,
+    expected:{notificationId:noticeId('old'),chatId:CHAT,messageId:noticeId('old')}}]);
 }));
+
+for(const [kind,subjectKind,key] of [['task_assigned','task','task_id'],['group_invite','invite','invite_id']]){
+  test(`actual presentation effect retains exact ${subjectKind} read cleanup`,()=>fixture(async f=>{
+    const row={...notice('old'),kind,payload:{[key]:CHAT}};
+    f.render([row]);f.render([{...row,read_at:'2026-10-28T12:00:00Z'}]);await f.settle();
+    assert.deepEqual(f.messages,[{type:'KUB_CLOSE_NOTIFICATION_IF_MATCH',v:1,tag:subjectKind+':'+CHAT,
+      expected:{notificationId:noticeId('old'),subjectKind,subjectId:CHAT}}]);
+  }));
+}
 
 test('pending service-worker readiness cannot close a newer unread same-chat card, even before repaint',()=>fixture(async f=>{
   f.render([notice('old')]);f.render([notice('old',CHAT,true)]);

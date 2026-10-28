@@ -92,12 +92,24 @@ self.addEventListener("message", (event) => {
     if (typeof event.waitUntil === "function") event.waitUntil(answered);
     return;
   }
-  if (event.data?.type === "KUB_CLOSE_NOTIFICATION") {
-    const tag = safeText(event.data?.tag, "", 120);
-    if (!tag) return;
+  if (event.data?.type === "KUB_CLOSE_NOTIFICATION_IF_MATCH") {
+    const data = event.data;
+    if (!isNotificationWindow(event.source) || !previewExact(data, ["type", "v", "tag", "expected"]) || data.v !== 1) return;
+    const expected = notificationCloseBoundary(data.expected, data.tag);
+    if (!expected) return;
+    const tag = data.tag;
     const closeMatching = self.registration.getNotifications({ tag }).then((notifications) => {
-      notifications.forEach((notification) => notification.close());
-    });
+      for (const notification of notifications) {
+        const card = notification.data;
+        const actual = card && Object.hasOwn(card, "closeBoundary")
+          ? notificationCloseBoundary(card.closeBoundary, notification.tag)
+          : subjectNotificationCloseBoundary(card?.kind, notification.tag, card?.notificationId);
+        if (notification.tag !== tag || !actual || actual.notificationId !== expected.notificationId) continue;
+        if ("subjectKind" in expected) {
+          if (actual.subjectKind === expected.subjectKind && actual.subjectId === expected.subjectId) notification.close();
+        } else if (actual.chatId === expected.chatId && actual.messageId === expected.messageId) notification.close();
+      }
+    }).catch(() => {});
     if (typeof event.waitUntil === "function") event.waitUntil(closeMatching);
   }
 });
@@ -262,9 +274,11 @@ function declarativePushPayload(notification) {
   const data = notification?.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) return {};
   const keys = ["kind", "url", "tag", "chatId", "messageId", "renotify"];
-  if (!previewExact(data, Object.hasOwn(data, "web_preview") ? [...keys, "web_preview"] : keys)
+  const notificationKeys = Object.hasOwn(data, "notificationId") ? [...keys, "notificationId"] : keys;
+  if (!previewExact(data, Object.hasOwn(data, "web_preview") ? [...notificationKeys, "web_preview"] : notificationKeys)
     || ["kind", "url", "tag", "chatId", "messageId"].some(key => typeof data[key] !== "string")
     || typeof data.renotify !== "boolean") return {};
+  if (Object.hasOwn(data, "notificationId") && !subjectNotificationCloseBoundary(data.kind, data.tag, data.notificationId)) return {};
   return { ...data };
 }
 
@@ -287,6 +301,7 @@ async function showPushNotification(data) {
       tag: data.tag,
       chatId: data.chatId,
       messageId: data.messageId,
+      closeBoundary: data.closeBoundary,
     },
   });
 }
@@ -351,19 +366,41 @@ function normalizePushPayload(raw) {
         : chatId
           ? `chat:${chatId}`
           : "kub-notification";
+  const tag = safeText(proposed.tag || data.tag, fallbackTag, 100);
+  const webPreview = isMessagePush ? webPreviewSelector(data.web_preview) : null;
   return {
     title: isMessagePush ? APP_NAME : safeText(proposed.title || data.title, APP_NAME, 80),
     body: isMessagePush ? DEFAULT_PUSH_BODY : safeText(proposed.body || data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
-    tag: safeText(proposed.tag || data.tag, fallbackTag, 100),
+    tag,
     renotify: typeof data.renotify === "boolean" ? data.renotify : true,
     kind,
     isMessagePush,
-    webPreview: isMessagePush ? webPreviewSelector(data.web_preview) : null,
+    webPreview,
+    // The selector names a recipient-owned notification row even when preview
+    // is disabled. It grants no content lookup/display permission by itself.
+    closeBoundary: webPreview ? notificationCloseBoundary({ notificationId: webPreview.notification_id, chatId, messageId }, tag)
+      : !isMessagePush ? subjectNotificationCloseBoundary(kind, tag, data.notificationId) : null,
     chatId,
     messageId,
     timestamp: safeTimestamp(data.timestamp || data.createdAt || data.created_at),
     url: routeForPush({ ...data, navigate: proposed.navigate }, { chatId, messageId, taskId, inviteId }),
   };
+}
+
+function notificationCloseBoundary(value, tag) {
+  if (previewExact(value, ["notificationId", "subjectKind", "subjectId"]) && previewId(value.notificationId)
+    && ["task", "invite"].includes(value.subjectKind) && previewId(value.subjectId)
+    && tag === `${value.subjectKind}:${value.subjectId}`) return { notificationId: value.notificationId, subjectKind: value.subjectKind, subjectId: value.subjectId };
+  if (!previewExact(value, ["notificationId", "chatId", "messageId"])
+    || !previewId(value.notificationId) || !previewId(value.chatId) || !previewId(value.messageId)
+    || tag !== `message:chat:${value.chatId}`) return null;
+  return { notificationId: value.notificationId, chatId: value.chatId, messageId: value.messageId };
+}
+
+function subjectNotificationCloseBoundary(kind, tag, notificationId) {
+  const subjectKind = typeof kind === "string" && kind.startsWith("task_") ? "task" : kind === "group_invite" ? "invite" : null;
+  if (!subjectKind || typeof tag !== "string") return null;
+  return notificationCloseBoundary({ notificationId, subjectKind, subjectId: tag.slice(subjectKind.length + 1) }, tag);
 }
 
 function previewExact(value, keys) {

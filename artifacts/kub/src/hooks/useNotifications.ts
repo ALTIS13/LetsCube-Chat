@@ -14,6 +14,7 @@ import { createNotificationFeedV2, type NotificationFeedRowV2 } from "@/lib/noti
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
 import { isMissingRpcError } from "@/lib/rpcAvailability";
 import {
+  browserNotificationReadBoundary,
   closeBrowserNotification,
   notificationPresentationTag,
   updateBrowserAppBadge,
@@ -413,7 +414,7 @@ export function useNotifications() {
       if (!isNativeAndroid() && previousTag && !currentUnreadTagCounts.has(previousTag)) {
         void closeBrowserNotification(previousTag, () => isCurrentReadOwner()
           && ![...alertRowsRef.current.rows.values()].some(row => row.user_id === userId
-            && !row.read_at && notificationPresentationTag(row) === previousTag));
+            && !row.read_at && notificationPresentationTag(row) === previousTag), browserNotificationReadBoundary(item, userId));
         if (isDesktopApp() && !isMessageNotification(item)) {
           closeDesktopNotification(item);
         }

@@ -40,10 +40,16 @@ export function buildDeclarativeWebPushPayload(
     preview: "",
   };
   delete neutral.web_preview;
+  delete neutral.notificationId;
   const selector = previewSelector && typeof previewSelector === "object" && !Array.isArray(previewSelector)
     ? previewSelector as Record<string, unknown>
     : null;
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if ((payload.kind.startsWith("task_") || payload.kind === "group_invite")
+    && typeof selector?.subscriptionId === "string" && uuid.test(selector.subscriptionId)
+    && typeof selector.notificationId === "string" && uuid.test(selector.notificationId)) {
+    neutral.notificationId = selector.notificationId.toLowerCase();
+  }
   if (payload.kind === "message" && typeof selector?.subscriptionId === "string" &&
     uuid.test(selector.subscriptionId) && typeof selector.notificationId === "string" && uuid.test(selector.notificationId)) {
     // Selectors are not display authority. The worker must obtain fresh content.
@@ -61,7 +67,9 @@ export function buildDeclarativeWebPushPayload(
     web_push: 8030,
     // Declarative clients skip the worker unless mutation is requested. Their
     // PushEvent carries Notification.data rather than the original JSON bytes.
-    mutable: compatibleWorker === true,
+    // Older mutable workers reject extra Notification.data fields. Nonmessage
+    // cards are already generic, so preserve their exact route/data directly.
+    mutable: compatibleWorker === true && !neutral.notificationId,
     notification: {
       title: neutral.title,
       body: neutral.body,
@@ -74,6 +82,7 @@ export function buildDeclarativeWebPushPayload(
         chatId: neutral.chatId,
         messageId: neutral.messageId,
         renotify: neutral.renotify,
+        ...(neutral.notificationId ? { notificationId: neutral.notificationId } : {}),
         ...(neutral.web_preview ? { web_preview: neutral.web_preview } : {}),
       },
     },

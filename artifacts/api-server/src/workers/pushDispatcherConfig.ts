@@ -22,6 +22,9 @@ export function buildLegacyWebPushPayload(
     title: "LETSCUBE", body: "Новое уведомление", kind, url, tag, chatId, messageId,
     renotify: typeof payload["renotify"] === "boolean" ? payload["renotify"] : true,
   };
+  if ((kind.startsWith("task_") || kind === "group_invite") && uuid(subscriptionId) && uuid(payload["notificationId"])) {
+    result["notificationId"] = payload["notificationId"].toLowerCase();
+  }
   if (kind === "message" && uuid(subscriptionId) && uuid(payload["notificationId"])) {
     result["web_preview"] = { preview_v: 1, subscription_id: subscriptionId.toLowerCase(),
       notification_id: payload["notificationId"].toLowerCase() };
@@ -32,7 +35,9 @@ export function buildLegacyWebPushPayload(
       if (origin.protocol === "https:" && !origin.username && !origin.password && origin.hostname !== "localhost") {
         result["web_push"] = 8030;
         result["notification"] = { title: "LETSCUBE", body: "Новое уведомление",
-          navigate: new URL(url, origin.origin).href, tag };
+          navigate: new URL(url, origin.origin).href, tag,
+          ...(result["notificationId"] ? { data: { kind, url, tag, chatId, messageId,
+            renotify: result["renotify"], notificationId: result["notificationId"] } } : {}) };
       }
     } catch { /* Invalid operator configuration keeps the safe legacy fallback. */ }
   }
