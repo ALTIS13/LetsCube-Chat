@@ -411,7 +411,9 @@ export function useNotifications() {
       if (!item.read_at) continue;
       const previousTag = previousUnread.get(item.id);
       if (!isNativeAndroid() && previousTag && !currentUnreadTagCounts.has(previousTag)) {
-        void closeBrowserNotification(previousTag);
+        void closeBrowserNotification(previousTag, () => isCurrentReadOwner()
+          && ![...alertRowsRef.current.rows.values()].some(row => row.user_id === userId
+            && !row.read_at && notificationPresentationTag(row) === previousTag));
         if (isDesktopApp() && !isMessageNotification(item)) {
           closeDesktopNotification(item);
         }

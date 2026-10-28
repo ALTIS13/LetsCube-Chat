@@ -72,7 +72,9 @@ final class AndroidUpdateRuntime {
         return new AndroidUpdatePolicy.Identity(info.packageName, info.versionName,
             Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode, hashes);
     }
-    private int signatureFlags() { return Build.VERSION.SDK_INT >= 28 ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES; }
+    // Some OEM archive parsers only populate modern signingInfo when legacy collection is also requested.
+    private int signatureFlags() { return Build.VERSION.SDK_INT >= 28
+        ? PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_SIGNATURES : PackageManager.GET_SIGNATURES; }
     private AndroidUpdatePolicy.Identity installed() throws Exception {
         return identity(context.getPackageManager().getPackageInfo(context.getPackageName(), signatureFlags()));
     }

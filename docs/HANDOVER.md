@@ -1,5 +1,15 @@
 # LETSCUBE — handover
 
+**Current priority checkpoint, 2026-10-28 19:21Z:** Owner Codex coordinator,
+Android updater/OEM plus Task2 intake. Actual INONE/API33 build40 normal download
+ofStable43 failsSIGNER; verified public bytes reveal modern archive signingInfo
+missing unless both collection flags are requested. Source repair retains strict
+modern signer checks; new8/8 and affected87/87 controls pass. Independent browser
+read/close race repaired78/78. Build/release is next, not yet claimed. Old affected
+native installs need one manual data-retaining replacement; do not call that
+self-update acceptance. Helper is still owned onAE; remove after QA. Stable43
+remains live. [Cause and next action](operations/2026-10-28-android-oem-updater.md).
+
 **Current checkpoint, 2026-10-28 18:46Z:** Owner Codex coordinator, Task3.
 Android0.1.42/build43 is RELEASED/Stable, mandatory=false, full public APK hash
 verified; previous40 catalog/APK retained. Actual Realme new-process offline

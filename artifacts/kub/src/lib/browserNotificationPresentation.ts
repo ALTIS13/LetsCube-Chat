@@ -28,11 +28,15 @@ export function notificationPresentationTag(
   return null;
 }
 
-export async function closeBrowserNotification(tag: string): Promise<void> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator))
+export async function closeBrowserNotification(
+  tag: string,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator) || !isCurrent())
     return;
   try {
     const registration = await navigator.serviceWorker.ready;
+    if (!isCurrent()) return;
     registration.active?.postMessage({ type: "KUB_CLOSE_NOTIFICATION", tag });
   } catch {
     // Notification read state remains authoritative even if presentation cleanup is unavailable.
