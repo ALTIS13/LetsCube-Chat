@@ -19,6 +19,7 @@ import { canEncodeFrame, videoTranscodeSupport } from "@/lib/videoTranscodeSuppo
 export interface VideoSendPick {
   id: string;
   file: File;
+  edited?: boolean;
 }
 
 export interface VideoSendLadderProgress {
@@ -83,6 +84,8 @@ const pairKey = (videoId: string, rung: VideoSendHeight) => `${videoId}|${rung}`
  * person, so a rung nothing can encode is removed instead.
  */
 export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLadder {
+  // Baked edits keep their chosen rendition; the slider governs only unedited picks.
+  const governedPicks = picks.filter(pick => pick.edited !== true);
   const [facts, setFacts] = useState<LadderFacts>(EMPTY);
   const [wanted, setWanted] = useState<VideoSendStop | null>(null);
   const [progress, setProgress] = useState<VideoSendLadderProgress | null>(null);
@@ -91,13 +94,13 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
   // changes constantly while its contents do not. The effect keys on what the
   // selection *is*, and reads the picks themselves through a ref.
   const selectionRef = useRef({ key: 0, picks: [] as VideoSendPick[] });
-  if (selectionRef.current.picks.length !== picks.length || picks.some((pick, index) =>
+  if (selectionRef.current.picks.length !== governedPicks.length || governedPicks.some((pick, index) =>
     selectionRef.current.picks[index]?.id !== pick.id || selectionRef.current.picks[index]?.file !== pick.file)) {
-    selectionRef.current = { key: selectionRef.current.key + 1, picks: picks.map(pick => ({ ...pick })) };
+    selectionRef.current = { key: selectionRef.current.key + 1, picks: governedPicks.map(pick => ({ ...pick })) };
   }
   const key = selectionRef.current.key;
-  const picksRef = useRef(picks);
-  picksRef.current = picks;
+  const picksRef = useRef(governedPicks);
+  picksRef.current = governedPicks;
   const readRef = useRef(new Map<string, { file: File; video: SelectedVideo }>());
   const abortRef = useRef<AbortController | null>(null);
   const aliveRef = useRef(true);
@@ -197,6 +200,8 @@ export function useVideoSendLadder(picks: readonly VideoSendPick[]): VideoSendLa
       try {
         const byFile = new Map<File, SelectedVideo>();
         for (const pick of picksRef.current) {
+          // The editor has already baked the chosen rendition into this File.
+          if (pick.edited === true) continue;
           const cached = readRef.current.get(pick.id);
           if (cached?.file === pick.file) byFile.set(pick.file, cached.video);
         }
