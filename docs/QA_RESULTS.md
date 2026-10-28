@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-10-28 - OEM Updater Stable44
+
+Actual INONE/API33 old40 normal download of43 failsSIGNER. Whole public43
+archive hash and expected package/version pass; modern-only signingInfo is null,
+combined flags collect the valid sole modern signer. Source repair retains the
+modern identity/pin; actual Runtime regression8/8 plus native58/58 and mounted
+flow29/29 pass. Missing/foreign/multiple signers and loaded mutants refuse.
+One initial flow invocation without the required mutations=0 flag refuses its
+setup; corrected invocation29/29 passes, not a product regression. Typecheck and
+independent code/publication reviews pass.
+
+Signed0.1.43/build44 original signer/Firebase/parity/QA=false pass. AE40->44 manual
+bootstrap/full installed APK/data identity and actual fixed native archive parser/
+identity/Policy pin pass. Realme43->44 guest/fatal0/data retention passes. Exact
+helper/temporary archive cleanup and normal AE return pass. No claim of natural
+self-update, new FCM or broader media acceptance. Stable public entire APK hash
+passes19:33:32Z, mandatory=false, rollback43 retained. The related browser stale
+close/read repair78/78 is included. Shared-webf56c4e7f/build9e1a29680bf352c5 sole
+healthy image, public/container hashes and calibrated old/new guard controls pass
+19:36:10Z. Prior cache/history markers remain; no new visual or physical iPhone
+notification claim.
+[Evidence and remaining boundary](operations/2026-10-28-android-oem-updater.md).
+
 ## 2026-10-28 - Authenticated Cold Media Stable43
 
 Realme RMX3830/Android15, retained signed0.1.42/build43: ordinary owned receiver

@@ -1,8 +1,14 @@
 # Priority Intake Reconciliation, 2026-10-28
 
 Owner: independent bounded Task2 worker; coordinator owns Android updater/OEM,
-release integration and deployment. Stage: SOURCE_ONLY_READY, not a production
-or device acceptance. Canonical source started clean at `a6a086e4`.
+release integration and deployment. Original worker stage: SOURCE_ONLY_READY,
+not a device acceptance. Canonical source started clean at `a6a086e4`.
+
+Coordinator rollout: this slice is included in AndroidStable0.1.43/build44 and
+shared-web`f56c4e7f`/build`9e1a29680bf352c5`, accepted19:36Z by sole healthy image,
+public/container hashes and old/new close-guard controls. That establishes shipped
+source, not a new physical OS notification test or closure of all#85.
+[Combined release and limits](2026-10-28-android-oem-updater.md).
 
 ## Reuse And Remaining Boundaries
 

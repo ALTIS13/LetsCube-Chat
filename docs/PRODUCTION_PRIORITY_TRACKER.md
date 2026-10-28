@@ -2,7 +2,19 @@
 
 Status: active production-hardening tracker, updated 2026-10-28.
 
-**Current release, Oct28:** Stable0.1.42/build43, mandatory=false, complete public
+**Current release, Oct28 19:33Z:** AndroidStable0.1.43/build44, mandatory=false,
+full public APK hash verified; previous43 retained. INONE/API33's modern archive
+metadata collection defect is reproduced and repaired without relaxing signer
+checks. AE40->44 manual/data-retaining bootstrap and actual fixed native identity/
+pin pass; Realme43->44 guest/fatal0 pass. This is NOT full natural self-update
+acceptance. Source/new8+affected87, typecheck/review and signer/Firebase/parity
+pass. Browser pending-close/read race source78/78 is included; shared-webf56c4e7f/
+build9e1a29680bf352c5 healthy image, parity and old/new guard controls pass19:36Z.
+Wider tester cases remain scoped in the
+[intake reconciliation](operations/2026-10-28-priority-intake.md).
+[Release and exact limits](operations/2026-10-28-android-oem-updater.md).
+
+**Prior release, Oct28:** Stable0.1.42/build43, mandatory=false, complete public
 APK SHA verified18:46Z; previous40 catalog/APK retained. Actual ordinary-UI owned
 Realme Auth, warm preview/explicit original, new-process offline history/original,
 native gallery exact hash/Bitmap and unchanged after-save cache pass18:42Z.

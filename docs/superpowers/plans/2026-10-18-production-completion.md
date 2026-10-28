@@ -80,6 +80,14 @@ this document coordinates their remaining deliverables, not a replacement design
   pass; old in-app32 ->33 stays REFUSED, later full34->35 is accepted above.
   [Release and limits](../../operations/2026-10-21-android-update-bridge-thread.md).
 
+- [x] Oct28 priority OEM follow-up: measured INONE/API33 archive metadata failure
+  (old40 download43 ->SIGNER) is repaired in Stable0.1.43/build44, without relaxing
+  modern signer checks. New8 plus affected87, typecheck, reviews and full public
+  APK hash pass; mandatory=false/previous43 retained. Actual AE manual40->44
+  retention/fixed Runtime identity/pin and Realme43->44 guest/fatal0 pass. This is
+  not a natural self-update acceptance; that higher-version/OEM lifecycle case
+  remains open. [Cause, release and limits](../../operations/2026-10-28-android-oem-updater.md).
+
 - [x] D388/source `b50dda0f` released on shared web/build `affacc90ed0418d6`
   and Android Stable0.1.32/build33. Final affected155/155/review, signer/Firebase/
   assets, Realme32 ->33 data retention and public APK hash pass; rollback32.
