@@ -1,6 +1,19 @@
 # LETSCUBE — handover
 
-**Current checkpoint, 2026-10-26 14:59Z:** Owner Codex coordinator, Task3.
+**Current checkpoint, 2026-10-28 18:46Z:** Owner Codex coordinator, Task3.
+Android0.1.42/build43 is RELEASED/Stable, mandatory=false, full public APK hash
+verified; previous40 catalog/APK retained. Actual Realme new-process offline
+history/original, native gallery full hash/Bitmap and after-save cache pass.
+All owned API/Auth/gallery/helper/network cleanup and stable normal guest pass.
+Original failed43 probe stays immutable; the fixed pending-metadata test does not
+prove its precise cause. No rebuild/reinstall after the interruption: separate
+fresh read-only artifact custody verifies the same signed bytes. Shared web cache
+repairs were already released atb895ac44/build1a033713e0aa2780. No SQL, PC network,
+Apple/Windows package, A063/additional-device or rental change. Next: Task3's
+remaining send/editor/Apple-audio workflows; keep Git/web-image proof separate and
+do not replay the accepted cold-photo cohort. [Release and evidence boundaries](operations/2026-10-28-android-cold-media-release.md).
+
+**Prior checkpoint, 2026-10-26 14:59Z:** Owner Codex coordinator, Task3.
 Source repairs now cover unrelated-chat cache-handle retirement and semantic
 microsecond clear/hide marks. Recovery rechecks server/privacy boundaries and
 coalesces bursts; a scope-local terminal access fence stops local and real

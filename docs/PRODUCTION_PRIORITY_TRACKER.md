@@ -1,8 +1,18 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-25.
+Status: active production-hardening tracker, updated 2026-10-28.
 
-**Current release, Oct25:** offline Android10+ original image/video gallery save
+**Current release, Oct28:** Stable0.1.42/build43, mandatory=false, complete public
+APK SHA verified18:46Z; previous40 catalog/APK retained. Actual ordinary-UI owned
+Realme Auth, warm preview/explicit original, new-process offline history/original,
+native gallery exact hash/Bitmap and unchanged after-save cache pass18:42Z.
+All owned fixture/SID/gallery/helper/network cleanup and stable normal guest pass.
+Source cache fixes were already deployed in shared web atb895ac44. Original
+failed43 is preserved; no precise transient cause or all-platform media closure
+is claimed. Wider media/editor/Apple audio and conditional SQL remain open.
+[Current release and scope](operations/2026-10-28-android-cold-media-release.md).
+
+**Prior release, Oct25:** offline Android10+ original image/video gallery save
 is RELEASED at85025f59/shared-web7d22d125aa0f30b1 and Stable0.1.38/build39,
 mandatory=false/rollback38 retained. Actual Realme retained-data upgrade and
 offline installed WebView/native/MediaStore PNG/WebM bytes/hash/MIME/size/decode,

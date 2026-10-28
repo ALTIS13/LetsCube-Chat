@@ -318,6 +318,16 @@ privacy admission, message anchors and lifecycle recovery already in the client.
 
 ## Task3: Media Completion (#25,29,104--105)
 
+**Oct28 physical release:** the authenticated large-photo receive/open/new-PID
+offline history/original/native-save/after-save-cache/hash journey is accepted
+on RealmeAndroid15 and RELEASED in Stable0.1.42/build43. All owned cleanup and
+stable normal guest pass18:42Z; full public APK/catalog and retained40 recovery
+material pass18:46Z. Source fixes were already shared-web released atb895ac44.
+The original failed43 record stays unchanged; a deterministic pending-metadata
+test gap is repaired, not declared the prior phone's proven cause. No rebuild/
+reinstall, SQL, personal capture, rental or new Apple/provider proof follows.
+[Current result and limits](../../operations/2026-10-28-android-cold-media-release.md).
+
 **Oct26 source continuation:** unrelated-chat retirement and equivalent clear
 timestamp spellings are independently RED/GREEN repaired. Bounded fresh recovery
 retains storage/privacy fences; terminal403 does not self-retry or bounce between
@@ -394,15 +404,12 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   original open: original absent before tap, then durable IDB and actual viewer
   Blob SHA/bytes/dimensions match. Warm acceptance is bounded, not cold/save or
   FCM acceptance. [Physical QA](../../operations/2026-10-25-authenticated-media-qa.md).
-- [ ] Execute the uncovered current physical large-original receive/open/native
-  save/reopen/hash workflow with owned Auth/media and exact cleanup; patch only
-  an observed failure, not an assumed missing auto-download implementation.
-  Oct25 cold new-PID case stopped at `open`; Oct26 candidates41/42 still have no
-  durable history page despite retained binary media. The completed same42
-  producer-only witness does not close this workflow. Diagnose the source gate
-  before another cohort; do not replay warm/original/release baselines merely to
-  widen instrumentation. Final normal guest/network/helper and all owned fixture
-  cleanup pass; full cold/gallery journey remains OPEN.
+- [x] Accept and release the actual owned authenticated large-photo receive/open/
+  new-PID offline history/original/native-gallery/after-save-cache/full-hash
+  workflow on RealmeAndroid15 (Stable43). Exact cleanup and normal guest pass.
+  Older failed/diagnostic records remain preserved; do not replay this accepted
+  case for coverage claims it does not establish. Other media/shell/editor/audio
+  workflows remain below, rather than being inferred from this photo case.
 - [ ] Finish missing grouping, quality defaults and save/cache semantics with
   focused behavioral tests and rendered desktop/mobile states.
 - [x] Release bounded private media IDB and mounted photo/file/voice/viewer/settings

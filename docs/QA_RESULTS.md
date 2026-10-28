@@ -1,5 +1,22 @@
 # QA Results
 
+## 2026-10-28 - Authenticated Cold Media Stable43
+
+Realme RMX3830/Android15, retained signed0.1.42/build43: ordinary owned receiver
+login, mounted preview/explicit original, durable history/default pointer and
+new-PID cold offline original hash/decode pass. Normal viewer save writes exact
+3,608,655B PNG into MediaStore with matching full SHA/MIME/size/native Bitmap;
+actual cache/viewer remains unchanged after save. Full exact gallery/staging/
+helper/API/new-SID cleanup, prior-SID retention, network restoration and stable
+normal guest pass18:42:35Z. Only the bounded known-retired-QA cleanup fallback is
+accepted, not general logout or all OEMs. Prior failed43 remains unchanged.
+Seven extracted-Java wait cases/two mutants, five current driver/root tests,
+full helper compile, independent reviews and five publisher tests pass.
+Separate current read-only custody proves the same original APK/AAB; no rebuild
+or reinstall. Public Stable43 catalog and complete APK hash pass18:46:30Z,
+mandatory=false, previous40 retained. No SQL/personal capture/Apple package or
+new provider proof. [Evidence and limits](operations/2026-10-28-android-cold-media-release.md).
+
 ## 2026-10-25 - Authenticated Media Native39 Continuation
 
 Actual Realme/Stable39 ordinary receiver LoginForm creates one own fresh SID;
