@@ -206,6 +206,9 @@ test(`compact tucked search: keyboard navigation at ${width} ${theme} ${scale}%`
     const focused = locator => locator.evaluate(node => node === document.activeElement);
     if (width < 768) {
       await opener.waitFor();
+      assert.equal(await field.getAttribute("tabindex"), "-1", "tucking retires keyboard focus before the animation settles");
+      await f.page.waitForFunction(() => document.querySelector('[data-testid="sidebar-search-input"]')
+        ?.parentElement?.parentElement?.getBoundingClientRect().height === 0);
       assert.equal((await wrapper.boundingBox()).height, 0, "the field is clipped before keyboard navigation");
       await menu.focus();
       await f.page.keyboard.press("Tab");
@@ -225,8 +228,51 @@ test(`compact tucked search: keyboard navigation at ${width} ${theme} ${scale}%`
       await f.page.keyboard.press("Shift+Tab");
       assert.equal(await focused(field), true, "desktop search stays tabbable when scrolled");
     }
+    await f.page.waitForFunction(() => (document.querySelector('[data-testid="sidebar-search-input"]')
+      ?.parentElement?.parentElement?.getBoundingClientRect().height ?? 0) >= 36);
     assert.ok((await wrapper.boundingBox()).height >= 36, "the focused field has usable geometry");
     await snapshot("focused");
+  } finally { await dispose(f); }
+});
+
+test("phone search geometry interpolates while retaining the list anchor", async () => {
+  const f = await fixture(390, "dark");
+  try {
+    const result = await f.page.evaluate(async () => {
+      const list = document.querySelector('[data-testid="chat-list-scroller"]');
+      const field = document.querySelector('[data-testid="sidebar-search-input"]');
+      const wrapper = field.parentElement.parentElement;
+      const rect = node => node.getBoundingClientRect();
+      const measure = () => ({ height: rect(wrapper).height, top: rect(list).top, scroll: list.scrollTop });
+      const sample = async action => {
+        const before = measure();
+        action();
+        const frames = [];
+        const start = performance.now();
+        do {
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          frames.push(measure());
+        } while (performance.now() - start < 350);
+        return { before, frames, after: frames.at(-1) };
+      };
+      const collapse = await sample(() => { list.scrollTop = 160; });
+      const opener = document.querySelector('button[aria-label="\u041f\u043e\u0438\u0441\u043a"]');
+      const expand = await sample(() => opener.click());
+      return { collapse, expand, retained: list === document.querySelector('[data-testid="chat-list-scroller"]'),
+        focus: field === document.activeElement };
+    });
+    const full = result.collapse.before.height;
+    assert.ok(full >= 36, "control: a fully exposed search field has height");
+    assert.equal(result.collapse.after.height, 0);
+    assert.equal(result.expand.before.height, 0);
+    assert.equal(result.expand.after.height, full);
+    for (const phase of [result.collapse, result.expand]) {
+      assert.ok(phase.frames.some(frame => frame.height > 1 && frame.height < full - 1), "visible height must not snap in one frame");
+    }
+    assert.ok(Math.abs(result.collapse.after.scroll - 160 - (result.collapse.after.top - result.collapse.before.top)) < 1,
+      "animated chrome must not accumulate rounding drift while retaining the current row");
+    assert.ok(Math.abs(result.expand.after.scroll - 160) < 1, "expansion restores the exact pre-tuck scroll position");
+    assert.ok(result.retained && result.focus);
   } finally { await dispose(f); }
 });
 

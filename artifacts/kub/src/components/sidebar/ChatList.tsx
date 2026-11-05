@@ -116,9 +116,12 @@ export function ChatList({ chats, selectedChatId, onChatSelect, onScrollStateCha
     const chrome = scroller?.closest(".kub-chat-list-column")?.querySelector("[data-kub-list-chrome]");
     if (!scroller || !chrome || !onScrollStateChange) return;
 
-    let previousY = scroller.getBoundingClientRect().top;
+    // Quantize the position, not each delta: fractional animation frames
+    // must telescope to the final offset when scrollTop is rounded by WebView.
+    const chromeY = () => Math.round(scroller.getBoundingClientRect().top);
+    let previousY = chromeY();
     const observer = new ResizeObserver(() => {
-      const y = scroller.getBoundingClientRect().top;
+      const y = chromeY();
       const delta = y - previousY;
       previousY = y;
       if (window.matchMedia("(min-width: 768px)").matches || delta === 0) return;

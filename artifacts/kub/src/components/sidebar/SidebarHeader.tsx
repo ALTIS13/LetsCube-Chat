@@ -365,9 +365,9 @@ export function SidebarHeader({
             its visibility, which was measured rather than assumed. */}
         <div
           className={cn(
-            "order-last w-full min-w-0 basis-full transition-opacity duration-[var(--kub-motion-standard)] ease-[var(--kub-ease-standard)] md:order-none md:w-auto md:basis-auto md:flex-1",
+            "order-last w-full min-w-0 basis-full overflow-clip [overflow-clip-margin:4px] transition-[max-height,opacity] duration-[var(--kub-motion-standard)] ease-[var(--kub-ease-standard)] md:order-none md:w-auto md:basis-auto md:flex-1 md:overflow-visible md:transition-opacity",
             tuck
-              ? "max-h-0 overflow-hidden opacity-0 md:max-h-none md:overflow-visible md:opacity-100"
+              ? "max-h-0 opacity-0 md:max-h-none md:opacity-100"
               : "max-h-12 opacity-100",
           )}
         >
