@@ -190,6 +190,46 @@ function continuity(before, after) {
   assert.ok(Math.abs(after.anchor - before.anchor) < 1, "visible row anchor remains in place");
 }
 
+for (const width of [390, 1440]) for (const theme of ["light", "dark"]) for (const scale of [100, 125])
+test(`compact tucked search: keyboard navigation at ${width} ${theme} ${scale}%`, async () => {
+  const f = await fixture(width, theme);
+  try {
+    await f.page.evaluate(scale => { document.documentElement.style.fontSize = `${scale}%`; }, scale);
+    const field = f.page.getByTestId("sidebar-search-input");
+    const wrapper = field.locator("xpath=../..");
+    const header = f.page.getByTestId("sidebar-control-row");
+    const opener = f.page.getByRole("button", { name: "\u041f\u043e\u0438\u0441\u043a", exact: true });
+    const menu = f.page.getByRole("button", { name: "\u041c\u0435\u043d\u044e", exact: true });
+    const snapshot = state => header.screenshot({ path: join(output, `tucked-search-${width}-${theme}-${scale}-${state}.png`), animations: "disabled" });
+    await f.page.getByTestId("chat-list-scroller").evaluate(node => { node.scrollTop = 160; });
+    await wrapper.and(f.page.locator(".max-h-0")).waitFor({ state: "attached" });
+    const focused = locator => locator.evaluate(node => node === document.activeElement);
+    if (width < 768) {
+      await opener.waitFor();
+      assert.equal((await wrapper.boundingBox()).height, 0, "the field is clipped before keyboard navigation");
+      await menu.focus();
+      await f.page.keyboard.press("Tab");
+      const target = await f.page.locator(":focus").evaluate(node => node.getAttribute("data-testid") ?? node.getAttribute("aria-label"));
+      assert.deepEqual({ target, height: (await wrapper.boundingBox()).height },
+        { target: "\u041f\u043e\u0438\u0441\u043a", height: 0 }, "Tab reaches the visible opener without revealing the clipped field");
+      await snapshot("closed");
+      await f.page.keyboard.press("Enter");
+      await field.and(f.page.locator(":focus")).waitFor();
+      await field.press("Escape");
+      await menu.focus();
+      await f.page.keyboard.press("Tab");
+      assert.equal(await focused(field), true, "the untucked field rejoins the Tab order");
+    } else {
+      assert.equal(await opener.isVisible(), false, "desktop does not use the mobile opener");
+      await f.page.getByTestId("notification-bell-button").focus();
+      await f.page.keyboard.press("Shift+Tab");
+      assert.equal(await focused(field), true, "desktop search stays tabbable when scrolled");
+    }
+    assert.ok((await wrapper.boundingBox()).height >= 36, "the focused field has usable geometry");
+    await snapshot("focused");
+  } finally { await dispose(f); }
+});
+
 for (const width of [390, 1440]) for (const theme of ["light", "dark"]) test(`${width} ${theme}: unread QuickSwitch and global query clear retain list DOM and anchor`, async () => {
   const f = await fixture(width, theme);
   try {
@@ -288,7 +328,9 @@ test("loading/unavailable/stale, folder and contacts policies remain effective",
     assert.equal(await f.page.getByTestId("chat-list-scroller").count(), 0);
     await f.page.evaluate(() => window.patch({ fixtureLoading: false, fixtureView: "unavailable" }));
     await f.page.getByTestId("chat-list-unavailable").waitFor(); assert.equal(await f.page.getByTestId("chat-list-scroller").count(), 0);
-    await f.page.evaluate(() => window.patch({ fixtureView: "stale" })); await f.page.getByTestId("chat-list-stale").waitFor();
+    await f.page.evaluate(() => window.patch({ fixtureView: "stale" }));
+    await f.page.getByTestId("chat-list-scroller").waitFor();
+    assert.equal(await f.page.getByTestId("chat-list-stale").count(), 0, "cached rows must not show the retired transient warning");
     assert.equal(await f.page.getByTestId("chat-list-scroller").getByTestId("chat-list-item").count(), 32);
     await f.page.getByRole("button", { name: /QA folder/ }).click();
     assert.equal(await f.page.getByTestId("chat-list-scroller").getByTestId("chat-list-item").count(), 1);

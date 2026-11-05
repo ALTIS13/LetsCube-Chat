@@ -379,6 +379,7 @@ export function SidebarHeader({
             type="text"
             placeholder="Поиск"
             aria-label="Поиск людей, чатов, сообщений или +номера"
+            tabIndex={isPhone && tuck ? -1 : undefined}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => {
