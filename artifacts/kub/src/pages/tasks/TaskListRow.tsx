@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { TaskOpenButton } from "./TaskOpenButton";
 import {
   TASK_ASSIGNMENT_SCOPE_META,
   TASK_PRIORITY_META,
@@ -38,21 +39,8 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
       className={cn(
-        // Периметр остаётся: строка задачи — это мишень (onClick, role=button,
-        // Enter/Space), и границей же она говорит о наведении, выборе и
-        // удалении. Снять её здесь значит оставить три состояния без канала.
-        "grid w-full gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+        "relative grid w-full gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40",
         selectionControl
           ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:grid-cols-[auto_minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]"
           : "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]",
@@ -61,12 +49,14 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
       )}
     >
       {selectionControl && (
-        <div className="flex items-start justify-center pt-0.5 sm:items-center sm:pt-0">
+        <div className="relative z-10 flex items-start justify-center pt-0.5 sm:items-center sm:pt-0">
           {selectionControl}
         </div>
       )}
       <div className="min-w-0">
-        <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{task.title}</div>
+        <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">
+          <TaskOpenButton title={task.title} onClick={onClick} />
+        </div>
         {task.description && (
           <div className="mt-0.5 truncate text-xs text-[color:var(--kub-muted)]">{task.description}</div>
         )}

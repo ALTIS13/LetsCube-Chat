@@ -35,7 +35,7 @@ for (const theme of ["light","dark"] as const) {
     } finally {await f.close();}
   });
 
-  test(`keyboard selection does not open row or card (${theme})`,async({page})=>{
+  test(`task title opens independently of bulk selection (${theme})`,async({page})=>{
     const f=await mountTaskUi(page,bundle,theme);
     try {
       await page.evaluate(()=>{window.fixture.surface='list';window.fixture.render();});
@@ -51,11 +51,22 @@ for (const theme of ["light","dark"] as const) {
         expect(await page.evaluate(()=>window.fixture.opens)).toBe(0);
       }
       for (const id of ['row','card']) {
-        await page.getByTestId(id).locator('[role="button"]').focus();
+        const surface=page.getByTestId(id);
+        const open=surface.getByRole('button',{name:'Fictional task A',exact:true});
+        await expect(open).toBeVisible({timeout:2000});
+        await expect(open.getByRole('checkbox')).toHaveCount(0);
+        await open.focus();
         await page.keyboard.press('Enter');
         await page.keyboard.press('Space');
+        const box=await surface.boundingBox();
+        expect(box).not.toBeNull();
+        await page.mouse.click(box!.x+box!.width-10,box!.y+box!.height-6);
+        const selector=surface.getByRole('checkbox').locator('..');
+        await selector.click();
+        await expect(surface.getByRole('checkbox')).toBeChecked();
+        await selector.click();
       }
-      expect(await page.evaluate(()=>window.fixture.opens)).toBe(4);
+      expect(await page.evaluate(()=>window.fixture.opens)).toBe(6);
     } finally {await f.close();}
   });
 

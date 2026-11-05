@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { TaskOpenButton } from "./TaskOpenButton";
 import {
   TASK_ASSIGNMENT_SCOPE_META,
   TASK_PRIORITY_META,
@@ -37,19 +38,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
   const checklist = checklistProgress(task.checklist);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      className="text-left w-full rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-    >
+    <div className="text-left w-full rounded-xl">
       {/* Every edge state here is drawn with `outline`, and that is not a
           preference. `.kub-panel` sets `background`, `box-shadow` and the
           `border` shorthand, and it sits outside any cascade layer, so it beats
@@ -75,10 +64,10 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-2">
-            {selectionControl}
+            {selectionControl && <div className="relative z-10 shrink-0">{selectionControl}</div>}
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-semibold text-[color:var(--kub-text)] truncate">
-                {task.title}
+                <TaskOpenButton title={task.title} onClick={onClick} />
               </h3>
               {task.description && (
                 <p className="mt-1 text-xs text-[color:var(--kub-muted)] line-clamp-1">
