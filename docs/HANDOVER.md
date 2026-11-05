@@ -1,6 +1,33 @@
 # LETSCUBE — handover
 
-**Current checkpoint, 2026-11-05 16:39Z:** Owner Codex coordinator, Task9 of12;
+**Active goal, 2026-11-05:** Codex coordinator, LETSCUBE only. Finish the
+[12-stream acceptance plan](IMPLEMENTATION_STATUS.md) and deliver gated
+slices, not just implementations. Reuse accepted evidence. Optional
+commercial work is outside the agreed result. No cross-project access.
+
+**Current checkpoint, 2026-11-06:** Codex coordinator, Task9 with Tasks1/3/5/6/8
+parallel. [Current shared web](operations/2026-11-06-web-motion-txt.md)
+`9eb97344` / `a1aa8b14f8770bc3` (search motion and TXT renewal), exact
+image/assets verified. It includes [logout/task recovery](operations/2026-11-06-web-logout-recovery.md)
+and [task card/bell](operations/2026-11-06-web-task-bell-slice.md). [Android
+Stable `0.1.49`/50](operations/2026-11-06-android50-stable.md) is optional;
+verified public APK and rollback47. Realme49->50 kept data and the first
+normal logout passed. [Installed iPhone PWA](operations/2026-11-05-task9-iphone-pwa.md)
+passed first logout on the new public web, exact QA retirement and release.
+Its card is still open. On [Android 49](operations/2026-11-05-task9-android-card.md),
+card and both drafts through foreground/live peer update passed. Physical
+isolated Retry/revoke/regrant passed; actual signed-app RLS revoke remains
+open. No QA-only active staff location; no shared-location grant was made.
+
+Next: review the one-run [D-356](operations/2026-11-05-task1-d356-held-bell-read.md)
+live held-read setup before any QA send, and integrate narrow Task3/5/6
+work after review. [Windows cold WNS](operations/2026-11-05-task10-windows-wns-readiness.md)
+still lacks package/provider identity; independent Web Push receipt not shown.
+Monitoring needs an external operator-only QA recipient. [Encrypted backup](operations/2026-11-05-task4-external-backup.md)
+bytes verified, retention/restore open. [Storage](operations/2026-11-06-task5-source-storage-revoke.md)
+public bytes still available after revoke; do not flip the bucket.
+
+**Prior checkpoint, 2026-11-05:** Owner Codex coordinator, Tasks9--12;
 bounded Task8 and channel work released. Shared web `736a5c85`/`d86e22971566dee8`
 and AndroidStable0.1.46/build47 are verified, mandatory=false, rollback46 kept.
 D393 no false chat-cache error; persistent actual errors still offer a quiet
@@ -9,9 +36,30 @@ active Mine/history, individual-channel notification controls and release histor
 Migration20261105151615 applied with before-backup, exact rollback/mirrors,17
 rehearsal/live cases and3 mutations. UI68 plus targeted boundary checks and
 exact pixels pass. Realme46->47 retained identity/data/guest and exact APK hash;
-public bytes and web image/assets verified. Next: actual authenticated two-client
-task review/history and Android draft/permission-loss QA. No native Apple/Windows
-package, real provider delivery or whole-product interface acceptance is claimed.
+public bytes and web image/assets verified. Follow-up: owned two-client web task
+review/history passed with live Realtime and exact cleanup. A rented iPhone
+17 Pro Max passed guest PWA install, keyboard and foreground return; released.
+Task-detail resume/online revalidation and editor retirement on confirmed
+loss of access are fixed locally. Focus and late-delete regression checks,
+78 focused tests, 6 visual cases and local build `2ce1b2d2a5e651f8` pass;
+not released. Realme unlocked and build47 guest AX calibrated.
+Physical Realme browser passed fictional foreground/Retry/revoke/restore.
+Stable47 QA Tech Admin login and fixture passed; native draft driver did not
+find the task card in Mine. Fixture/API/native SID cleanup passed; a second
+normal UI logout restored empty guest and HOME. Silent logout error handling
+fixed and verified locally (62 Auth cases), original Realme response unproven.
+Android48 `9f113947` / `93893b363c3d2bbb` is signed and installed on Realme,
+not published. Actual 47->48 retained data and matched full APK bytes. On 48,
+QA login and Mine exact search passed; AX did not find the card. Actual
+logout failure alert, normal retry, exact SID cleanup, empty guest and HOME
+passed. Next: reconcile the native list response with card AX before another
+cohort, then separate staff revoke. Task8 hidden-search Tab fix is in 48.
+[Android48](operations/2026-11-05-android48-qa.md),
+[Windows boundaries](operations/2026-11-05-task10-windows-boundary.md),
+[monitoring loopback](operations/2026-11-05-task11-uptime-canary.md),
+[optional scope reconciled](operations/2026-11-05-task12-optional-scope.md).
+Signed-in iPhone PWA, live monitoring delivery and commercial scope remain separate.
+No native Apple/Windows package or whole-product interface acceptance is claimed.
 [Current batch/evidence](operations/2026-11-05-task-workflows.md),
 [12-stream status](IMPLEMENTATION_STATUS.md).
 

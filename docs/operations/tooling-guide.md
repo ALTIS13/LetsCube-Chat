@@ -19,6 +19,14 @@ Do not generate speculative redesigns or spend search calls just to prove login.
 | Rive | session_info succeeded, no active file/open tabs | Edit an existing selected animation/state machine, validate structure, render the artboard and inspect pixels before exporting. Do not create paid assets merely to exercise the connection. No Rive runtime/source change was made. |
 
 Current reference: [Discord iOS image upload](https://mobbin.com/flows/19741d96-a866-4416-af35-3a022cbbff33).
+
+Task8 search follow-up, 2026-11-05: one Refero iOS Screens query returned
+Telegram. Inspected the full [chat list](https://refero.design/screens/b0f51fe1-2178-4edb-b835-f06f2028d293)
+and [search inside a conversation](https://refero.design/screens/d5382319-10cd-4566-b4f2-9e89cc377542).
+The list keeps its search affordance above folders; active in-chat search
+distinguishes clearing the query from leaving search. Preserve that distinction
+and the list's scroll anchor in LETSCUBE. These are separate static screens,
+not a paired flow or evidence about motion, Android, or current client versions.
 Observed: an explicit selected thumbnail in the gallery sheet and Send action;
 the sent images then appear in the conversation. This supports explicit selection
 and send feedback, not atomicity, retries, caption ownership or native codec

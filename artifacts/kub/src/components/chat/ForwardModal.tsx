@@ -5,7 +5,8 @@ import { BotTag } from "@/components/bots/BotTag";
 import { chatBotPartner } from "@/lib/chatBots";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
-import { KubIcon, KubModal } from "@/components/kub";
+import { KubButton, KubIcon, KubModal } from "@/components/kub";
+import { useBroadcastPublication } from "@/hooks/useBroadcastPublication";
 import type { MessageWithSender } from "@/types/database";
 import { forwardDraftTitle, forwardTargets } from "@/lib/messageActions";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
@@ -40,9 +41,16 @@ export function ForwardModal({ messages, onClose, onForward }: ForwardModalProps
   // you are talking to is the source — so the one person a message could not
   // be forwarded to was them: «И даже переслать тебе он не даёт. Только другим
   // людям.» Do not put it back; `forwardTargets` carries the reason.
-  const filtered = useMemo(() => forwardTargets(chats, query), [chats, query]);
+  const channelIds = useMemo(() => chats.filter((chat) => chat.type === "channel")
+    .map((chat) => chat.id).sort().join(","), [chats]);
+  const publication = useBroadcastPublication(channelIds);
+  const matches = useMemo(() => forwardTargets(chats, query), [chats, query]);
+  const filtered = matches.filter((chat) => chat.type !== "channel" || publication.statusFor(chat.id) === "publisher");
+  const checkingChannels = publication.status !== "ready" && matches.some((chat) => chat.type === "channel");
 
   const handlePick = async (id: string) => {
+    const target = useAppStore.getState().chats.find((chat) => chat.id === id);
+    if (!target || (target.type === "channel" && !publication.canPublishNow(id))) return;
     setBusyId(id);
     try { await onForward(id); }
     finally { setBusyId(null); }
@@ -83,9 +91,22 @@ export function ForwardModal({ messages, onClose, onForward }: ForwardModalProps
         />
       </div>
 
+      {checkingChannels && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-[color:var(--kub-muted)]">
+          <span role="status">{publication.status === "checking" ? "Проверяем права каналов…" : "Не удалось проверить права каналов."}</span>
+          {publication.status === "unavailable" && (
+            <KubButton type="button" variant="ghost" size="sm" onClick={publication.retry}>Повторить</KubButton>
+          )}
+        </div>
+      )}
+
       <div data-forward-picker="true" className="max-h-72 overflow-y-auto -mx-4 px-1 py-1">
         {filtered.length === 0 ? (
-          <p className="text-center text-sm py-8 text-[color:var(--kub-muted)]">Чаты не найдены</p>
+          checkingChannels ? null : (
+            <p className="text-center text-sm py-8 text-[color:var(--kub-muted)]">
+              {matches.length ? "Нет доступных чатов" : "Чаты не найдены"}
+            </p>
+          )
         ) : (
           filtered.map((chat) => (
             <button

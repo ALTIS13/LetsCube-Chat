@@ -586,8 +586,9 @@ ownership, readable defaults/scale and reduced-motion preference.
   hydration was not held; actual-hook held-response tests already cover readiness.
   No forced phone Auth/permission fault or all-platform claim is needed to close
   D370; unexercised device/fault/OEM cases remain separate QA coverage.
-- [ ] Measure one uncovered native search expand/collapse or compact-container
-  defect, including frame/layout evidence before changing animation.
+- [x] Measured search collapse/expansion on a physical Realme WebView with
+  actual sidebar code and fictional rows: 44px one-frame layout snap.
+  [Frame/anchor evidence](../../operations/2026-11-06-task8-search-motion.md).
 - [x] Complete/release reproduced D375 search-list continuity: actual shared
   Sidebar unmounts the list for quick results and loses its scroll on Escape.
   Source18/WebKit/final typecheck/review/pixels and actual web/Stable30 release
@@ -702,12 +703,14 @@ measured resource limits and no speculative platform rewrite.
 
 ## Task12: Remaining Optional Product Scope (#24)
 
-**State:** QUEUED behind core reliability, not silently removed from owner scope.
+**State:** Scope reconciled. Existing non-commercial behavior verified locally;
+commercial grant/expiry and provider decisions remain open.
+[Nov05 evidence](../../operations/2026-11-05-task12-optional-scope.md).
 **Files/Interfaces:** Existing optional cosmetics/paid-feature proposal; revalidate
 commercial/provider constraints before implementing its independently testable
 slice. No unrequested purchase, financial commitment or fabricated entitlement.
 
-- [ ] Reconcile requested optional scope with the accepted product design.
+- [x] Reconcile requested optional scope with the accepted product design.
 - [ ] Implement reversible non-commercial pieces; identify genuine external
   owner/provider decisions rather than presenting them as completed.
 

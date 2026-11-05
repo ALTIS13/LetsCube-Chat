@@ -26,6 +26,7 @@ import { VoiceCallCapsule } from "./VoiceCallCapsule";
 import { useTopics } from "@/hooks/useTopics";
 import { useServerChannels } from "@/hooks/useServerChannels";
 import { useChatRoles } from "@/hooks/useChatRoles";
+import { useBroadcastPublication } from "@/hooks/useBroadcastPublication";
 import { topChatRolesByMember } from "@/lib/chatRoles";
 import { useVoiceChannel } from "@/hooks/useVoiceChannel";
 import { useVoiceElsewhere } from "@/hooks/useVoiceElsewhere";
@@ -203,6 +204,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const chat = useAppStore((s) => s.chats.find((c) => c.id === chatId));
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const chatKind = chat?.type;
+  const broadcast = chatKind === "channel";
+  const { statusFor: publicationFor, canPublishNow, retry: retryPublication } =
+    useBroadcastPublication(broadcast ? chatId : "");
+  const publicationStatus = broadcast ? publicationFor(chatId) : null;
+  const canCompose = Boolean(chat) && (publicationStatus === null || publicationStatus === "publisher");
+  const canUseComposerNow = useCallback(() => {
+    if (chatKind !== undefined && chatKind !== "channel") return true;
+    const app = useAppStore.getState();
+    return chatKind === "channel" && app.selectedChatId === chatId && canPublishNow(chatId) &&
+      app.chats.some((entry) => entry.id === chatId && entry.type === "channel");
+  }, [chatId, chatKind, canPublishNow]);
   const botViewer = useBotViewerPanels(chatId, userId);
   const markChatRead = useAppStore((s) => s.markChatRead);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
@@ -1157,6 +1170,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     origin?: { replyToId: string | null; topicId: string | null | undefined; clientSentAt: string },
     mentionEntities?: MessageMentionsV1,
   ): Promise<boolean> => {
+    if (!canUseComposerNow()) return false;
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять файлы.", "Вложения");
       return false;
@@ -1521,7 +1535,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     } finally {
       stopAccountWatch();
     }
-  }, [messageTopicId, replyTo?.id, removeStagedAttachment, retryMessageSend, sendMediaMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
+  }, [canUseComposerNow, messageTopicId, replyTo?.id, removeStagedAttachment, retryMessageSend, sendMediaMessage, updateStagedAttachment, uploadScope, uploadStagedAttachment, userId]);
 
   /**
    * «Повторить» on a failed message. A placeholder whose bytes never reached
@@ -1530,6 +1544,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * refused is inserted again from its own fields, as before.
    */
   const retrySend = useCallback((message: MessageWithSender) => {
+    if (!canUseComposerNow()) return;
     const entry = message.media_path ? null : outgoingEntry(message.id);
     if (entry) {
       void sendStagedAttachments(entry.caption ?? "", undefined, [entry.attachment], {
@@ -1540,7 +1555,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       return;
     }
     void retryMessageSend(message);
-  }, [retryMessageSend, sendStagedAttachments]);
+  }, [canUseComposerNow, retryMessageSend, sendStagedAttachments]);
 
   /**
    * Files and voice notes of this conversation that waited for the network —
@@ -1552,6 +1567,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    */
   useEffect(() => {
     const sendWaiting = () => {
+      if (!canUseComposerNow()) return;
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       const messages = useAppStore.getState().messages[chatId] ?? [];
       for (const entry of outgoingEntriesForChat(chatId)) {
@@ -1578,7 +1594,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       window.removeEventListener(CONNECTION_REVIVED_EVENT, sendWaiting);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [chatId, retrySend]);
+  }, [canUseComposerNow, chatId, retrySend]);
 
   // While this view is mounted its conversation's waiting attachments are its
   // own to send, above; the background sender of item 52 leaves them alone.
@@ -1627,11 +1643,20 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * with its media and its previews (D-083).
    */
   const sendForwardDraft = useCallback(async (comment: string, draft: MessageWithSender[], mentionEntities?: MessageMentionsV1) => {
+    if (!canUseComposerNow()) return;
     setPendingForward(null);
     if (comment.trim()) await sendMessage(comment, undefined, mentionEntities);
     // The messages go to the chat on screen, and arriving in its feed is their
     // confirmation — see `forwardFeedback`. Only a failure is said.
     for (let index = 0; index < draft.length; index += 1) {
+      if (broadcast && !canUseComposerNow()) {
+        const app = useAppStore.getState();
+        if (app.currentUser?.id === userId && app.accountEpoch === accountEpoch &&
+            app.selectedChatId === chatId && !app.pendingForward) {
+          setPendingForward({ chatId, messages: draft.slice(index) });
+        }
+        return;
+      }
       const result = await forwardMessage(draft[index], chatId)
         .catch((cause: unknown) => ({ ok: false as const, error: mapPgError(cause) }));
       if (!result.ok) {
@@ -1641,7 +1666,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       }
     }
     settleActionFeedback(FORWARD_FEEDBACK_KEY, null);
-  }, [chatId, forwardMessage, sendMessage, setPendingForward]);
+  }, [accountEpoch, broadcast, canUseComposerNow, chatId, forwardMessage, sendMessage, setPendingForward, userId]);
 
   const stageIncomingFiles = useCallback(
     (files: File[], source: IncomingFilesSource, compress: boolean) => stageFiles(files, source, { compress }),
@@ -1659,9 +1684,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     closeMediaSendRequest();
   }, [chatId, closeMediaSendRequest]);
 
+  useLayoutEffect(() => {
+    if (!publicationStatus || publicationStatus === "publisher") return;
+    closeMediaSendRequest();
+    setIsComposerFocused(false);
+    dragDepthRef.current = 0;
+    setDraggingFiles(false);
+    if (publicationStatus === "read-only" && useAppStore.getState().editingMessage?.chat_id === chatId) {
+      setEditingMessage(null);
+    }
+  }, [chatId, closeMediaSendRequest, publicationStatus, setEditingMessage]);
+
   // The attach sheet (D-122) sends what it picked: staged as chosen, compressed
   // or as originals, then sent with its caption.
   const sendMediaFromSheet = useCallback(async (request: AttachSendRequest) => {
+    if (!canUseComposerNow()) return;
     const staged = await stageFiles(request.files, request.source, {
       compress: request.compress,
       photoQuality: request.photoQuality,
@@ -1670,9 +1707,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     });
     if (!staged.length) return;
     await sendStagedAttachments(request.caption, undefined, staged, undefined, request.mentionEntities);
-  }, [sendStagedAttachments, stageFiles]);
+  }, [canUseComposerNow, sendStagedAttachments, stageFiles]);
 
   const handleSend = useCallback((content: string, mentionEntities?: MessageMentionsV1) => {
+    if (!canUseComposerNow()) return false;
     if (forwardDraft) {
       void sendForwardDraft(content, forwardDraft, mentionEntities);
       return true;
@@ -1688,7 +1726,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     void sendMessage(content, replyToId, mentionEntities);
     setReplyTo(null);
     return true;
-  }, [forwardDraft, replyTo?.id, sendForwardDraft, sendMessage, sendStagedAttachments, userId]);
+  }, [canUseComposerNow, forwardDraft, replyTo?.id, sendForwardDraft, sendMessage, sendStagedAttachments, userId]);
 
   /**
    * Running a command that is already in the conversation (D-263).
@@ -1701,12 +1739,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * Telegram's tap sends the command and nothing else.
    */
   const runBotCommand = useCallback((content: string) => {
+    if (!canUseComposerNow()) return;
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять сообщения.", "Сообщение");
       return;
     }
     void sendMessage(content);
-  }, [sendMessage, userId]);
+  }, [canUseComposerNow, sendMessage, userId]);
 
   /**
    * What makes a `/command` in the conversation pressable, or null (D-263).
@@ -1719,10 +1758,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    */
   const botCommandsInText = useMemo<BotCommandsInText | null>(
     () =>
-      botChat.botId && botChat.commands.length > 0
+      canCompose && botChat.botId && botChat.commands.length > 0
         ? { commands: botChat.commands, addressing: botAddressing, onRun: runBotCommand }
         : null,
-    [botAddressing, botChat.botId, botChat.commands, runBotCommand],
+    [botAddressing, botChat.botId, botChat.commands, canCompose, runBotCommand],
   );
 
   /**
@@ -1745,18 +1784,20 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [chatId, clearComposerDraftRequest, composerDraftRequest]);
 
   const handleReply = useCallback((msg: MessageWithSender) => {
+    if (!canUseComposerNow()) return;
     setReplyTo(msg);
     setReplyFocusKey((key) => key + 1);
-  }, []);
+  }, [canUseComposerNow]);
 
   const submitBotInput = useCallback((message: MessageWithSender, text: string) => {
+    if (!canUseComposerNow()) return false;
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять сообщения.", "Сообщение");
       return false;
     }
     void sendMessage(text, message.id);
     return true;
-  }, [sendMessage, userId]);
+  }, [canUseComposerNow, sendMessage, userId]);
 
   /**
    * A released recording is sent, not parked (D-130, audit row R6).
@@ -1768,6 +1809,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * modal this used to raise (R7) — so the guard left here is silent.
    */
   const handleSendVoice = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
+    if (!canUseComposerNow()) return;
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять голосовые сообщения.", "Голосовое сообщение");
       return;
@@ -1776,10 +1818,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const staged = stageVoiceRecording(blob, durationMs, mimeType);
     if (!staged) return;
     await sendStagedAttachments("", undefined, [staged]);
-  }, [sendStagedAttachments, stageVoiceRecording, userId]);
+  }, [canUseComposerNow, sendStagedAttachments, stageVoiceRecording, userId]);
 
   /** The round video goes the same way: released means sent (D-130). */
   const handleSendVideoMessage = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
+    if (!canUseComposerNow()) return;
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять видео-сообщения.", "Видео-сообщение");
       return;
@@ -1788,7 +1831,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const staged = stageVideoMessageRecording(blob, durationMs, mimeType);
     if (!staged) return;
     await sendStagedAttachments("", undefined, [staged]);
-  }, [sendStagedAttachments, stageVideoMessageRecording, userId]);
+  }, [canUseComposerNow, sendStagedAttachments, stageVideoMessageRecording, userId]);
 
   const showJumpNotice = useCallback((message: string) => {
     setPinError(message);
@@ -1907,23 +1950,25 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [deleteMessagesForEveryone, hideMessagesForMe]);
 
   const handleEditFailedSend = useCallback((msg: MessageWithSender) => {
+    if (!canUseComposerNow()) return;
     if (msg.type !== "text" || msg.user_id !== useAppStore.getState().currentUser?.id) return;
     discardSend(msg);
     setDraftRestore({ id: `${msg.id}:${Date.now()}`, text: msg.content ?? "", mentionEntities: createMentionText(msg.content ?? "", msg.mention_entities).mentionEntities });
-  }, [discardSend]);
+  }, [canUseComposerNow, discardSend]);
 
   const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
+    if (!canUseComposerNow()) return;
     dragDepthRef.current += 1;
     setDraggingFiles(true);
-  }, []);
+  }, [canUseComposerNow]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  }, []);
+    event.dataTransfer.dropEffect = canUseComposerNow() ? "copy" : "none";
+  }, [canUseComposerNow]);
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!hasDraggedFiles(event.dataTransfer)) return;
@@ -1937,9 +1982,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     event.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
+    if (!canUseComposerNow()) return;
     const files = filesFromDataTransfer(event.dataTransfer);
     if (files.length) handleIncomingFiles(files, "drop");
-  }, [handleIncomingFiles]);
+  }, [canUseComposerNow, handleIncomingFiles]);
 
   // The conversation runs the full height of the pane, under both pieces of
   // chrome, so its padding is exactly what they cover. Note what this does
@@ -2098,7 +2144,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             <KubEmptyState
               icon={<KubIcon name="chatRect" size={24} />}
               title={hasMoreOlder ? "Ранние сообщения" : "Сообщений пока нет"}
-              description={hasMoreOlder ? (olderError ?? "В загруженной части истории нет сообщений.") : "Поздоровайтесь и начните разговор."}
+              description={hasMoreOlder ? (olderError ?? "В загруженной части истории нет сообщений.") :
+                publicationStatus && !canCompose ? undefined : "Поздоровайтесь и начните разговор."}
               action={hasMoreOlder ? (
                 <KubButton type="button" variant="secondary" className="min-h-11" loading={loadingOlder}
                   leftIcon={<KubIcon name="chevronUp" size={16} />}
@@ -2114,17 +2161,17 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             messages={conversation}
             onJumpControlChange={setJumpControlOnScreen}
             loadReadTimes={readTimesLoader()}
-            onReply={handleReply}
-            onBotInputSubmit={submitBotInput}
+            onReply={canCompose ? handleReply : undefined}
+            onBotInputSubmit={canCompose ? submitBotInput : undefined}
             onJumpToReply={handleJumpToReply}
             onReaction={toggleReaction}
-            onEdit={(msg) => setEditingMessage(msg)}
+            onEdit={canCompose ? (msg) => { if (canUseComposerNow()) setEditingMessage(msg); } : undefined}
             onDelete={savedChat ? undefined : (msg) => deleteMessage(msg.id)}
             onHideForMe={handleHideForMe}
             onTogglePin={userId ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessages([msg])}
-            onRetrySend={retrySend}
-            onEditFailedSend={handleEditFailedSend}
+            onRetrySend={canCompose ? retrySend : undefined}
+            onEditFailedSend={canCompose ? handleEditFailedSend : undefined}
             onDiscardLocalMessage={discardSend}
             onOpenMedia={setOpenMediaId}
             bottomRef={bottomRef}
@@ -2311,7 +2358,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           className="kub-chat-composer-dock absolute inset-x-0 bottom-0 transition-[padding-bottom] duration-150 ease-out"
           style={{ paddingBottom: "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))" }}
         >
-          <MessageInput
+          {canCompose ? <MessageInput
             chatId={chatId}
             topicId={messageTopicId}
             replyTo={replyTo}
@@ -2319,7 +2366,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onLayoutChange={measureComposerHeight}
             onCancelReply={() => setReplyTo(null)}
             onSend={handleSend}
-            onEdit={editMessage}
+            onEdit={broadcast ? async (...args) => canUseComposerNow() ? editMessage(...args) :
+              { ok: false, error: "Нет права публикации." } : editMessage}
             onSendVoice={handleSendVoice}
             onSendVideoMessage={handleSendVideoMessage}
             onTyping={sendTyping}
@@ -2352,7 +2400,23 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
                   }
                 : null
             }
-          />
+          /> : publicationStatus && (
+            <div className="relative flex min-h-12 flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-center text-sm text-[color:var(--kub-text)]">
+              <div data-testid="broadcast-publication-state" role="status" className="flex min-w-0 items-center gap-2">
+                <KubIcon name="lock" size={16} className="shrink-0 text-[color:var(--kub-muted)]" />
+                <span>{publicationStatus === "checking" ? "Проверяем право публикации…" :
+                  publicationStatus === "unavailable" ? "Не удалось проверить право публикации." : "Только чтение"}</span>
+              </div>
+              {publicationStatus === "unavailable" && (
+                <KubButton type="button" variant="ghost" size="sm" onClick={retryPublication}>Повторить</KubButton>
+              )}
+              {forwardDraft && (
+                <KubButton type="button" variant="ghost" size="sm" onClick={() => setPendingForward(null)}>
+                  Отменить пересылку
+                </KubButton>
+              )}
+            </div>
+          )}
         </div>
         <BotViewerPanel viewer={botViewer} />
       </div>

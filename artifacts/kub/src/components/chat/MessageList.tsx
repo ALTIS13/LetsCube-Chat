@@ -101,7 +101,7 @@ interface MessageListProps {
    * whatever else floats in that corner can make room (D-326).
    */
   onJumpControlChange?: (onScreen: boolean) => void;
-  onReply: (msg: MessageWithSender) => void;
+  onReply?: (msg: MessageWithSender) => void;
   onBotInputSubmit?: (msg: MessageWithSender, text: string) => boolean;
   onJumpToReply?: (messageId: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
@@ -832,7 +832,7 @@ export function MessageList({
     reply: (message) => {
       setMenu(null);
       setMenuLift(0);
-      handlersRef.current.onReply(message);
+      handlersRef.current.onReply?.(message);
     },
     submitBotInput: (message, text) => handlersRef.current.onBotInputSubmit?.(message, text) ?? false,
     jumpToReply: (messageId) => handlersRef.current.onJumpToReply?.(messageId),
@@ -886,6 +886,7 @@ export function MessageList({
     },
   }), [toggleSelected]);
 
+  const hasReply = Boolean(onReply);
   const hasJumpToReply = Boolean(onJumpToReply);
   const hasEdit = Boolean(onEdit);
   const hasDelete = Boolean(onDelete);
@@ -897,6 +898,7 @@ export function MessageList({
   const hasForward = Boolean(onForward);
   const hasOpenMedia = Boolean(onOpenMedia);
   const rowCapabilities = React.useMemo<MessageRowCapabilities>(() => ({
+    reply: hasReply,
     jumpToReply: hasJumpToReply,
     edit: hasEdit,
     remove: hasDelete,
@@ -910,7 +912,7 @@ export function MessageList({
     callBack: callBackTarget !== null,
   }), [
     callBackTarget, hasDelete, hasDiscardLocalMessage, hasEdit, hasEditFailedSend, hasForward,
-    hasHideForMe, hasJumpToReply, hasOpenMedia, hasRetrySend, hasTogglePin,
+    hasHideForMe, hasJumpToReply, hasOpenMedia, hasReply, hasRetrySend, hasTogglePin,
   ]);
 
   // Rebuilt whenever a message or a member's read mark changes, which is every
@@ -1038,7 +1040,7 @@ export function MessageList({
     };
     switch (action) {
       case "reply":
-        handlers.onReply(message);
+        handlers.onReply?.(message);
         return;
       case "edit":
       case "editCaption":
@@ -1155,7 +1157,7 @@ export function MessageList({
       captionEditable: kind === "photo" || kind === "file" || (kind === "video" && !isRoundVideoMessage(menuMessage)),
       groupReadInfo: receiptsByMessageId.groupRead.get(menuMessage.id) ?? null,
       capabilities: {
-        reply: !localSend,
+        reply: rowCapabilities.reply && !localSend,
         edit: own && rowCapabilities.edit,
         pin: rowCapabilities.togglePin,
         forward: rowCapabilities.forward,
@@ -2053,6 +2055,7 @@ interface MessageRowActions {
  * themselves are new arrows on every render of the caller.
  */
 interface MessageRowCapabilities {
+  reply: boolean;
   jumpToReply: boolean;
   edit: boolean;
   remove: boolean;
@@ -2201,7 +2204,7 @@ const MessageRow = React.memo(function MessageRow({
   const isSystemMessage = msg.type === "system";
   const canSelect = !msg.deleted_at && !isSystemMessage;
   const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
-  const canReply = canSelect && !isLocalSend;
+  const canReply = capabilities.reply && canSelect && !isLocalSend;
   const hasGroupReadInfo = groupReadInfo !== null;
 
   // Once per message rather than once per render, so the bubble's memo sees the
