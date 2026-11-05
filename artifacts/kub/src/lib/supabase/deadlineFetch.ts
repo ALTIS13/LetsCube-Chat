@@ -199,6 +199,12 @@ export function createDeadlineFetch(
 
     return base(input, { ...init, signal: controller.signal }).then(
       async (response) => {
+        // Some browser engines expose an empty stream for these statuses, but
+        // the Response constructor forbids wrapping it as a response body.
+        if (response.status === 204 || response.status === 205 || response.status === 304) {
+          settle();
+          return response;
+        }
         const errorFor = (error: unknown) => cutReason ? cutError(cutReason)
           : controller.signal.aborted ? controller.signal.reason : error;
         if (finiteJson && response.body && response.status !== 0) {
