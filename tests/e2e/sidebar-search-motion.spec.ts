@@ -7,7 +7,7 @@ const me = person('93111111-1111-4111-8111-000000000001', 'Fictional Reader');
 const at = '2026-10-09T09:00:00.000Z';
 const ids = Array.from({ length: 32 }, (_, i) => `93222222-2222-4222-8222-${String(i + 1).padStart(12, '0')}`);
 
-test('sidebar search respects reduced motion without losing focus or query', async ({ page, request }) => {
+test('sidebar search respects reduced motion without losing focus or query', async ({ page, request, browserName }) => {
   expect(process.env.KUB_QA_ALLOW_MUTATIONS).toBe('0');
   // Keep the wheel scenario scrollable even in the 2160px-tall desktop project.
   const viewport = page.viewportSize()!;
@@ -78,10 +78,16 @@ test('sidebar search respects reduced motion without losing focus or query', asy
   await expect(page.getByTestId('sidebar-search-result-chat')).toHaveCount(24);
   await expect.poll(() => resultsScroller.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeGreaterThan(200);
   const beforeScroll = await resultsScroller.evaluate((node) => node.scrollTop);
-  const bounds = await resultsScroller.boundingBox();
-  expect(bounds).not.toBeNull();
-  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
-  await page.mouse.wheel(0, 200);
+  if (browserName === 'webkit' && test.info().project.use.isMobile) {
+    // Playwright cannot send a mouse wheel in mobile WebKit. Exercise its real
+    // overflow scroller without treating DOM scrolling as a physical gesture.
+    await resultsScroller.evaluate(node => node.scrollBy(0, 200));
+  } else {
+    const bounds = await resultsScroller.boundingBox();
+    expect(bounds).not.toBeNull();
+    await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+    await page.mouse.wheel(0, 200);
+  }
   await expect.poll(() => resultsScroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(beforeScroll);
   await expect(field).toHaveValue('Fictional');
   await expect(field).toBeFocused();
