@@ -180,8 +180,7 @@ function DocumentViewer({
   onClose: () => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [text, setText] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [textPreview, setTextPreview] = useState<{ text: string } | "failed" | null>(null);
 
   useEffect(() => {
     const opener = returnTo ?? document.activeElement as HTMLElement | null;
@@ -207,9 +206,10 @@ function DocumentViewer({
       try {
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`the file answered ${response.status}`);
-        setText(await response.text());
+        const text = await response.text();
+        if (!controller.signal.aborted) setTextPreview({ text });
       } catch {
-        if (!controller.signal.aborted) setFailed(true);
+        if (!controller.signal.aborted) setTextPreview("failed");
       }
     })();
     return () => controller.abort();
@@ -273,21 +273,21 @@ function DocumentViewer({
         )}
         {preview === "audio" && <audio src={url} controls autoPlay />}
         {preview === "text" && (
-          failed ? (
+          textPreview === "failed" ? (
             <div role="alert" className="text-center text-sm text-white/80">
               Не удалось открыть файл.{" "}
               <button type="button" className="underline" onClick={() => void saveMediaAs(url, facts.name)}>
                 Скачать
               </button>
             </div>
-          ) : text === null ? (
+          ) : textPreview === null ? (
             <KubIcon name="spinner" size={22} className="text-white/80" />
           ) : (
             <pre
               data-testid="document-viewer-text"
               className="h-full w-full max-w-5xl overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[#0d1117] p-4 font-mono text-[13px] leading-relaxed text-[#e6edf3]"
             >
-              {text}
+              {textPreview.text}
             </pre>
           )
         )}
