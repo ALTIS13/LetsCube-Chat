@@ -1,5 +1,21 @@
 # QA Results
 
+## 2026-11-05 - Bounded AAC Compatibility / Stable46
+
+Native AAC failure has actual Chromium RED before repair and GREEN afterwards.
+Affected42/browser8/typecheck/review pass; exact editor390/1440/both-theme pixels
+inspected. Realme/Yandex Chromium144 actually uses one product WebAudio decode;
+selected video/audio and cleanup pass, frozen source hashes match. This is not
+installed Capacitor editing or authenticated upload/receive/save acceptance.
+Original signer/Firebase4/QAfalse/APK-AAB web/config/DEX parity pass. Actual
+Realme45->46 retains UID/data/firstInstall, guest/foreground/fatal0 and complete
+installed APK hash. Sole healthy web01d3ae90/build78cbf7b00ba74f45 and imported
+editor/PCM/public-container hashes pass. Public Android0.1.45/build46 whole
+7,840,604B SHA64a71bc545e13e5ecc6133f3faffdfc8b2e876d96335d62ab8ddffa37312fd0c
+passes14:38:28Z, mandatory=false/rollback45 retained. Publisher149 offline
+controls pass; no SQL, worker/Edge or native Apple/Windows change.
+[Evidence and exact remaining scope](operations/2026-11-05-video-pcm-fallback.md).
+
 ## 2026-10-28 - Stable45 Follow-Up
 
 Stale native ready/catalog recovery10 and affected105 pass; final UI callback/

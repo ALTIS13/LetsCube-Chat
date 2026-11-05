@@ -1,8 +1,19 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-10-28.
+Status: active production-hardening tracker, updated 2026-11-05.
 
-**Current release, Oct28 20:36Z:** AndroidStable0.1.44/build45, mandatory=false,
+**Current release, Nov05 14:38Z:** AndroidStable0.1.45/build46, mandatory=false,
+full public APK SHA/length verified; rollback45 retained. D376 bounded AAC PCM
+compatibility is released, not universal encoding support. Actual browser
+RED/GREEN, affected42/browser8/typecheck/review, Realme browser one product
+WebAudio decode and exact selected video/audio pass. Native original signer/
+Firebase/parity, Realme45->46 retained identity/data/guest/fatal0/full installed
+hash and sole-healthy web01d3ae90/build78cbf7b00ba74f45/imported-PCM parity pass.
+Authenticated mixed-album upload/receive/save, installed-shell editing and Apple
+codec/device matrix remain open. No SQL, worker/Edge or native Apple/Windows
+change. [Release and limits](operations/2026-11-05-video-pcm-fallback.md).
+
+**Prior release, Oct28 20:36Z:** AndroidStable0.1.44/build45, mandatory=false,
 complete public APK SHA/length verified; rollback44 retained. Stale-ready catalog
 recovery and baked-video/slider correction are included. Exact post-dispatch
 notification close preserves newer cards and task/invite cleanup through both

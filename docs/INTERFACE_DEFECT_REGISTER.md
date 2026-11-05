@@ -26050,7 +26050,18 @@ actual guest upgrade/public bytes/rollback pass. Physical general-jank coverage
 is distinct from this repaired DOM/lifetime defect.
 [Cause, design and current stage](operations/2026-10-19-search-continuity.md).
 
-## D-376 `[ ]` Realme browser reports AAC support but fails actual video trimming
+## D-376 `[x]` Realme browser reports AAC support but fails actual video trimming
+
+**Released bounded repair, 2026-11-05:** Sourceaa1c25ad/candidate01d3ae90,
+shared-web78cbf7b00ba74f45 and AndroidStable0.1.45/build46. Native cleanup settles
+before one admitted PCM attempt through installed Mediabunny; no original/audio-
+dropping fallback. Actual Chromium RED/GREEN, affected42/browser8/typecheck/review
+and Realme browser exactly-one-decode selected-video/audio proof pass. Native
+retained-data upgrade/full artifact custody and web/public parity pass. This
+closes the recorded synthetic browser fixture, NOT arbitrary AAC, physical
+iPhone, installed Capacitor editing or authenticated send/save. Those wider
+Task3 matrix entries stay open. Historical diagnosis below is retained.
+[Implementation and release limits](operations/2026-11-05-video-pcm-fallback.md).
 
 **Severity:** medium; bounded browser/codec compatibility. Actual owned AVC/AAC
 fixture decodes on desktop; independently matched bytes on Realme/Yandex

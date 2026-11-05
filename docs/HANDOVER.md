@@ -1,19 +1,20 @@
 # LETSCUBE — handover
 
-**Current execution checkpoint, 2026-11-05:** Owner Codex coordinator, Task3.
-Live public catalog still reports Android0.1.44/build45/mandatory=false. Source
-baseline1c6fdd03 is unchanged after fetch; no old cold-media/updater/provider QA
-was replayed. Paid design-tool routing and actual connection limits are saved in
-[tooling guide](operations/tooling-guide.md); re-discover live callables rather
-than treating the inventory as permanent. Figma/Rive and Refero/Mobbin checks
-passed; Rive has no open file. Local Realme/A063 are visible, AE is absent; no
-device was rented or changed. Actual sheet/staging/send/retry callbacks now have
-a focused mixed-album regression3/3 plus a loaded caption-ownership omission
-control. No production defect was reproduced or patched in that bounded case.
-Next: actual authenticated mixed-album upload/retry/receive/view/save on supported
-shells and the separately gated D376 PCM bridge; mocked upload is not that proof.
-No new APK, migration or visual rewrite is justified by this test-only slice.
-[Consumer evidence](operations/2026-11-05-media-send-consumer.md).
+**Current execution checkpoint, 2026-11-05 14:38Z:** Owner Codex coordinator,
+Task3. D376's bounded PCM fallback is RELEASED on shared web01d3ae90/
+build78cbf7b00ba74f45 and AndroidStable0.1.45/build46, mandatory=false,
+rollback45 retained. Actual Chromium RED/GREEN, affected42/browser8, typecheck,
+review and unchanged editor390/1440/both-theme pixels pass. Actual Realme browser
+selects correct video/audio with exactly one product WebAudio decode; installed
+Realme45->46 retains data/identity and passes guest/fatal0/full APK hash. Sole
+healthy web, imported PCM chunk/public-container parity and whole public APK
+hash pass. No SQL, worker/Edge, Windows package, Apple or rental change.
+Next: actual authenticated mixed-album upload/retry/receive/view/save and remaining
+Apple codec/device matrix; browser PCM is not installed Capacitor editing proof.
+Reuse accepted cold-photo/notification/updater evidence, not repeated cohorts.
+[Release and limits](operations/2026-11-05-video-pcm-fallback.md),
+[consumer evidence](operations/2026-11-05-media-send-consumer.md),
+[paid tools and actual capability routing](operations/tooling-guide.md).
 
 **Current execution checkpoint, 2026-10-28:** Owner Codex coordinator. Stable
 Android0.1.44/build45 is published, mandatory=false/full public APK hash verified

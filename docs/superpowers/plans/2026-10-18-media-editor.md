@@ -71,6 +71,14 @@ approval round. This extends the existing attach flow, not a new upload path.
    explicitly refuses unsupported encoding; successful native/iPhone editing is
    not inferred. [Evidence and remaining release checks](../../operations/2026-10-18-media-editor.md).
 
+8. [x] D376 bounded AAC compatibility fallback is released on shared web01d3ae90
+   and AndroidStable0.1.45/build46. Existing Mediabunny composable conversion,
+   explicit provenance/memory/output envelopes, settled cancellation and actual
+   selected AV/waveform checks pass. Realme browser uses one product WebAudio
+   decode; native guest upgrade is separate from editing acceptance. Wider
+   authenticated media and Apple matrix stay open.
+   [Implementation and release](../../operations/2026-11-05-video-pcm-fallback.md).
+
 ## Acceptance Boundaries
 
 Every changed behavior gets a failing shipped case or omission control, not a

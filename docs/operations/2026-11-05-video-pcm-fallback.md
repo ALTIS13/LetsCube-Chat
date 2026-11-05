@@ -1,8 +1,8 @@
 # Bounded AAC Compatibility
 
-Owner Codex coordinator, Task3/D376. Stage: verified source and Realme browser;
-release integration follows separately. Native45 remains the last public APK at
-this source checkpoint. No database, Auth, provider or private media was touched.
+Owner Codex coordinator, Task3/D376. Stage: RELEASED on shared web and Android
+Stable46; broader authenticated/Apple acceptance remains separate. No database,
+Auth, provider or private media was touched.
 
 ## Implementation
 
@@ -76,9 +76,36 @@ branch-observed receipt2b34b016deb4c11714f63360. Earlier refused/partial records
 remain intact. This is a synthetic local-browser codec case, not authenticated
 upload/retry/receive/save, installed Capacitor, every AAC input or iPhone proof.
 
+## Release
+
+Productaa1c25adf10f67bd5a7fcdaa8b7b4f440aee05dc and version-only candidate
+01d3ae90e338c4a88abc801bbd9f047aeb2799b5 are on origin/main. Source/test hashes
+remain identical to the accepted browser/Realme evidence. Native0.1.45/build46
+was built from that exact clean candidate: APK7,840,604B,
+SHA25664a71bc545e13e5ecc6133f3faffdfc8b2e876d96335d62ab8ddffa37312fd0c,
+unchanged sole signerac8249647e3e32b32e7dba283c6c7bc835f293401a3cf82115901ce74f4a0839.
+Firebase4 values, ordinary false QA flags, APK/AAB web/config/DEX parity and
+known-secret scan pass. Realme45->46 retains UID/data/firstInstall; normal guest
+foreground/fatal0/full installed APK hash pass14:34Z, HOME restored. This is not
+an in-app updater or installed-shell editing case.
+
+Web sole healthy exact candidate/build78cbf7b00ba74f45, public/container
+HTML/SW/entry and imported editor/PCM chunk hashes pass. The PCM chunk is reached
+through the actual entry->editor dynamic import graph and carries the bounded
+output/decode/provenance helpers. Local APK web build4421dd4a7bf3ef5c is not
+misrepresented as the server's build ID. Worker/Edge unchanged, no migration.
+
+Publisher149 offline controls/mutations pass. Staging does not publish; then
+locked previous45 catalog/hash CAS, backup, immutable candidate publication and
+full public bytes verification pass14:38:28Z. Stable is0.1.45/build46,
+mandatory=false, rollback45 retained. Private release receipts live in primary
+`.ops-private/video-pcm-release46-20261105/`. Original failed and accepted browser
+receipts remain in their original directory; binding preparation after build
+does not claim the physical codec run happened after that build.
+
 ## Next
 
-Integrate reviewed source into web and next legitimate Android candidate with
-normal signer/Firebase/custody/retained-data gates. Keep the wider authenticated
-mixed-album journey and Apple codec/device matrix open; do not replay accepted
-cold-photo, notification or updater cohorts for unrelated coverage claims.
+Keep the wider authenticated mixed-album journey and Apple codec/device matrix
+open; do not replay accepted cold-photo, notification or updater cohorts for
+unrelated coverage claims. The narrow browser defect is closed; installed
+Capacitor editing/upload/retry/receive/save is not inferred from this release.

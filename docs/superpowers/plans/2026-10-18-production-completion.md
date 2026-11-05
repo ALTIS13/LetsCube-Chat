@@ -450,9 +450,13 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   after a first-file refusal.3/3 plus loaded omission control pass; no baseline
   source defect. This does not replace actual authenticated upload/device proof.
   [Consumer boundary](../../operations/2026-11-05-media-send-consumer.md).
-- [ ] Design/implement D376's bounded PCM fallback only after the accepted Web
+- [x] Design/implement D376's bounded PCM fallback only after the accepted Web
   Audio feasibility, with decoded-memory/track provenance/cancellation and exact
   both-track trim/alignment checks; no global decoder mutation or raw fallback.
+  Released shared-web01d3ae90 and AndroidStable46 with actual Realme browser
+  branch/AV proof and native upgrade/custody. Installed-shell editing and Apple
+  acceptance remain above; do not treat this synthetic browser proof as them.
+  [Evidence](../../operations/2026-11-05-video-pcm-fallback.md).
 
 ## Task4: Faithful Recovery (#82/D-342)
 
