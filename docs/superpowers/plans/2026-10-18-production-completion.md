@@ -445,6 +445,11 @@ metadata and positional intent; preserve original bytes and explicit downloads.
   states, no raw privacy-edit fallback. Source/UI/bytes/native upgrade/public
   release checks pass; successful Realme/iPhone encoding is not inferred.
 - [ ] Accept actual send/retry/view/save behavior on affected shells and release.
+- [x] Add actual AttachSheet/ChatWindow stage/send/retry consumer regression for
+  mixed albums, retained edited File/identity/order/topic/reply and one caption
+  after a first-file refusal.3/3 plus loaded omission control pass; no baseline
+  source defect. This does not replace actual authenticated upload/device proof.
+  [Consumer boundary](../../operations/2026-11-05-media-send-consumer.md).
 - [ ] Design/implement D376's bounded PCM fallback only after the accepted Web
   Audio feasibility, with decoded-memory/track provenance/cancellation and exact
   both-track trim/alignment checks; no global decoder mutation or raw fallback.

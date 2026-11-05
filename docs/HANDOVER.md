@@ -1,5 +1,20 @@
 # LETSCUBE — handover
 
+**Current execution checkpoint, 2026-11-05:** Owner Codex coordinator, Task3.
+Live public catalog still reports Android0.1.44/build45/mandatory=false. Source
+baseline1c6fdd03 is unchanged after fetch; no old cold-media/updater/provider QA
+was replayed. Paid design-tool routing and actual connection limits are saved in
+[tooling guide](operations/tooling-guide.md); re-discover live callables rather
+than treating the inventory as permanent. Figma/Rive and Refero/Mobbin checks
+passed; Rive has no open file. Local Realme/A063 are visible, AE is absent; no
+device was rented or changed. Actual sheet/staging/send/retry callbacks now have
+a focused mixed-album regression3/3 plus a loaded caption-ownership omission
+control. No production defect was reproduced or patched in that bounded case.
+Next: actual authenticated mixed-album upload/retry/receive/view/save on supported
+shells and the separately gated D376 PCM bridge; mocked upload is not that proof.
+No new APK, migration or visual rewrite is justified by this test-only slice.
+[Consumer evidence](operations/2026-11-05-media-send-consumer.md).
+
 **Current execution checkpoint, 2026-10-28:** Owner Codex coordinator. Stable
 Android0.1.44/build45 is published, mandatory=false/full public APK hash verified
 20:36:52Z, rollback44 retained. Reviewed stale catalog recovery, exact post-dispatch
