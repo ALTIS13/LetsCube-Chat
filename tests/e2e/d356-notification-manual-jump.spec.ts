@@ -83,11 +83,18 @@ test("D356: manual chat round trip retires an already queued bell jump", async (
   const jumps = () => page.evaluate(() => (window as Window & { d356Jumps?: unknown[] }).d356Jumps);
   const onRoute = (path: string) => expect(page).toHaveURL(new URL(path, app).href);
   const jumpPath = `/chat/${TARGET}/m/${MESSAGE}`;
+  const showChatList = async () => {
+    if ((page.viewportSize()?.width ?? 1440) >= 768 || !new URL(page.url()).pathname.startsWith("/chat/")) return;
+    await page.getByRole("button", { name: "Назад", exact: true }).click();
+    await onRoute("/");
+  };
   const clickChat = async (name: string, chatId: string) => {
+    await showChatList();
     await page.getByTestId("chat-list-item").filter({ hasText: name }).click();
     await onRoute(`/chat/${chatId}`);
   };
   const clickBellNotice = async () => {
+    await showChatList();
     await bell.click();
     await page.getByTestId("notification-message-group").filter({ hasText: PEER.full_name }).click();
     await onRoute(jumpPath);
