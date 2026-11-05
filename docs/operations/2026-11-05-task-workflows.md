@@ -59,17 +59,37 @@ or personal message data are in this report.
 
 ## Interface And Release Work
 
-- IN PROGRESS: authoritative review hook, account/epoch/query ownership and
+- SOURCE VERIFIED: authoritative review hook, account/epoch/query ownership and
   explicit permission-denial retirement instead of retaining another user's or
   revoked task data; exact known business errors preserve their explanation.
-- IN PROGRESS: explicit unassigned creation using the existing user/null model,
+- SOURCE VERIFIED: explicit unassigned creation using the existing user/null model,
   no invented pool/enum, with all person/location/role/admin/chat routing cleared.
-- IN PROGRESS: compact avatar/search/multiple-person filters and a simpler task
+- SOURCE VERIFIED: compact avatar/search/multiple-person filters and a simpler task
   form with progressive optional settings, preserving the liquid-glass material.
-- IN PROGRESS: multiple verified release notes plus concrete tester scenarios;
+- SOURCE VERIFIED: multiple verified release notes plus concrete tester scenarios;
   archival notes are not a source of downloadable artifact authority.
-- IN PROGRESS: a discoverable individual-channel notification entry reusing the
+- SOURCE VERIFIED: a discoverable individual-channel notification entry reusing the
   existing canonical topic preference/delivery contract, not another mute store.
+- SOURCE VERIFIED: restored chat snapshots no longer manufacture a refused
+  network read. Cache identity/privacy/owner fences remain; an actual first-read
+  failure is still unavailable and a later genuine failure remains stale.
+- SOURCE VERIFIED: an account/session-owned quiet inline recovery status, delayed
+  only for persistent stale reads, with actual retry and no red startup card.
+
+Client review/cache ownership and known-error checks pass83/83. Existing affected
+task detail/reconnect/co-executor/routing and notification-control checks pass118;
+the final existing menu24 and new channel-list12 pass, preserving loaded
+omission controls. The mobile rail remains open; Escape and keyboard focus are
+owned by the top notification dialog. Changelog34 and quiet notice15 pass;
+notice includes literal1199/1200ms, retry, recovery, account change and unmount.
+Task workflow fixture52/52 passes at390/1440/both themes. Final review found
+two routing/visibility edge cases, reproduced in three behavioral controls.
+The revised form passes20/20 (16 new cases) and review hint4/4, without rerunning
+the unaffected portions of the52. Compact form, person picker, history, channel,
+changelog and notice pixels were inspected. Selection contrast exceeds16:1.
+The mounted cold-list matrix43/43 is retained; its changed restore assertion was
+rerun1/1. Typecheck and diff whitespace checks pass. These are source/synthetic
+browser results, not physical task completion or cross-client acceptance.
 
 Shared web/native publication of these client changes is pending at this
 checkpoint. AndroidStable remains0.1.45/build46. Do not call the whole batch or

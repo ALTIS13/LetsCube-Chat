@@ -19,6 +19,7 @@ import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
 import { KubButton, KubEmptyState, KubFilterButton, KubFilterSummary, KubHeader, KubIcon, KubInput, KubNotice, type ActiveFilter } from "@/components/kub";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { TaskCard } from "./TaskCard";
+import { TaskAssigneeFilter, type TaskFilterPerson, type TaskAssigneeSelection } from "./TaskAssigneeFilter";
 import { isCoassignee } from "@/lib/taskCoassignees";
 import { TaskListRow } from "./TaskListRow";
 import { TaskDetailModal } from "./TaskDetailModal";
@@ -42,12 +43,13 @@ interface Tab {
 }
 
 type TaskViewMode = "cards" | "list";
-type AssigneeFilter = "all" | "me" | "unassigned" | string;
+type AssigneeFilter = TaskAssigneeSelection;
 type LocationFilter = "all" | "my" | string;
 type RecipientFilter = "all" | "admin" | "staff";
 
 const STAFF_TABS: Tab[] = [
   { id: "mine", label: "Мои", filter: { mine: "assigned" } },
+  { id: "history", label: "История", filter: { mine: "all", statuses: ["confirmed", "cancelled"] } },
   { id: "available", label: "Доступные",
     filter: {
       mine: "all",
@@ -86,7 +88,7 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
     const saved = window.localStorage.getItem("kub.taskViewMode");
     return saved === "list" || saved === "cards" ? saved : "cards";
   });
-  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>([]);
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
   const [showDeleted, setShowDeleted] = useState(false);
@@ -266,15 +268,20 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
   }, [canBulkDeleteTasks, selectedTaskIds.size, visibleDeletableTaskIds]);
 
   const assigneeOptions = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, {label:string;profile:TaskFilterPerson}>();
     for (const task of tasks) {
-      if (!task.assignee_id || !task.assignee) continue;
-      map.set(
-        task.assignee_id,
-        task.assignee.full_name ?? task.assignee.username ?? "Пользователь",
-      );
+      if (task.assignee_id && task.assignee) {
+        map.set(task.assignee_id, {
+          label:task.assignee.full_name ?? task.assignee.username ?? "Пользователь",profile:task.assignee,
+        });
+      }
+      for (const row of task.coassignees ?? []) {
+        if (map.has(row.user_id)) continue;
+        const profile = row.profile ?? { id:row.user_id, full_name:null, username:null, avatar_url:null };
+        map.set(row.user_id, {label:profile.full_name ?? profile.username ?? "Пользователь",profile});
+      }
     }
-    return Array.from(map, ([id, label]) => ({ id, label })).sort((a, b) =>
+    return Array.from(map, ([id, person]) => ({ id, ...person })).sort((a, b) =>
       a.label.localeCompare(b.label, "ru-RU"),
     );
   }, [tasks]);
@@ -284,15 +291,15 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
     if (search.trim()) {
       active.push({ id: "search", label: `Поиск: ${search.trim()}`, onRemove: () => setSearch("") });
     }
-    if (assigneeFilter !== "all") {
-      const named = assigneeOptions.find((option) => option.id === assigneeFilter);
+    if (assigneeFilter.length > 0) {
+      const named = assigneeOptions.find((option) => option.id === assigneeFilter[0]);
       const label =
-        assigneeFilter === "me"
+        assigneeFilter.length > 1 ? `Выбрано: ${assigneeFilter.length}` : assigneeFilter[0] === "me"
           ? "Я"
-          : assigneeFilter === "unassigned"
+          : assigneeFilter[0] === "unassigned"
             ? "Без исполнителя"
-            : (named?.label ?? assigneeFilter);
-      active.push({ id: "assignee", label: `Исполнитель: ${label}`, onRemove: () => setAssigneeFilter("all") });
+            : (named?.label ?? "Исполнитель");
+      active.push({ id: "assignee", label: `Исполнитель: ${label}`, onRemove: () => setAssigneeFilter([]) });
     }
     if (locationFilter !== "all") {
       const named = routing.locations.find((location) => location.id === locationFilter);
@@ -311,7 +318,7 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
 
   const resetTaskFilters = () => {
     setSearch("");
-    setAssigneeFilter("all");
+    setAssigneeFilter([]);
     setLocationFilter("all");
     setRecipientFilter("all");
     setShowDeleted(false);
@@ -324,8 +331,8 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
   }, [canViewAllLocations, myLocationIds, routing.available, routing.locations]);
 
   useEffect(() => {
-    if (assigneeFilter === "all" || assigneeFilter === "me" || assigneeFilter === "unassigned") return;
-    if (!assigneeOptions.some((option) => option.id === assigneeFilter)) setAssigneeFilter("all");
+    const next = assigneeFilter.filter(id => id === "me" || id === "unassigned" || assigneeOptions.some(option => option.id === id));
+    if (next.length !== assigneeFilter.length) setAssigneeFilter(next);
   }, [assigneeFilter, assigneeOptions]);
 
   useEffect(() => {
@@ -518,21 +525,8 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
             />
 
             <div className={cn("flex min-w-0 flex-wrap items-center gap-2", !filtersOpen && "hidden")}>
-            <label className="sr-only" htmlFor="task-assignee-filter">Исполнитель</label>
-            <select
-              id="task-assignee-filter"
-              value={assigneeFilter}
-              onChange={(event) => setAssigneeFilter(event.target.value)}
-              className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] sm:w-auto sm:max-w-[220px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-              style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
-            >
-              <option value="all">Все исполнители</option>
-              <option value="me">Я</option>
-              <option value="unassigned">Без исполнителя</option>
-              {assigneeOptions.map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </select>
+            <TaskAssigneeFilter value={assigneeFilter} onChange={setAssigneeFilter}
+              people={assigneeOptions} currentUser={currentUser}/>
 
             {routing.available && (
               <>
@@ -838,6 +832,8 @@ function pluralizeTasks(n: number): string {
 
 function getEmptyTitle(tabId: string): string {
   switch (tabId) {
+    case "history":
+      return "Нет завершённых задач";
     case "new":
       return "Нет назначенных задач";
     case "active":
@@ -863,6 +859,8 @@ function getEmptyTitle(tabId: string): string {
 
 function getEmptyDescription(tabId: string, canCreateTasks: boolean): string {
   switch (tabId) {
+    case "history":
+      return "Нет подтверждённых или отменённых задач.";
     case "new":
       return "Новые назначенные задачи появятся здесь сразу после назначения.";
     case "active":
@@ -906,7 +904,9 @@ function applyClientFilters(
   const mine = (task: TaskWithPeople) => task.assignee_id === userId || isCoassignee(task.coassignees, userId);
   return tasks.filter((task) => {
     if (!showDeleted && task.deleted_at) return false;
-    if (tabId === "mine" && !mine(task)) return false;
+    const completed = task.status === "confirmed" || task.status === "cancelled";
+    if (tabId === "mine" && (!mine(task) || completed)) return false;
+    if (tabId === "history" && !completed) return false;
     if (tabId === "available") {
       if (task.status !== "new" || task.assignment_scope === "user" || task.assignee_id !== null) return false;
     }
@@ -917,9 +917,8 @@ function applyClientFilters(
     if (tabId === "created" && task.created_by !== userId) return false;
     if (tabId === "new" && (!mine(task) || task.status !== "assigned")) return false;
     if (tabId === "active" && (!mine(task) || !["accepted", "in_progress"].includes(task.status))) return false;
-    if (assigneeFilter === "me" && !mine(task)) return false;
-    if (assigneeFilter === "unassigned" && task.assignee_id !== null) return false;
-    if (assigneeFilter !== "all" && assigneeFilter !== "me" && assigneeFilter !== "unassigned" && task.assignee_id !== assigneeFilter) {
+    if (assigneeFilter.length > 0 && !assigneeFilter.some(id =>
+      id === "me" ? mine(task) : id === "unassigned" ? task.assignee_id === null : task.assignee_id === id || isCoassignee(task.coassignees, id))) {
       return false;
     }
     if (locationFilter !== "all") {

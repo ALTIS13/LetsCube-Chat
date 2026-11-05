@@ -42,6 +42,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onClick();

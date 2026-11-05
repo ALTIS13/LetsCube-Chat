@@ -11,7 +11,7 @@ const root=path.dirname(src);
 const requireKub=createRequire(new URL('../../artifacts/kub/package.json',import.meta.url));
 const {chromium}=requireKub('@playwright/test');
 const {build}=createRequire(requireKub.resolve('vite'))('esbuild');
-let browser,server,origin,bundle;
+let browser,server,origin,bundle,publicBundle;
 const leaf='export const ';
 const stubs=new Map([
   ['@/lib/supabase/client',`${leaf}createClient=()=>({from(){throw Error('Unexpected fixture DB access');}});`],
@@ -23,7 +23,7 @@ const stubs=new Map([
   ['@/hooks/useNativeMessagePreview',`${leaf}useNativeMessagePreview=()=>({savedChoice:'none',available:false});`],
   ['@/hooks/useWebMessagePreview',`${leaf}useWebMessagePreview=()=>({savedChoice:'none',available:false});`],
   ['@/hooks/usePwaUpdate',`${leaf}usePwaUpdate=()=>null;`],
-  ['@/hooks/useVoiceCall',`${leaf}useVoiceCall=()=>({phase:'idle',channelId:null});`],
+  ['@/hooks/useVoiceCall',`${leaf}useVoiceCall=()=>({phase:'idle',channelId:null});export const voiceCallSnapshot=()=>({phase:'idle',channelId:null});`],
   ['@/hooks/useAudioSettings',`${leaf}useAudioSettings=()=>({settings:{processingMode:'clean',selectedInputDeviceId:'default',micInputGain:1}});`],
   ['@/hooks/useRole',`${leaf}useIsAdmin=()=>false;export const useIsManagerOrAdmin=()=>false;`],
   ['@/hooks/usePersonalModeration',`${leaf}usePersonalBlocks=()=>({blocked:[],people:[],loading:false,error:null});`],
@@ -35,7 +35,7 @@ const stubs=new Map([
   ['@/lib/platform/capabilities',`${leaf}isNativeApp=()=>false;export const isNativeAndroid=()=>false;export const getCurrentDistributionTarget=()=> 'windows_download';`],
   ['@/lib/platform/desktop',`${leaf}isDesktopApp=()=>false;export const getDesktopRuntimeInfo=async()=>null;`],
   ['@/lib/monitoring',`${leaf}getBuildMetadata=()=>({version:'0.0.0-fixture'});export const reportError=()=>{};`],
-  ['@/lib/media/mediaUrl',`${leaf}publicMediaObjectUrl=()=>null;`],
+  ['@/lib/media/mediaUrl',`${leaf}publicMediaObjectUrl=()=>null;export const signedMediaUrls=()=>({subscribe:()=>()=>{},isRefused:()=>false});`],
   ['@/lib/mediaUpload',`${leaf}avatarUploadPath=()=>'';export const prepareAvatarImage=async f=>f;export const validateAvatarImage=()=>null;export const validateAvatarUploadImage=()=>null;`],
   ['@/lib/appDialogs',`${leaf}requestAppConfirm=async()=>{window.fixture.commands.push('confirm');return false;};`],
   ['@/lib/actionFeedback',`${leaf}showActionFeedback=()=>{};`],
@@ -44,7 +44,7 @@ for(const name of ['ReleaseDistributionSection','StorageSection','WindowsStartup
   stubs.set('@/components/settings/'+name,`${leaf}${name}=()=>null;`);
 }
 
-async function compile(change){
+async function compile(change,publicSurface=false,syntheticHistory=null){
   let mutations=0;
   const result=await build({write:false,bundle:true,platform:'browser',format:'iife',jsx:'automatic',target:'es2022',
     alias:{'@':src},define:{'process.env.NODE_ENV':'"development"','import.meta.env':JSON.stringify({BASE_URL:'/',DEV:false})},
@@ -59,11 +59,18 @@ async function compile(change){
           accountEpoch:1,settingsFocus:null,selectedChatId:'fictional-chat',drafts:{'fictional-chat':'unsent synthetic draft'},
           call:{id:'fictional-call',joined:true},setCurrentUser(){window.fixture.commands.push('setCurrentUser');}}));
         window.fixtureStore=useAppStore;`}));
-      if(change)plugin.onLoad({filter:/SettingsScreen\.tsx$/},async args=>{
+      if(change)plugin.onLoad({filter:change.filter??/SettingsScreen\.tsx$/},async args=>{
         const text=(await readFile(args.path,'utf8')).replaceAll('\r\n','\n');assert.equal(text.split(change.before).length-1,1);mutations++;
         return{loader:'tsx',contents:text.replace(change.before,change.after)};
       });
-    }}],stdin:{resolveDir:src,sourcefile:'settings-changelog-fixture.tsx',loader:'tsx',contents:`
+    }}],stdin:{resolveDir:src,sourcefile:'settings-changelog-fixture.tsx',loader:'tsx',contents:publicSurface?`
+      import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
+      import {ReleaseChangelog} from './components/public/ReleaseChangelog';
+      import {usePublicReleaseCatalog} from './hooks/usePublicReleaseCatalog';
+      function App(){const catalog=usePublicReleaseCatalog();return <main style={{maxWidth:760,margin:'0 auto',padding:16}}><ReleaseChangelog entry={${syntheticHistory?JSON.stringify({...syntheticHistory[0],history:syntheticHistory}):'catalog.changelog'}}/></main>;}
+      const root=createRoot(document.getElementById('root'));flushSync(()=>root.render(<App/>));
+      window.unmount=()=>flushSync(()=>root.unmount());
+    `:`
       import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
       import {useSettingsScreen} from './components/settings/SettingsScreen';
       import {SettingsOverlay} from './components/settings/SettingsOverlay';
@@ -83,6 +90,7 @@ async function compile(change){
 test.before(async()=>{
   assert.equal(process.env.KUB_QA_ALLOW_MUTATIONS,'0');
   bundle=await compile();
+  publicBundle=await compile(undefined,true);
   const {createServer}=await import(pathToFileURL(requireKub.resolve('vite')).href);
   const {default:tailwind}=await import(pathToFileURL(requireKub.resolve('@tailwindcss/vite')).href);
   server=await createServer({configFile:false,root,appType:'custom',envDir:path.join(root,'.fixture-no-env'),plugins:[tailwind()],
@@ -99,12 +107,12 @@ test.before(async()=>{
 test.after(async()=>{await browser?.close();await server?.close();});
 
 function manifest(platform,overrides={}){return{schemaVersion:1,platform,channel:'stable',available:true,version:platform==='android'?'0.3.0':'0.2.0',
-  build:platform==='android'?3:2,publishedAt:platform==='android'?'2026-10-18T09:00:00Z':'2026-10-17T09:00:00Z',
+  build:platform==='android'?93:82,publishedAt:platform==='android'?'2026-10-18T09:00:00Z':'2026-10-17T09:00:00Z',
   minimumSupportedVersion:null,mandatory:false,notes:'Синтетические сведения о выпуске.',
   highlights:['Открытие чатов без лишнего ожидания','Новые настройки звука','Точный поиск в переписке','Удобные подписи к файлам','Обновлённые уведомления','Чёткое отображение фотографий'],
   artifact:{url:`https://api.letscube.ru/releases/files/${platform}/${platform==='android'?'0.3.0':'0.2.0'}/fixture.${platform==='android'?'apk':'exe'}`,size:1234,sha256:'a'.repeat(64)},...overrides};}
 
-async function fixture(t,{width=1440,theme='dark',mode='success',overrides={},code=bundle,cache=false,clock=false}={}){
+async function fixture(t,{width=1440,theme='dark',mode='success',overrides={},code=bundle,cache=false,clock=false,publicSurface=false}={}){
   const context=await browser.newContext({viewport:{width,height:960},serviceWorkers:'block'}),page=await context.newPage(),errors=[],requests=[];
   let policy=mode,held=[];page.setDefaultTimeout(3500);page.on('pageerror',e=>errors.push(e.message));
   if(cache)await page.addInitScript(values=>{
@@ -140,7 +148,7 @@ async function fixture(t,{width=1440,theme='dark',mode='success',overrides={},co
   },theme);
   await page.addScriptTag({content:code});
   assert.equal(await page.title(),'LETSCUBE Synthetic Settings');
-  assert.equal(await page.getByRole('heading',{name:'Настройки',exact:true}).count(),1,'actual SettingsScreen/Overlay mounted');
+  assert.equal(await page.getByRole('heading',{name:publicSurface?'Что нового':'Настройки',exact:true}).count(),1,'actual consumer mounted');
   t.after(async()=>{await page.evaluate(()=>window.unmount()).catch(()=>{});for(const route of held)await route.abort().catch(()=>{});
     await context.close();assert.deepEqual(errors,[],'no application runtime error');});
   return{page,requests,async policy(value){policy=value;},async release(){const pending=held;held=[];
@@ -152,7 +160,7 @@ test('signed-in settings exposes a lazy in-place changelog without route or prod
   const row=f.page.getByTestId('settings-open-changelog');assert.equal(await row.count(),1,'reachable signed-in changelog row');
   const before=await f.page.evaluate(()=>({url:location.href,state:JSON.stringify(window.fixtureStore.getState()),history:history.length}));
   await f.page.getByPlaceholder('Ваше имя',{exact:true}).fill('Несохранённое имя');
-  await row.click();await f.page.getByTestId('settings-changelog-entry').waitFor();
+  await row.click();await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();
   assert.equal(await row.getAttribute('aria-expanded'),'true');assert.equal(f.requests.length,2);
   await row.click();assert.equal(await f.page.getByTestId('settings-changelog-entry').count(),0);
   const after=await f.page.evaluate(()=>({url:location.href,state:JSON.stringify(window.fixtureStore.getState()),commands:window.fixture.commands,history:history.length}));
@@ -172,24 +180,35 @@ test('settings search finds release notes alone under Application, keeps the que
   assert.equal(await search.inputValue(),'');assert.deepEqual(await f.page.evaluate(()=>window.fixture.commands),[]);
 });
 
-test('loading is explicit, complete catalog metadata and all highlights appear in place, no invented archive',async t=>{
+test('loading is explicit, complete catalog metadata and all highlights join verified history',async t=>{
   const f=await fixture(t,{mode:'hold'});await f.page.getByTestId('settings-open-changelog').click();
   await f.page.getByTestId('settings-changelog').getByText('Загружаем сведения о выпуске…').waitFor();
   assert.equal(await f.page.getByTestId('settings-changelog-refresh').isDisabled(),true);
-  await f.release();const entry=f.page.getByTestId('settings-changelog-entry');await entry.waitFor();
+  await f.release();await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();const entry=f.page.getByTestId('settings-changelog-entry');
   assert.equal(await entry.getAttribute('data-platform'),'android');assert.match(await entry.innerText(),/Android 0\.3\.0/);
   assert.equal(await entry.locator('time').getAttribute('datetime'),'2026-10-18T09:00:00Z');
   assert.equal(await entry.locator('li').count(),6);assert.equal(await entry.getByText('Чёткое отображение фотографий').count(),1);
-  assert.match(await f.page.getByTestId('settings-changelog').innerText(),/Архив предыдущих выпусков пока недоступен/);
+  assert.equal(await f.page.getByTestId('release-history-older').count(),3);
   assert.equal(await f.page.getByTestId('settings-changelog').locator('a').count(),0,'reader cannot navigate to a download/public page');
 });
 
 test('catalog failure is recoverable with explicit refresh, not a fabricated release',async t=>{
   const f=await fixture(t,{mode:'failure'});await f.page.getByTestId('settings-open-changelog').click();
   await f.page.getByTestId('settings-changelog').getByText('Не удалось загрузить сведения об обновлениях.').waitFor();
-  assert.equal(await f.page.getByTestId('settings-changelog-entry').count(),0);
+  assert.equal(await f.page.getByTestId('settings-changelog-entry').getAttribute('data-build'),'46');
   await f.policy('success');await f.page.getByTestId('settings-changelog-refresh').click();
-  await f.page.getByTestId('settings-changelog-entry').waitFor();assert.equal(f.requests.length,4);
+  await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();assert.equal(f.requests.length,4);
+});
+
+test('verified multi-version Android history survives an unavailable current catalog',async t=>{
+  const f=await fixture(t,{mode:'failure'});
+  await f.page.getByTestId('settings-open-changelog').click();
+  await f.page.getByText('0.1.45', {exact:false}).first().waitFor();
+  const history=f.page.getByTestId('release-history');
+  assert.match(await history.innerText(),/0\.1\.44/);
+  assert.match(await history.innerText(),/0\.1\.43/);
+  assert.match(await history.innerText(),/Что проверить/);
+  assert.equal(await history.locator('a').count(),0,'history must not invent historical download links');
 });
 
 test('actual mounted catalog hooks recover after HTTP200 headers with a stalled body',async t=>{
@@ -204,30 +223,31 @@ test('actual mounted catalog hooks recover after HTTP200 headers with a stalled 
   assert.equal(await f.page.getByTestId('settings-changelog-refresh').isEnabled(),true);
   await f.page.evaluate(()=>{window.holdCatalogBodies=false;});
   await f.page.getByTestId('settings-changelog-refresh').click();
-  await f.page.getByTestId('settings-changelog-entry').waitFor();assert.equal(f.requests.length,2);
+  await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();assert.equal(f.requests.length,2);
   assert.deepEqual(await f.page.evaluate(()=>window.fixture.commands),[]);
 });
 
 test('stale catalog keeps actual cached notes with a visible saved-state label',async t=>{
   const f=await fixture(t,{mode:'failure',cache:true});await f.page.getByTestId('settings-open-changelog').click();
-  await f.page.getByTestId('settings-changelog-entry').waitFor();
+  await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();
   assert.match(await f.page.getByTestId('settings-changelog').innerText(),/Сохранённые сведения/);
   assert.equal(await f.page.getByTestId('settings-changelog-entry').locator('li').count(),6);
 });
 
 test('legacy notes-only manifest remains readable and unpublished catalogs never become history',async t=>{
   const notes=await fixture(t,{overrides:{highlights:undefined,notes:'Проверяемая заметка из синтетического manifest.'}});
-  await notes.page.getByTestId('settings-open-changelog').click();await notes.page.getByTestId('settings-changelog-entry').waitFor();
+  await notes.page.getByTestId('settings-open-changelog').click();await notes.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();
   assert.match(await notes.page.getByTestId('settings-changelog-entry').innerText(),/Проверяемая заметка/);
   const empty=await fixture(t,{overrides:{available:false,artifact:null}});await empty.page.getByTestId('settings-open-changelog').click();
-  await empty.page.getByTestId('settings-changelog').getByText('Сведения о выпусках пока не опубликованы.').waitFor();
-  assert.equal(await empty.page.getByTestId('settings-changelog-entry').count(),0);
+  await empty.page.getByTestId('settings-changelog-entry').waitFor();
+  assert.equal(await empty.page.getByTestId('settings-changelog-entry').getAttribute('data-build'),'46');
+  assert.equal(await empty.page.getByText('Android 0.3.0',{exact:false}).count(),0);
 });
 
 for(const width of [390,1440])for(const theme of ['dark','light'])test(`synthetic ${width} ${theme}: compact reader fits, renders real controls and remains collapsible`,async t=>{
   const f=await fixture(t,{width,theme});
   if(width===1440)await f.page.getByTestId('settings-rail-application').click();
-  const row=f.page.getByTestId('settings-open-changelog');await row.click();const entry=f.page.getByTestId('settings-changelog-entry');await entry.waitFor();
+  const row=f.page.getByTestId('settings-open-changelog');await row.click();await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();const entry=f.page.getByTestId('settings-changelog-entry');
   await entry.scrollIntoViewIfNeeded();await f.page.evaluate(()=>document.fonts.ready);
   assert.equal(await f.page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--kub-text').trim()),theme==='dark'?'#F5F7FB':'#07111F');
   assert.equal(await entry.locator('li').count(),6);assert.equal(await entry.evaluate(node=>node.scrollWidth<=node.clientWidth),true);
@@ -241,7 +261,80 @@ for(const width of [390,1440])for(const theme of ['dark','light'])test(`syntheti
 });
 
 test('literal omission of Application row admission is caught by the actual filtered consumer',async t=>{
-  const code=await compile({before:'"audio", "updates", "changelog"].some',after:'"audio", "updates"].some'});
+  const code=await compile({before:'row.section === id && shows(row.id)',after:'row.section === id && row.id !== "changelog" && shows(row.id)'});
   const f=await fixture(t,{code});await f.page.getByTestId('settings-search-input').fill('что нового');
   assert.equal(await f.page.getByTestId('settings-open-changelog').count(),0,'omission must make the positive search oracle fail');
+});
+
+test('public history keeps platform tracks separate, expands older releases and defaults technical details closed',async t=>{
+  const f=await fixture(t,{code:publicBundle,publicSurface:true});
+  await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();
+  const platform=f.page.getByLabel('Платформа',{exact:true});
+  await platform.selectOption('windows');
+  await f.page.getByRole('heading',{name:/Windows 0\.2\.0/}).waitFor();
+  assert.equal(await f.page.getByTestId('release-history-older').count(),0);
+  assert.equal(await f.page.getByTestId('release-history').locator('article').getByText('Android',{exact:false}).count(),0);
+  await platform.selectOption('android');
+  const older=f.page.getByTestId('release-history-older').filter({has:f.page.locator('summary',{hasText:'0.1.44'})});
+  await older.locator(':scope > summary').click();
+  assert.equal(await older.getByRole('heading',{name:'Что проверить',exact:true}).isVisible(),true);
+  assert.equal(await older.getByText(/На проверенном устройстве Android 13 установка/).isVisible(),false);
+  await older.getByText('Подробности',{exact:true}).click();
+  assert.equal(await older.getByText(/На проверенном устройстве Android 13 установка/).isVisible(),true);
+  assert.equal(await f.page.getByTestId('release-history').locator('a').count(),0);
+});
+
+test('release copy omits internal authority explanations and healthy catalog labels',async t=>{
+  const f=await fixture(t);
+  await f.page.getByTestId('settings-open-changelog').click();
+  await f.page.getByRole('heading',{name:/Android 0\.3\.0/}).waitFor();
+  const reader=f.page.getByTestId('settings-changelog');
+  assert.doesNotMatch(await reader.innerText(),/В истории — подтверждённые|Доступность загрузки|Каталог Stable/);
+  const older=f.page.getByTestId('release-history-older').filter({has:f.page.locator('summary',{hasText:'0.1.44'})});
+  await older.locator(':scope > summary').click();
+  assert.equal(await older.getByText('Выпущено',{exact:true}).isVisible(),true);
+  assert.equal(await older.getByText('История опубликованного выпуска',{exact:true}).count(),0);
+});
+
+test('loaded visible-note cap mutations fail the literal three-changes/two-checks oracle',async t=>{
+  const history=[{platform:'android',title:'Android',version:'9.9.9',build:999,publishedAt:'2026-11-05',source:'catalog',
+    notes:'Synthetic cap fixture',highlights:['Change1','Change2','Change3','Change4','Change5','Change6'],
+    whatToTest:['Check1','Check2','Check3'],limitations:[]}];
+  const normal=await fixture(t,{code:await compile(undefined,true,history),publicSurface:true});
+  assert.equal(await normal.page.locator('article li:visible').count(),5);
+  assert.equal(await normal.page.getByText('Change4',{exact:true}).isVisible(),false);
+  assert.equal(await normal.page.getByText('Check3',{exact:true}).isVisible(),false);
+  for(const [before,after] of [['entry.highlights.slice(0, 3)','entry.highlights.slice(0, 6)'],['entry.whatToTest.slice(0, 2)','entry.whatToTest.slice(0, 3)']]){
+    const code=await compile({filter:/components[\\/]public[\\/]ReleaseChangelog\.tsx$/,before,after},true,history);
+    const mutant=await fixture(t,{code,publicSurface:true});
+    const visible=await mutant.page.locator('article li:visible').count();
+    assert.throws(()=>assert.equal(visible,5),'the same literal positive oracle must refuse the loaded mutation');
+  }
+});
+
+for(const width of [390,1440])for(const theme of ['dark','light'])for(const surface of ['settings','public'])
+test(`receipt-backed history ${surface} ${width} ${theme}: compact offline notes and pixel evidence`,async t=>{
+  const publicSurface=surface==='public';
+  const f=await fixture(t,{width,theme,mode:'failure',publicSurface,code:publicSurface?publicBundle:bundle});
+  if(!publicSurface){
+    if(width===1440)await f.page.getByTestId('settings-rail-application').click();
+    await f.page.getByTestId('settings-open-changelog').click();
+  }
+  const history=f.page.getByTestId('release-history');
+  await history.getByRole('heading',{name:/Android 0\.1\.45/}).waitFor();
+  await history.scrollIntoViewIfNeeded();await f.page.evaluate(()=>document.fonts.ready);
+  assert.equal(await history.getByTestId('release-history-older').count(),2);
+  const details=history.locator('article').getByTestId('release-history-details');
+  assert.equal(await details.getAttribute('open'),null);
+  assert.equal(await history.getByText(/Резервный путь ограничен/).isVisible(),false);
+  assert.equal(await history.locator('article li:visible').count(),3,'two concise changes and one tester check');
+  assert.equal(await history.evaluate(node=>node.scrollWidth<=node.clientWidth),true);
+  assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  if(process.env.KUB_CHANGELOG_CAPTURE){
+    await mkdir(process.env.KUB_CHANGELOG_CAPTURE,{recursive:true});
+    await f.page.screenshot({path:path.join(process.env.KUB_CHANGELOG_CAPTURE,`history-${surface}-${width}-${theme}.png`)});
+  }
+  await details.locator('summary').click();
+  assert.equal(await history.getByText(/Резервный путь ограничен/).isVisible(),true);
+  assert.equal(await history.evaluate(node=>node.scrollWidth<=node.clientWidth),true);
 });

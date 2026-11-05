@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
@@ -46,8 +46,8 @@ export interface TasksFilter {
 
 export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {}) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  const [read, setRead] = useState<HeldList<TaskWithPeople>>(() => heldListPending<TaskWithPeople>());
-  const tasks = read.rows;
+  const accountEpoch = useAppStore((s) => s.accountEpoch);
+  const [heldRead, setRead] = useState<HeldList<TaskWithPeople>>(() => heldListPending<TaskWithPeople>());
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
   const enabled = options.enabled ?? true;
@@ -63,72 +63,86 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
   // answer. `lib/listReadState.ts` holds that rule.
   const subject = [
     userId ?? "",
+    accountEpoch,
     filter.mine,
     statusKey,
     assignmentScopeKey,
     visibilityKey,
     filter.assignee ?? "",
   ].join("|");
+  const owner = useMemo(() => ({ active: false, request: 0 }), [subject, enabled]);
+  const ownerRef = useRef(owner);
+  ownerRef.current = owner;
 
   const fetchTasks = useCallback(async () => {
-    if (!userId) return;
-    if (!enabled) {
+    const isOwner = () => owner.active && ownerRef.current === owner &&
+      (useAppStore.getState().currentUser?.id ?? null) === userId &&
+      useAppStore.getState().accountEpoch === accountEpoch;
+    if (!isOwner()) return;
+    if (!userId || !enabled) {
       // This account is not shown the list at all. That is an answer, and an
       // empty one is the right way to say it — unlike a read nobody could make.
       setRead(heldListCleared<TaskWithPeople>());
       return;
     }
+    const request = ++owner.request;
+    const isCurrent = () => isOwner() && request === owner.request;
     bumpFetch("useTasks");
-    let q = supabase
-      .from("tasks")
-      .select(
-        `*,
-         assignee:profiles!tasks_assignee_id_fkey(*),
-         creator:profiles!tasks_created_by_fkey(*),
-         checklist:task_checklist_items(done),
-         coassignees:task_coassignees(user_id, profile:profiles!task_coassignees_user_id_fkey(*))`,
-      )
-      // Sort by urgency first (enum order is low<normal<high<urgent in the
-      // DB, so DESC gives urgent → low), then by recency so two tasks of
-      // the same priority surface the freshest one.
-      .order("priority", { ascending: false })
-      .order("updated_at", { ascending: false })
-      .limit(200);
+    let response: { data: unknown[] | null; error: unknown; status?: number };
+    try {
+      let q = supabase
+        .from("tasks")
+        .select(
+          `*,
+           assignee:profiles!tasks_assignee_id_fkey(*),
+           creator:profiles!tasks_created_by_fkey(*),
+           checklist:task_checklist_items(done),
+           coassignees:task_coassignees(user_id, profile:profiles!task_coassignees_user_id_fkey(*))`,
+        )
+        // Urgency first, then recency within each priority.
+        .order("priority", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .limit(200);
 
-    if (filter.mine === "assigned") q = q.eq("assignee_id", userId);
-    else if (filter.mine === "created") q = q.eq("created_by", userId);
+      if (filter.mine === "assigned") q = q.eq("assignee_id", userId);
+      else if (filter.mine === "created") q = q.eq("created_by", userId);
 
-    if (filter.statuses && filter.statuses.length > 0) {
-      q = q.in("status", filter.statuses);
-    }
-    if (filter.assignmentScopes && filter.assignmentScopes.length > 0) {
-      q = q.in("assignment_scope", filter.assignmentScopes);
-    }
-    if (filter.visibilities && filter.visibilities.length > 0) {
-      q = q.in("visibility", filter.visibilities);
-    }
-    if (filter.assignee === "unassigned") {
-      q = q.is("assignee_id", null);
-    }
+      if (filter.statuses && filter.statuses.length > 0) {
+        q = q.in("status", filter.statuses);
+      }
+      if (filter.assignmentScopes && filter.assignmentScopes.length > 0) {
+        q = q.in("assignment_scope", filter.assignmentScopes);
+      }
+      if (filter.visibilities && filter.visibilities.length > 0) {
+        q = q.in("visibility", filter.visibilities);
+      }
+      if (filter.assignee === "unassigned") {
+        q = q.is("assignee_id", null);
+      }
 
-    const { data, error } = await q;
-    if (error) {
-      // F-6. This said `setTasks([])`, and the page then drew «Нет доступных
-      // задач» with a «Создать задачу» beside it — a refusal told as "you are
-      // all caught up". The SELECT policy here calls a nine-argument plpgsql
-      // function, and the restrictive «block banned» policy on this table
-      // answers with emptiness rather than with an error, so both halves of the
-      // failure land on this line.
-      if (import.meta.env.DEV) console.error("[useTasks] fetch failed", error);
-      setRead((previous) =>
-        heldListRefused(previous, {
+      response = await q;
+    } catch (error) {
+      response = { data: null, error: error || true };
+    }
+    if (!isCurrent()) return;
+    const { data, error } = response;
+    const detail = typeof error === "object" && error !== null ? error as Record<string, unknown> : {};
+    const denied = response.status === 401 || response.status === 403 ||
+      detail.status === 401 || detail.status === 403 || detail.statusCode === 401 || detail.statusCode === 403 ||
+      detail.code === "42501" || detail.code === "PGRST301" || detail.code === "PGRST302" || detail.code === "PGRST303";
+    if (error || denied) {
+      // Transient failure may retain same-session rows; explicit auth refusal cannot.
+      setRead((current) => {
+        if (!isCurrent()) return current;
+        const previous = denied ? heldListPending<TaskWithPeople>() : current;
+        return heldListRefused(previous, {
           subject,
           message: plainFailure(mapPgError(error), TASKS_UNAVAILABLE),
-        }),
-      );
+        });
+      });
       return;
     }
-    setRead(
+    setRead((previous) => isCurrent() ?
       heldListSucceeded(
         (data ?? []).map((row) => ({
           ...(row as TaskWithPeople),
@@ -136,11 +150,15 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
           creator:  (row as { creator?: Profile | null }).creator ?? null,
         })),
         subject,
-      ),
+      ) : previous,
     );
-  }, [userId, enabled, supabase, subject, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, accountEpoch, owner, enabled, supabase, subject, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => {
+    owner.active = true;
+    void fetchTasks();
+    return () => { owner.active = false; owner.request += 1; };
+  }, [owner, fetchTasks]);
 
   // Realtime: any change to tasks I can see → debounced refetch.
   useEffect(() => {
@@ -173,8 +191,10 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
     };
   }, [userId, enabled, rt, fetchTasks, filter.mine]);
 
+  const read = !userId || !enabled ? heldListCleared<TaskWithPeople>() :
+    heldRead.subject === subject ? heldRead : heldListPending<TaskWithPeople>();
   return {
-    tasks,
+    tasks: read.rows,
     loading: read.loading,
     /** The refused read's sentence, or null. Already in a person's words. */
     error: read.error,

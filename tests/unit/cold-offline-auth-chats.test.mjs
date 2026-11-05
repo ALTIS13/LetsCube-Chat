@@ -492,6 +492,8 @@ test("mounted: list restores concurrently with a blocked server read", async () 
     await f.page.evaluate(c => window.fixture.cachedChats.resolve([c]), chat());
     const s = await f.snapshot(); assert.equal(s.state.chats[0]?.id, "cached-chat");
     assert.equal(s.list.loading, false, "disk rows finish cold list loading while server remains pending");
+    assert.equal(s.list.view, "cached", "restored rows do not claim either a server failure or a fresh server result");
+    assert.equal(await f.page.evaluate(() => window.chatsView.error), null);
     assert.equal(s.requests[0].table, "chat_members");
   } finally { await f.close(); }
 });

@@ -104,6 +104,9 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const [startsAt, setStartsAt] = useState<string>(toLocalInput(task?.starts_at));
   const [visibility, setVisibility] = useState<TaskVisibility>(task?.visibility ?? "staff");
   const [assignmentScope, setAssignmentScope] = useState<TaskAssignmentScope>(task?.assignment_scope ?? "user");
+  const [unassigned, setUnassigned] = useState(Boolean(task && task.assignment_scope === "user" &&
+    !task.assignee_id && !task.location_id && !task.target_role && !task.route_admin_id &&
+    !task.created_for_admin && !task.chat_id && !task.coassignees?.length));
   const [locationId, setLocationId] = useState<string>((task?.location_id as string | null | undefined) ?? "");
   /** Tracker item 72: the locations after the first, for a route that names nobody. */
   const [moreLocationIds, setMoreLocationIds] = useState<string[]>([]);
@@ -113,6 +116,9 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const taskAlreadyRecurring = Boolean(task?.recurrence_id && !task?.recurrence_template_task_id);
   const isRecurrenceOccurrence = Boolean(task?.recurrence_template_task_id);
   const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurrenceOpen, setRecurrenceOpen] = useState(taskAlreadyRecurring || isRecurrenceOccurrence);
+  const [routingOpen, setRoutingOpen] = useState(Boolean(task?.location_id || task?.target_role || task?.route_admin_id ||
+    task?.created_for_admin || task?.chat_id || (task && task.assignment_scope !== "user")));
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<TaskRecurrenceFrequency>("daily");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
@@ -224,6 +230,25 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const locationsToSend = taskLocationsToSend(locationId, severalLocationsAllowed ? moreLocationIds : []);
   const severalLocations = locationsToSend.length > 1;
   const chooseRoute = (id: string) => {
+    if (id === "unassigned") {
+      setUnassigned(true);
+      setAssignmentScope("user");
+      setAssignee(null);
+      setCoassignees([]);
+      setSearch("");
+      setResults([]);
+      setLocationId("");
+      setMoreLocationIds([]);
+      setTargetRole("");
+      setRouteAdminId("");
+      setCreatedForAdmin(false);
+      setChatId(null);
+      setVisibility("private");
+      setRoutingOpen(false);
+      return;
+    }
+    setUnassigned(false);
+    if (id !== "person") setRoutingOpen(true);
     if (id === route.id) return;
     const next = routeOptions.find((option) => option.id === id);
     if (!next) return;
@@ -301,11 +326,18 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       dueAt: due_iso,
     });
     if (recurrenceValidation.error) {
+      setRecurrenceOpen(true);
       setError(recurrenceValidation.error);
       return;
     }
     const effectiveAssigneeId = assignmentScope === "user" ? assignee?.id ?? null : null;
     const useRoutingRpc = routing.available;
+    const requiresRoutingRpc = unassigned || assignmentScope !== "user" || Boolean(locationId || targetRole || routeAdminId || createdForAdmin) || visibility !== "staff";
+    if (requiresRoutingRpc && !useRoutingRpc) {
+      setRoutingOpen(true);
+      setError("Не удалось проверить параметры задачи. Повторите попытку.");
+      return;
+    }
     const recurrenceInput = recurrenceValidation.input;
     const routingError = validateRoutingDraft({
       routingAvailable: useRoutingRpc,
@@ -320,6 +352,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       canUseAdminTaskControls,
     });
     if (routingError) {
+      setRoutingOpen(true);
       setError(routingError);
       return;
     }
@@ -515,32 +548,101 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         />
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+          <span className="mb-1.5 block">Назначение</span>
+          <select value={unassigned ? "unassigned" : route.id} onChange={(event) => chooseRoute(event.target.value)}
+            disabled={!routing.available} data-testid="task-route" className={TASK_SELECT_WELL}>
+            <option value="unassigned" disabled={!routing.available}>Без назначения</option>
+            {routeOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+          <span className="mb-1.5 block">Приоритет</span>
+          <select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} className={TASK_SELECT_WELL}>
+            {PRIORITIES.map((value) => <option key={value} value={value}>{TASK_PRIORITY_META[value].label}</option>)}
+          </select>
+        </label>
+      </div>
+
       <div>
         <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
-          Приоритет
+          Исполнитель
         </label>
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          {PRIORITIES.map((p) => {
-            const meta = TASK_PRIORITY_META[p];
-            const active = priority === p;
-            return (
-              <button
-                type="button"
-                key={p}
-                onClick={() => setPriority(p)}
-                className={cn(
-                  "px-3 py-2 rounded-lg text-xs font-semibold transition-colors border",
-                  active
-                    ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] border-[var(--kub-cyan)] kub-glow-soft"
-                    : "bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border-[color:var(--kub-border-color)]",
-                )}
-              >
-                {meta.label}
-              </button>
-            );
-          })}
-        </div>
+        {unassigned ? (
+          <div className="rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)] kub-raise">
+            Не назначен
+          </div>
+        ) : assignmentScope !== "user" ? (
+          <div className="rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
+            Для задач из пула конкретный исполнитель не назначается сразу. Работник возьмёт задачу в работу сам.
+          </div>
+        ) : assignee ? (
+          <div className="flex items-center gap-3 rounded-xl px-3 py-2 kub-raise">
+            <UserAvatar user={assignee} size="sm" />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold truncate text-sm text-[color:var(--kub-text)]">
+                {assignee.full_name ?? "Без имени"}
+              </div>
+              {assignee.username && (
+                <div className="text-xs truncate text-[color:var(--kub-muted)]">
+                  @{assignee.username}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setAssignee(null); setSearch(""); }}
+              className="p-1.5 rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
+              aria-label="Убрать"
+            >
+              <KubIcon name="close" size={14} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className={TASK_SEARCH_WELL}>
+              <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
+              <input
+                type="text"
+                placeholder="Поиск по имени или @никнейму…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
+              />
+              {searching && <KubIcon name="spinner" size={14} className="text-[color:var(--kub-cyan)]" />}
+            </div>
+            {results.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl kub-raise">
+                {results.map((p) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => { setAssignee(p); setSearch(""); setResults([]); }}
+                    className="w-full flex items-center gap-3 px-3 py-2 kub-raise-hover text-left"
+                  >
+                    <UserAvatar user={p} size="sm" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate text-[color:var(--kub-text)]">
+                        {p.full_name ?? "Без имени"}
+                      </div>
+                      {p.username && (
+                        <div className="text-[12px] truncate text-[color:var(--kub-muted)]">
+                          @{p.username}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      {!unassigned && assignmentScope === "user" && assignee && (
+        <TaskCoassigneesField value={coassignees} onChange={setCoassignees} assigneeId={assignee.id} />
+      )}
 
       {/* A period, from a date to a date (tracker item 68): the start is as
           optional as the deadline, and either stands alone. */}
@@ -575,23 +677,15 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         </div>
       </div>
 
-      <div className="rounded-xl p-3 kub-raise">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
-              Повторение
-            </div>
-            <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
-              Повтор создаёт отдельные задачи с теми же локацией, получателем, видимостью и маршрутом администратора.
-            </p>
-            {canUseAdminTaskControls && (
-              <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
-                Автоматическое создание повторов требует настроенный scheduler на стороне Supabase.
-              </p>
-            )}
-          </div>
+      <details open={recurrenceOpen} onToggle={(event) => setRecurrenceOpen(event.currentTarget.open)}
+        className="group border-t border-[color:var(--kub-rule)]">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md py-3 text-sm font-medium text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] [&::-webkit-details-marker]:hidden">
+          <KubIcon name="chevronRight" size={14} className="shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none"/>
+          <span className="flex-1">Повторение</span>
+          {recurringEnabled && <span className="text-xs text-[color:var(--kub-muted)]">Включено</span>}
           {recurring.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
-        </div>
+        </summary>
+        <div className="pb-3">
 
         {taskAlreadyRecurring ? (
           <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
@@ -618,9 +712,6 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               />
               <span className="min-w-0">
                 <span className="block font-semibold">Повторять задачу</span>
-                <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                  Экземпляр будет создан только после наступления рассчитанного срока.
-                </span>
               </span>
             </label>
 
@@ -749,7 +840,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 )}
 
                 <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
-                  {recurrenceSummary}. Следующее выполнение будет рассчитано сервером.
+                  {recurrenceSummary}
                 </div>
               </div>
             )}
@@ -764,27 +855,27 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         )}
       </div>
 
-      <div className="rounded-xl p-3 kub-raise">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
-              Маршрутизация по локации
-            </div>
-            <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
-              Выберите локацию, кому идёт задача, и администратора, через которого она проходит.
-            </p>
-          </div>
+      </details>
+
+      <details open={routingOpen} onToggle={(event) => setRoutingOpen(event.currentTarget.open)}
+        className="group border-t border-[color:var(--kub-rule)]">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md py-3 text-sm font-medium text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] [&::-webkit-details-marker]:hidden">
+          <KubIcon name="chevronRight" size={14} className="shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none"/>
+          <span className="flex-1">Маршрутизация и видимость</span>
+          <span className="max-w-36 truncate text-xs text-[color:var(--kub-muted)]">{TASK_VISIBILITY_META[visibility].label}</span>
           {routing.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
-        </div>
+        </summary>
+        <div className="space-y-4 pb-3">
 
         {routing.available ? (
           <div className="grid gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3">
               <div className="grid min-w-0 content-start gap-2">
               <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
                 <span className="mb-1.5 block uppercase tracking-wide">Локация</span>
                 <select
                   value={locationId}
+                  disabled={unassigned}
                   onChange={(event) => {
                     setLocationId(event.target.value);
                     setRouteAdminId("");
@@ -847,19 +938,6 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 )}
               </div>
 
-              <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
-                <span className="mb-1.5 block uppercase tracking-wide">Кому</span>
-                <select
-                  value={route.id}
-                  onChange={(event) => chooseRoute(event.target.value)}
-                  data-testid="task-route"
-                  className={TASK_SELECT_WELL}
-                >
-                  {routeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -871,7 +949,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                   className={TASK_SELECT_WELL}
                 >
                   {(Object.keys(TASK_VISIBILITY_META) as TaskVisibility[]).map((value) => (
-                    <option key={value} value={value}>{TASK_VISIBILITY_META[value].label}</option>
+                    <option key={value} value={value} disabled={unassigned && value === "chat"}>{TASK_VISIBILITY_META[value].label}</option>
                   ))}
                 </select>
               </label>
@@ -881,7 +959,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 <select
                   value={routeAdminId}
                   onChange={(event) => setRouteAdminId(event.target.value)}
-                  disabled={!locationId || selectedLocationAdmins.length === 0 || severalLocations}
+                  disabled={unassigned || !locationId || selectedLocationAdmins.length === 0 || severalLocations}
                   title={severalLocations ? "У каждой локации свой администратор — задачи пойдут без него" : undefined}
                   className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 >
@@ -895,7 +973,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               </label>
             </div>
 
-            {canUseAdminTaskControls && (
+            {canUseAdminTaskControls && !unassigned && (
               <label className="flex items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
                 <input
                   type="checkbox"
@@ -925,9 +1003,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             {plainMessage(routing.error, TASK_ROUTING_UNAVAILABLE)} {TASK_ROUTING_UNAVAILABLE_DETAIL}
           </div>
         )}
-      </div>
-
-      <div>
+      {!unassigned && <div>
         <label
           htmlFor="task-chat-select"
           className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]"
@@ -1010,90 +1086,13 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             ? `Выбрано: ${getChatDisplayInfo(selectedChat, currentUserId).title}`
             : "Только чаты, в которых вы состоите."}
         </p>
-      </div>
+      </div>}
+        </div>
+      </details>
 
-      <div>
-        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
-          Исполнитель
-        </label>
-        {assignmentScope !== "user" ? (
-          <div className="rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
-            Для задач из пула конкретный исполнитель не назначается сразу. Работник возьмёт задачу в работу сам.
-          </div>
-        ) : assignee ? (
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2 kub-raise">
-            <UserAvatar user={assignee} size="sm" />
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold truncate text-sm text-[color:var(--kub-text)]">
-                {assignee.full_name ?? "Без имени"}
-              </div>
-              {assignee.username && (
-                <div className="text-xs truncate text-[color:var(--kub-muted)]">
-                  @{assignee.username}
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => { setAssignee(null); setSearch(""); }}
-              className="p-1.5 rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
-              aria-label="Убрать"
-            >
-              <KubIcon name="close" size={14} />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className={TASK_SEARCH_WELL}>
-              <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
-              <input
-                type="text"
-                placeholder="Поиск по имени или @никнейму…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
-              />
-              {searching && <KubIcon name="spinner" size={14} className="text-[color:var(--kub-cyan)]" />}
-            </div>
-            {results.length > 0 && (
-              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl kub-raise">
-                {results.map((p) => (
-                  <button
-                    type="button"
-                    key={p.id}
-                    onClick={() => { setAssignee(p); setSearch(""); setResults([]); }}
-                    className="w-full flex items-center gap-3 px-3 py-2 kub-raise-hover text-left"
-                  >
-                    <UserAvatar user={p} size="sm" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate text-[color:var(--kub-text)]">
-                        {p.full_name ?? "Без имени"}
-                      </div>
-                      {p.username && (
-                        <div className="text-[12px] truncate text-[color:var(--kub-muted)]">
-                          @{p.username}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="mt-1.5 text-[12px] text-[color:var(--kub-muted)]">
-              {isEdit
-                ? "Можно убрать исполнителя — задача станет неназначенной."
-                : "Можно создать задачу без исполнителя — назначить позже."}
-            </p>
-          </>
-        )}
-      </div>
-
-      {assignmentScope === "user" && assignee && (
-        <TaskCoassigneesField value={coassignees} onChange={setCoassignees} assigneeId={assignee.id} />
-      )}
 
       {error && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
+        <div role="alert" className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
           {error}
         </div>
       )}

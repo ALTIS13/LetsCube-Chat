@@ -1,23 +1,19 @@
-// The client's copies of the five task RPC authorization gates (D-124).
+// Legacy pure task helpers (D-124). Live review authorization is tested through
+// useTaskReviewAccess in task-hook-authorization.test.mts, not inferred here.
 //
 // `public.tasks` blocks INSERT, UPDATE and DELETE at RLS outright, so these
 // SECURITY DEFINER functions are the only authority. Every gate below was read
 // off production on 2026-09-15 and is quoted in `lib/taskActionAccess.ts`.
 //
-// The two assertions worth the most here are negative: a location administrator
-// must **not** be offered confirm, reject or assign. D-124 proposed exactly
-// that widening; the database refuses it, measured inside a rolled-back
-// transaction against the one account holding `location_admin` with no global
-// role.
+// Location administration alone still cannot assign or cancel. Review rights
+// are not inferred here; their scoped authority belongs to the readonly RPC.
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
   canAssignTask,
   canCancelTask,
-  canConfirmTask,
   canEditTask,
-  canRejectTask,
   type TaskActionActor,
   type TaskActionStatus,
 } from "../../artifacts/kub/src/lib/taskActionAccess.ts";
@@ -53,27 +49,6 @@ const staff = actor({ isManagerOrAdmin: true });
  * their locations; `is_manager_or_admin` is false.
  */
 const locationAdmin = actor({ isLocationAdmin: true });
-
-test("task_confirm: staff only, waiting_confirmation only, and never your own", () => {
-  assert.equal(canConfirmTask(staff, "waiting_confirmation"), true);
-  assert.equal(canConfirmTask(stranger, "waiting_confirmation"), false);
-  // `if cur.assignee_id = caller then raise 'Нельзя подтверждать собственную задачу'`
-  assert.equal(
-    canConfirmTask(actor({ isManagerOrAdmin: true, isAssignee: true }), "waiting_confirmation"),
-    false,
-  );
-  // Exactly one status admits, and the list is checked rather than sampled.
-  const admitting = ALL_STATUSES.filter((status) => canConfirmTask(staff, status));
-  assert.deepEqual(admitting, ["waiting_confirmation"]);
-});
-
-test("task_reject carries the identical gate to task_confirm, on every status", () => {
-  for (const status of ALL_STATUSES) {
-    for (const who of [stranger, staff, locationAdmin]) {
-      assert.equal(canRejectTask(who, status), canConfirmTask(who, status), status);
-    }
-  }
-});
 
 test("task_assign: staff only, and only before the task is picked up", () => {
   const admitting = ALL_STATUSES.filter((status) => canAssignTask(staff, status));
@@ -126,15 +101,10 @@ test("task_update_v3: the location branch admits, and it is the one the modal ne
   assert.equal(canEditTask(actor({ isLocationAdmin: false }), "new"), false);
 });
 
-test("the location administrator measured on production: edit yes, the other three no", () => {
-  // loc_perm(tasks.manage)=true, loc_perm(location_members.manage)=true,
-  // is_manager_or_admin=false, is_location_admin=true — and then:
-  //   task_confirm : REFUSED -> Подтверждать может только администратор или менеджер
-  //   task_assign  : REFUSED -> Только администратор или менеджер может назначать задачи
-  // So holding `tasks.manage` for the location buys none of these three, and a
-  // client that offered them would draw a button the database refuses.
-  assert.equal(canConfirmTask(locationAdmin, "waiting_confirmation"), false);
-  assert.equal(canRejectTask(locationAdmin, "waiting_confirmation"), false);
+test("the location administrator: edit yes, assign/cancel no", () => {
+  // Historical 2026-09-15 measurement: location grants alone did not satisfy
+  // task_assign or the non-creator task_cancel branch. These two non-review
+  // gates are unchanged; current confirm/reject rights come from the RPC hook.
   assert.equal(canAssignTask(locationAdmin, "new"), false);
   assert.equal(canCancelTask(locationAdmin, "new"), false);
   assert.equal(canEditTask(locationAdmin, "new"), true);
@@ -142,8 +112,6 @@ test("the location administrator measured on production: edit yes, the other thr
 
 test("no gate admits a stranger on any status", () => {
   for (const status of ALL_STATUSES) {
-    assert.equal(canConfirmTask(stranger, status), false, `confirm ${status}`);
-    assert.equal(canRejectTask(stranger, status), false, `reject ${status}`);
     assert.equal(canAssignTask(stranger, status), false, `assign ${status}`);
     assert.equal(canCancelTask(stranger, status), false, `cancel ${status}`);
     assert.equal(canEditTask(stranger, status), false, `edit ${status}`);
@@ -182,7 +150,7 @@ function actorLiteral(): string {
 test("wiring: the modal asks the server predicate, not the client's wide isStaff", () => {
   assert.match(
     MODAL_SOURCE,
-    /const \{ allowed: isManagerOrAdmin \} = useMatchesIsManagerOrAdmin\(\);/,
+    /const \{ allowed: isManagerOrAdmin(?:, checking: \w+)? \} = useMatchesIsManagerOrAdmin\(\);/,
     "isManagerOrAdmin must come from useMatchesIsManagerOrAdmin()",
   );
   // The wide predicate must not come back. Its import is gone too.
@@ -209,11 +177,18 @@ test("wiring: the actor carries the four inputs, each as the live value", () => 
   );
 });
 
-test("wiring: each flag is computed by the module rather than re-derived", () => {
-  assert.match(MODAL_SOURCE, /canConfirmReject = !taskIsDeleted && canConfirmTask\(actor, task\.status\)/);
+test("wiring: non-review flags are computed by the module rather than re-derived", () => {
+  // Review controls now consume task_review_access; they must not be pinned to
+  // the narrower historical canConfirmTask mirror by this source assertion.
   assert.match(MODAL_SOURCE, /canCancel = !taskIsDeleted && canCancelTask\(actor, task\.status\)/);
   assert.match(MODAL_SOURCE, /canAssign = !taskIsDeleted && canAssignTask\(actor, task\.status\)/);
   assert.match(MODAL_SOURCE, /canEdit = !taskIsDeleted && canEditTask\(actor, task\.status\)/);
+});
+
+test("wiring: review controls consume the authoritative RPC hook, not the legacy helper", () => {
+  assert.match(MODAL_SOURCE, /const reviewAccess = useTaskReviewAccess\(task\?\.id \?\? null,/);
+  assert.match(MODAL_SOURCE, /canConfirmReject = !taskIsDeleted && reviewAccess\.canReview/);
+  assert.doesNotMatch(MODAL_SOURCE, /canConfirmReject\s*=.*canConfirmTask\(/);
 });
 
 test("wiring: the location answer comes from the database, gated on the task having one", () => {

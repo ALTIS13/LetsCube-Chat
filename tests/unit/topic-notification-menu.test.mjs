@@ -17,13 +17,15 @@ function windowBoundary(change) {
   let text=readFileSync(resolve(src,"components/chat/ChatWindow.tsx"),"utf8");
   if(change){assert.equal(text.split(change[0]).length,2);text=text.replace(change[0],change[1]);}
   const file=ts.createSourceFile("ChatWindow.tsx",text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
-  let producer="const currentTopicNotificationScope=undefined;",header;
+  let producer,header,scope;
   function visit(n){
     if(ts.isFunctionDeclaration(n)&&n.name?.text==="currentTopicNotificationScope")producer=n.getText(file).replace(/^export /,"");
+    if(ts.isVariableDeclaration(n)&&n.name.getText(file)==="topicNotificationScope")scope=n.initializer.getText(file);
     if(ts.isJsxSelfClosingElement(n)&&n.tagName.getText(file)==="ChatHeader")header=n.getText(file);
     ts.forEachChild(n,visit);
-  }visit(file);assert.ok(header,"actual Window-to-Header boundary exists");
-  return {producer,header};
+  }visit(file);assert.ok(producer,"actual canonical scope producer exists");
+  assert.ok(scope,"actual Window scope invocation exists");assert.ok(header,"actual Window-to-Header boundary exists");
+  return {producer,header,scope};
 }
 async function compile(change) {
   const boundary=windowBoundary(change?.window);
@@ -63,7 +65,9 @@ async function compile(change) {
         selectedTopicId:'${T}',scopeKnown:true,topics:[{id:'${G}',chat_id:'${C}',name:'Общие',is_general:true,archived:false},{id:'${T}',chat_id:'${C}',name:'Дизайн',is_general:false,archived:false}]};
       function Boundary(){const s=useAppStore();const args={...input,userId:s.currentUser?.id??null,accountEpoch:s.accountEpoch,
         snapshot:input.scopeKnown?{userId:input.snapshotUserId??'${U}',accountEpoch:input.snapshotEpoch??1,chatId:input.snapshotChatId??'${C}',topics:input.topics}:null};
-        const chatId=args.chatId,chat=args.chat,topicNotificationScope=input.heldScope??currentTopicNotificationScope?.(args)??null;
+        const {chatId,chat,userId,accountEpoch,selectedTopicId}=args;
+        const topicsEnabled=Boolean(chat&&(chat.is_forum||chat.type==='group')),topicSnapshot=args.snapshot;
+        const topicNotificationScope=input.heldScope??${boundary.scope};
         const openChatSearch=()=>{},setShowInfo=()=>{},clearChatForMe=undefined,phoneServer=false,setRailOpen=()=>{};
         window.scope=topicNotificationScope;return ${boundary.header};}
       const root=createRoot(document.getElementById('root'));window.render=patch=>{input={...input,...patch};flushSync(()=>root.render(<Boundary/>));};
@@ -79,7 +83,7 @@ async function fixture(t,{code=bundle,input={}}={}){
   await page.route("**/*",r=>{requests.push("UNKNOWN_REQUEST");return r.abort();});
   await page.setContent('<!doctype html><div id="root"></div>');await page.addScriptTag({content:code});await page.evaluate(input=>window.render(input),input);
   t.after(async()=>{await page.evaluate(()=>window.unmount());await context.close();assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);});
-  return{page,async menu(){await page.getByRole("button",{name:"Ещё",exact:true}).click();},async topic(){await page.getByRole("button",{name:"Уведомления темы",exact:true}).click();},
+  return{page,async menu(){await page.getByRole("button",{name:"Ещё",exact:true}).click();},async topic(){await page.getByRole("button",{name:"Уведомления канала",exact:true}).click();},
     async answer(name,data,error=null){await page.evaluate(({name,data,error})=>window.requests.findLast(r=>r.name===name).resolve({data,error}),{name,data,error});},
     async writes(){return page.evaluate(()=>window.requests.filter(r=>r.name==='topic_notification_preference_set').map(r=>r.args));},
     async ready(rows=[{scope_key:T,mode:"disabled",revision:7}]){await page.evaluate(()=>window.channels.at(-1).status("SUBSCRIBED"));
@@ -89,7 +93,7 @@ async function fixture(t,{code=bundle,input={}}={}){
 }
 test("current canonical topic control is reachable through the actual Window Header menu",async t=>{
   const f=await fixture(t);await f.menu();
-  assert.equal(await f.page.getByRole("button",{name:"Уведомления темы",exact:true}).count(),1,"CURRENT_TOPIC_MENU_MOUNT_REQUIRED");
+  assert.equal(await f.page.getByRole("button",{name:"Уведомления канала",exact:true}).count(),1,"CURRENT_TOPIC_MENU_MOUNT_REQUIRED");
   await f.topic();assert.equal(await f.page.locator('input[type=radio]').count(),3);await f.ready();
   assert.deepEqual(await f.page.locator('input:checked').evaluateAll(nodes=>nodes.map(n=>n.value)),["disabled"]);
 });
@@ -108,7 +112,7 @@ test("parent chat mute remains separate and topic hook is mounted only on explic
 
 test('an owned successful raw snapshot without a general row still offers implicit general',async t=>{
   const f=await fixture(t,{input:{selectedTopicId:null,topics:[]}});await f.menu();
-  assert.equal(await f.page.getByRole('button',{name:'Уведомления темы',exact:true}).count(),1);
+  assert.equal(await f.page.getByRole('button',{name:'Уведомления канала',exact:true}).count(),1);
   await f.topic();await f.ready([]);await f.page.locator('input[value=disabled]').click();
   assert.deepEqual(await f.writes(),[{p_chat_id:C,p_topic_id:null,p_mode:'disabled',p_expected_revision:0}]);
 });
@@ -131,7 +135,7 @@ for(const [name,input] of [
   ['private chat',{chat:{id:C,type:'private',is_forum:false,name:'Private'}}],
 ])test(`menu refuses ${name} without acquiring preference reads`,async t=>{
   const f=await fixture(t,{input});await f.menu();
-  assert.equal(await f.page.getByRole('button',{name:'Уведомления темы',exact:true}).count(),0);
+  assert.equal(await f.page.getByRole('button',{name:'Уведомления канала',exact:true}).count(),0);
   assert.equal(await f.page.evaluate(()=>window.requests.length),0);
 });
 
@@ -151,7 +155,7 @@ test("confirmed CAS conflict and retry remain reachable without overwriting serv
   assert.equal((await f.page.locator('body').innerText()).includes('PRIVATE_ERROR_CANARY'),false);
   await f.page.getByRole('menu').getByRole('button',{name:'Назад',exact:true}).click();
   assert.equal(await f.page.locator('input[type=radio]').count(),0);
-  assert.equal(await f.page.getByRole('button',{name:'Уведомления темы',exact:true}).count(),1);
+  assert.equal(await f.page.getByRole('button',{name:'Уведомления канала',exact:true}).count(),1);
   await f.page.keyboard.press('Escape');assert.equal(await f.page.getByRole('menu').count(),0);
 });
 
@@ -175,7 +179,7 @@ test("scope change retires held topic ACK and reopening targets only the new can
 
 test("Header rejects stale caller owner even if current chat ID still matches",async t=>{
   const f=await fixture(t,{input:{heldScope:{userId:OTHER,accountEpoch:1,chatId:C,topicId:T,canonicalScopeKey:T,title:'Stale'}}});
-  await f.menu();assert.equal(await f.page.getByRole('button',{name:'Уведомления темы',exact:true}).count(),0);
+  await f.menu();assert.equal(await f.page.getByRole('button',{name:'Уведомления канала',exact:true}).count(),0);
 });
 
 test('diagnostic actual menu pixels fit both themes at 1440 and 390 without launch acceptance',async t=>{
@@ -193,9 +197,9 @@ test('diagnostic actual menu pixels fit both themes at 1440 and 390 without laun
     await f.page.emulateMedia({colorScheme:theme,reducedMotion:'reduce'});
     await f.page.evaluate(({theme,width})=>{document.documentElement.className=theme;document.documentElement.style.setProperty('--kub-safe-bottom',width===390?'34px':'0px');},{theme,width});
     await f.page.addStyleTag({content:css});
-    const widths=await f.page.evaluate(async()=>{await document.fonts.load('14px Inter','Уведомления темы');await document.fonts.ready;
-      const c=document.createElement('canvas').getContext('2d');c.font='14px Inter, monospace';const loaded=c.measureText('Уведомления темы 123').width;
-      c.font='14px monospace';return[loaded,c.measureText('Уведомления темы 123').width];});
+    const widths=await f.page.evaluate(async()=>{await document.fonts.load('14px Inter','Уведомления канала');await document.fonts.ready;
+      const c=document.createElement('canvas').getContext('2d');c.font='14px Inter, monospace';const loaded=c.measureText('Уведомления канала 123').width;
+      c.font='14px monospace';return[loaded,c.measureText('Уведомления канала 123').width];});
     assert.notEqual(widths[0],widths[1],'REAL_INTER_MUST_DIFFER_FROM_ITS_FALLBACK');
     await f.page.evaluate(()=>window.store.setState({parentMuted:true}));
     await f.menu();await f.topic();await f.ready([{scope_key:'general',mode:'enabled',revision:4}]);
@@ -215,8 +219,8 @@ for(const control of [
   {name:'Header owner fence',change:{header:['topicNotificationScope?.userId === currentUser?.id && topicNotificationScope?.accountEpoch === accountEpoch','true']},
     input:{heldScope:{userId:OTHER,accountEpoch:1,chatId:C,topicId:T,canonicalScopeKey:T,title:'Stale'}},expected:0},
 ])test(`literal compiled omission exposes ${control.name}`,async t=>{
-  const normal=await fixture(t,{input:control.input});await normal.menu();assert.equal(await normal.page.getByRole('button',{name:'Уведомления темы',exact:true}).count(),control.expected);
+  const normal=await fixture(t,{input:control.input});await normal.menu();assert.equal(await normal.page.getByRole('button',{name:'Уведомления канала',exact:true}).count(),control.expected);
   const mutant=await fixture(t,{input:control.input,code:await compile(control.change)});await mutant.menu();
-  const actual=await mutant.page.getByRole('button',{name:'Уведомления темы',exact:true}).count();
+  const actual=await mutant.page.getByRole('button',{name:'Уведомления канала',exact:true}).count();
   assert.throws(()=>assert.equal(actual,control.expected),assert.AssertionError);
 });

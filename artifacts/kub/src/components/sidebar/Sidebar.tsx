@@ -13,6 +13,7 @@ import { FolderTabs } from "./FolderTabs";
 import { FolderRail } from "./FolderRail";
 import { SideMenuLayer } from "./SideMenuLayer";
 import { ChatList } from "./ChatList";
+import { ChatListSyncNotice } from "./ChatListSyncNotice";
 import { NewChatModal } from "./NewChatModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { ContactsPanel } from "@/components/contacts/ContactsPanel";
@@ -28,7 +29,6 @@ import { useAppStore } from "@/store/app.store";
 import { useChats } from "@/hooks/useChats";
 import { useFolders } from "@/hooks/useFolders";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
-import { LIST_MAY_BE_STALE } from "@/lib/plainMessages";
 import { ShellSectionRows } from "./ShellSectionRows";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { QuickSwitchList } from "./QuickSwitchList";
@@ -369,19 +369,8 @@ export function Sidebar() {
           ) : (
             <div className="relative flex min-h-0 flex-1 flex-col">
               <ConnectionStatus variant="plate" />
-              {/* The chats on screen are still true and are no longer current.
-                  They stay, and the line above them says so — the same shape the
-                  sanctions tab and the channel rail already use. */}
-              {chatsView === "stale" && (
-                <div className="flex flex-wrap items-center gap-2 px-3 pb-2" data-testid="chat-list-stale">
-                  <KubNotice tone="danger" className="min-w-0 flex-1 text-xs">
-                    {LIST_MAY_BE_STALE}: {chatsError}
-                  </KubNotice>
-                  <KubButton size="sm" variant="secondary" onClick={() => void refetch()}>
-                    Повторить
-                  </KubButton>
-                </div>
-              )}
+              <ChatListSyncNotice stale={chatsView === "stale"}
+                ownerKey={`${userId}:${accountEpoch}`} onRetry={() => void refetch()} />
               <ChatList
                 active={!listReplaced}
                 chats={listed}

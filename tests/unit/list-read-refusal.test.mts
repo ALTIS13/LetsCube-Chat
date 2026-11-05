@@ -259,7 +259,8 @@ test("the sidebar's two reads both report their refusal", () => {
   assert.match(hook, /if \(chatsError \|\| !chatsData\) \{[\s\S]*?listReadRefused/u);
   // An answer of «no memberships» is still an answer.
   assert.match(hook, /listReadSucceeded\(userId\)/u);
-  assert.match(hook, /view: listReadView\(read\)/u);
+  assert.ok(/view: read\.fromCache \? "cached" as const : listReadView\(read\)/u.test(hook),
+    "restored cache is separate, while actual failed reads still use listReadView");
 });
 
 test("the forum's channel read stops being thrown away", () => {
@@ -314,11 +315,12 @@ test("the chat list says a refused read rather than «Чаты не найден
   assert.match(unavailable, /\{chatsError\}/u, "the refusal is drawn with no sentence in it");
   assert.match(unavailable, /void refetch\(\)/u, "and with no way to ask again");
 
-  const stale = between(sidebar, '{chatsView === "stale" && (', "<ChatList");
-  assert.match(stale, /data-testid="chat-list-stale"/u);
-  assert.match(stale, /\{LIST_MAY_BE_STALE\}/u);
-  assert.match(stale, /\{chatsError\}/u);
-  assert.match(stale, /void refetch\(\)/u);
+  // Actual delayed-status behavior is exercised by chat-list-sync-notice.test.
+  const stale = sidebar.match(/<ChatListSyncNotice[\s\S]*?\/>/u)?.[0];
+  assert.ok(stale, "the quiet status component is mounted");
+  assert.match(stale, /stale=\{chatsView === "stale"\}/u);
+  assert.match(stale, /ownerKey=\{`\$\{userId\}:\$\{accountEpoch\}`\}/u);
+  assert.match(stale, /onRetry=\{\(\) => void refetch\(\)\}/u);
   assert.ok(
     at(sidebar, 'chatsView === "unavailable"') < at(sidebar, "<ChatList"),
     "the list is drawn before the refusal is ruled out",

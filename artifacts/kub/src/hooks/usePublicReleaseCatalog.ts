@@ -4,10 +4,10 @@ import { useReleaseCatalog } from "@/hooks/useReleaseCatalog";
 import {
   describePublicPlatform,
   selectPublicChangelog,
-  type PublicChangelogEntry,
   type PublicPlatformState,
 } from "@/lib/publicReleaseModel";
 import type { ReleasePlatform } from "@/lib/releaseCatalog";
+import { mergeReleaseHistory, type ReleaseChangelogValue, type ReleaseHistoryEntry } from "@/lib/releaseHistory";
 
 /**
  * Release state for the public downloads surface.
@@ -36,7 +36,8 @@ const UNPUBLISHED_PLATFORMS: ReleasePlatform[] = ["macos", "ios"];
 
 export type PublicReleaseCatalog = {
   platforms: PublicPlatformState[];
-  changelog: PublicChangelogEntry | null;
+  changelog: ReleaseChangelogValue | null;
+  history: ReleaseHistoryEntry[];
   /** Re-reads both published manifests. The public retry control needs this. */
   refresh: () => void;
 };
@@ -93,12 +94,17 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
       }),
     );
 
+    const sources = [
+      { title: PUBLIC_PLATFORM_TITLES.windows, snapshot: windowsSnapshot },
+      { title: PUBLIC_PLATFORM_TITLES.android, snapshot: androidSnapshot },
+    ];
+    const history = mergeReleaseHistory(sources);
+    const latest = selectPublicChangelog(sources) ?? history[0] ?? null;
+
     return {
       platforms: [...published, ...planned],
-      changelog: selectPublicChangelog([
-        { title: PUBLIC_PLATFORM_TITLES.windows, snapshot: windowsSnapshot },
-        { title: PUBLIC_PLATFORM_TITLES.android, snapshot: androidSnapshot },
-      ]),
+      changelog: latest ? { ...latest, history } : null,
+      history,
       refresh,
     };
     // The underlying hook returns a fresh object each render, so this depends

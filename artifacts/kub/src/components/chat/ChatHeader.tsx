@@ -433,7 +433,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
     { icon: isPinned ? "pinOff" : "pin", label: isPinned ? "Открепить чат" : "Закрепить чат", action: handlePinToggle },
     ...muteItems,
-    ...(topicScope ? [{ icon: "notifications" as KubIconName, label: "Уведомления темы", action: () => setTopicChoiceOpen(true) }] : []),
+    ...(topicScope ? [{ icon: "notifications" as KubIconName, label: "Уведомления канала", action: () => setTopicChoiceOpen(true) }] : []),
     // «Пожаловаться» sends something and ends nothing, so it belongs with the
     // ordinary items rather than inside the destructive run below. Photographed
     // at 1440 and 390 with it under «Очистить историю у себя»: an unmarked row

@@ -11,7 +11,6 @@ import { useIsLocationAdmin } from "@/hooks/useLocationAdmin";
 import {
   canAssignTask,
   canCancelTask,
-  canConfirmTask,
   canEditTask,
   type TaskActionActor,
 } from "@/lib/taskActionAccess";
@@ -25,6 +24,7 @@ import {
 } from "@/hooks/useRecurringTasks";
 import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
 import { useTask } from "@/hooks/useTask";
+import { useTaskReviewAccess } from "@/hooks/useTaskReviewAccess";
 import {
   TASK_EVENT_LABEL,
   TASK_ASSIGNMENT_SCOPE_META,
@@ -61,6 +61,8 @@ const GLOBAL_RECURRENCE_MANAGE_KEYS = [
   "tasks.manage_admin_tasks",
 ] as const;
 const LOCATION_RECURRENCE_MANAGE_KEYS = ["tasks.manage", "tasks.manage_admin_tasks"] as const;
+const REVIEW_INVALIDATION_KEYS = ["tasks.manage", "tasks.review_own"] as const;
+const LOCATION_REVIEW_INVALIDATION_KEYS = ["tasks.manage"] as const;
 
 /**
  * Task detail with full event timeline + comment composer + role-aware
@@ -77,14 +79,28 @@ export function TaskDetailModal(props: Props) {
 function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: Props) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
-  // `public.is_manager_or_admin(auth.uid())`, which is what `task_confirm`,
-  // `task_reject`, `task_assign` and `task_cancel` ask. Deliberately not
-  // `useIsManagerOrAdmin()`, the client's own wide `isStaff`: that one also
-  // admits a holder of one of `STAFF_ACCESS_PERMISSIONS`, and no RLS policy or
-  // task RPC knows anything about permissions (D-202, and `lib/taskActionAccess.ts`).
-  const { allowed: isManagerOrAdmin } = useMatchesIsManagerOrAdmin();
+  // Assignment/cancellation retain their measured staff predicate. Review
+  // uses the server's task_review_access answer, including scoped capabilities.
+  const { allowed: isManagerOrAdmin, checking: managerChecking } = useMatchesIsManagerOrAdmin();
   const { softDeleteTask } = useTaskSoftDelete();
   const { task, events, checklist, reminders, loading, refreshing, error: readError, refetch } = useTask(taskId);
+  const reviewEnabled = Boolean(task && task.status === "waiting_confirmation" && !task.deleted_at && !refreshing && !readError);
+  const globalReviewInputs = usePermissionAccess(REVIEW_INVALIDATION_KEYS, { enabled: reviewEnabled });
+  const locationReviewInputs = usePermissionAccess(LOCATION_REVIEW_INVALIDATION_KEYS, {
+    locationId: task?.location_id ?? null,
+    locationOnly: true,
+    enabled: reviewEnabled && Boolean(task?.location_id),
+  });
+  const reviewAccess = useTaskReviewAccess(task?.id ?? null, {
+    updatedAt: task?.updated_at,
+    enabled: reviewEnabled && !managerChecking && !globalReviewInputs.checking && !locationReviewInputs.checking,
+    // Invalidation only: no permission or role answer here grants review.
+    rolesKey: JSON.stringify([
+      Boolean(managerChecking), isManagerOrAdmin,
+      Boolean(globalReviewInputs.checking), globalReviewInputs.hasPermission("tasks.manage"), globalReviewInputs.hasPermission("tasks.review_own"),
+      Boolean(locationReviewInputs.checking), locationReviewInputs.hasPermission("tasks.manage"),
+    ]),
+  });
   const {
     recurrence,
     status: recurrenceStatus,
@@ -124,6 +140,7 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
 
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -178,24 +195,23 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
   // Tracker item 67: a co-executor does the work as the assignee does — moves
-  // the task along, ticks, sets reminders — and, like them, does not confirm it.
+  // the task along, ticks and sets reminders. Review is authorized separately.
   const isDoer = isAssignee || isCoassignee(task.coassignees, currentUser?.id);
   const isCreator  = currentUser?.id === task.created_by;
   const canDeleteTask =
     !taskIsDeleted &&
     (deleteAccess.hasAnyPermission(TASK_DELETE_PERMISSION_KEYS) || locationDeleteAccess.hasPermission("tasks.delete"));
-  // One copy per RPC of the gate that RPC applies, in `lib/taskActionAccess.ts`
+  // Non-review actions use their measured gates in `lib/taskActionAccess.ts`
   // together with the production function bodies. `taskIsDeleted` stays here:
-  // none of the four RPCs looks at `deleted_at`, so refusing a deleted task is
-  // the client's own narrowing and does not belong in a module that claims to
-  // mirror the database.
+  // the legacy non-review gates do not cover this state. Review's readonly
+  // RPC separately refuses deleted tasks through its authoritative policy.
   const actor: TaskActionActor = {
     isManagerOrAdmin,
     isCreator,
     isAssignee,
     isLocationAdmin,
   };
-  const canConfirmReject = !taskIsDeleted && canConfirmTask(actor, task.status);
+  const canConfirmReject = !taskIsDeleted && reviewAccess.canReview;
   const canCancel = !taskIsDeleted && canCancelTask(actor, task.status);
   const canAssign = !taskIsDeleted && canAssignTask(actor, task.status);
   const canClaimGlobal = claimAccess.hasAnyPermission(TASK_CLAIM_PERMISSION_KEYS);
@@ -224,7 +240,7 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
     canCancel ||
     canConfirmReject ||
     (isDoer && ["assigned", "accepted", "in_progress", "rejected"].includes(task.status)) ||
-    (isManagerOrAdmin && task.status === "waiting_confirmation" && isDoer) ||
+    reviewAccess.reason === "self_review" ||
     canDeleteTask;
 
   // supabase.rpc(...) returns a thenable PostgrestBuilder, not a real Promise,
@@ -318,27 +334,33 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
   };
 
   const submitComment = async () => {
-    if (taskIsDeleted) return;
-    if (!comment.trim()) return;
-    setPosting(true); setActionError(null);
-    const { error } = await supabase.rpc("task_comment", {
-      p_task_id: task.id, p_text: comment.trim(),
-    });
-    setPosting(false);
-    if (error) { setActionError(mapPgError(error)); return; }
-    setComment("");
+    if (taskIsDeleted || posting || !comment.trim()) return;
+    setPosting(true);
+    setCommentError(null);
+    try {
+      const { error } = await supabase.rpc("task_comment", {
+        p_task_id: task.id, p_text: comment.trim(),
+      });
+      if (error) { setCommentError(mapPgError(error)); return; }
+      setComment("");
+    } catch (err: unknown) {
+      setCommentError(mapPgError(err));
+    } finally {
+      setPosting(false);
+    }
   };
 
   const eventPayloadText = (kind: string, payload: Record<string, unknown>) => {
     const note = payload.note as string | undefined;
     const reason = payload.reason as string | undefined;
     const text = payload.text as string | undefined;
-    if (kind === "comment" && text) return text;
-    if (kind === "reject" && reason) return `Причина: ${reason}`;
-    if (kind === "cancel" && reason) return `Причина: ${reason}`;
-    if (kind === "confirm" && note)  return note;
-    if (kind === "send_for_confirmation" && note) return note;
-    return null;
+    const detail = kind === "comment" && text ? text
+      : (kind === "reject" || kind === "cancel") && reason ? `Причина: ${reason}`
+      : (kind === "confirm" || kind === "send_for_confirmation") && note ? note : null;
+    const selfReview = (kind === "confirm" || kind === "reject") &&
+      payload.self_review === true && payload.permission === "tasks.review_own"
+      ? "Проверено участником выполнения по специальному праву." : null;
+    return [detail, selfReview].filter(Boolean).join("\n") || null;
   };
 
   const latestRejectReason =
@@ -361,7 +383,7 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
         title={task.title}
         icon={<KubIcon name="tasks" size={15} />}
         size="lg"
-        contentClassName="px-5 py-4 space-y-4"
+        contentClassName="px-5 py-4 space-y-4 [overflow-wrap:anywhere]"
       >
         {readError === "transient" && <TaskReadError refreshing={refreshing} onRetry={refetch} />}
         {/* meta strip */}
@@ -678,6 +700,19 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
         </div>
 
         {/* Action buttons */}
+        {reviewAccess.checking && (
+          <div role="status" className="flex items-center gap-2 text-xs text-[color:var(--kub-muted)]">
+            <KubIcon name="spinner" size={14} /> Проверка доступа…
+          </div>
+        )}
+        {reviewAccess.error && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg kub-raise px-3 py-2 text-xs text-[color:var(--kub-text)]">
+            <span>{reviewAccess.error}</span>
+            <KubButton variant="secondary" size="sm" onClick={() => void reviewAccess.refetch()}>
+              Повторить проверку
+            </KubButton>
+          </div>
+        )}
         {hasTaskActions && (
           <div className="rounded-2xl p-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center kub-raise">
           <div className="w-full text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
@@ -766,9 +801,9 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
               </KubButton>
             </>
           )}
-          {isManagerOrAdmin && task.status === "waiting_confirmation" && isDoer && (
+          {reviewAccess.reason === "self_review" && (
             <span className="text-[12px] self-center text-[color:var(--kub-muted)]">
-              Подтвердить должен другой администратор или менеджер
+              Задачу должен проверить другой пользователь с правом подтверждения.
             </span>
           )}
           {canEdit && (
@@ -803,12 +838,12 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
         )}
 
         {actionError && (
-          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
+          <div role="alert" className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
             {actionError}
           </div>
         )}
         {actionNotice && (
-          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online-text)] border border-[color:var(--kub-online)]/30">
+          <div role="status" className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online-text)] border border-[color:var(--kub-online)]/30">
             {actionNotice}
           </div>
         )}
@@ -849,8 +884,9 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
               onChange={(e) => setComment(e.target.value)}
               rows={2}
               disabled={taskIsDeleted}
+              aria-label="Комментарий к задаче"
               placeholder="Оставьте комментарий…"
-              className="flex-1 rounded-xl px-3 py-2 text-sm resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+              className="min-w-0 flex-1 rounded-xl px-3 py-2 text-sm resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
             <KubButton
               variant="primary"
@@ -863,6 +899,11 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
               <KubIcon name="send" size={14} />
             </KubButton>
           </div>
+          {commentError && (
+            <div role="alert" className="mt-2 rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
+              {commentError}
+            </div>
+          )}
         </div>
       </KubModal>
 

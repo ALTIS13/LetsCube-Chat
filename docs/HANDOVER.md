@@ -10,10 +10,14 @@ avatar filters, compact form, multi-release changelog and channel notification
 entry are being integrated by disjoint agents. Client release is NOT yet done;
 AndroidStable46 remains current. Next: freeze/review changed clients, exact
 1440/390/both-theme UI checks, then verified web and legitimate native release.
+Newest owner report D393: cache restoration itself fabricated the flashing red
+chat failure. Cached state is repaired without granting server authority; quiet
+account-owned retry presentation is under final verification. Do not hide actual
+first-read refusal or replay the accepted cold-cache cohort.
 [Current batch/evidence](operations/2026-11-05-task-workflows.md),
 [12-stream status](IMPLEMENTATION_STATUS.md).
 
-**Current execution checkpoint, 2026-11-05 14:38Z:** Owner Codex coordinator,
+**Prior released checkpoint, 2026-11-05 14:38Z:** Owner Codex coordinator,
 Task3. D376's bounded PCM fallback is RELEASED on shared web01d3ae90/
 build78cbf7b00ba74f45 and AndroidStable0.1.45/build46, mandatory=false,
 rollback45 retained. Actual Chromium RED/GREEN, affected42/browser8, typecheck,

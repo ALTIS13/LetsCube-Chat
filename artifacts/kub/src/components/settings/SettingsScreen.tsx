@@ -1154,7 +1154,7 @@ export function useSettingsScreen({ onClose }: { onClose: () => void }): Setting
               id="changelog"
               icon="clock"
               title="Что нового"
-              value="Последний выпуск"
+              value="История выпусков"
               open={openSections.has("changelog")}
               onToggle={toggleSection}
             >

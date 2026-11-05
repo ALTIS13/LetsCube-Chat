@@ -120,7 +120,7 @@ export function useChats() {
   // a request that never got an answer. The rows stay in the store, where a
   // realtime event applies to one of them at a time; only the reading's own
   // state is held here.
-  const [read, setRead] = useState<ListReadProgress>(LIST_READ_PENDING);
+  const [read, setRead] = useState<ListReadProgress & { fromCache?: boolean }>(LIST_READ_PENDING);
   const loading = read.loading;
   const chats = useAppStore((s) => s.chats);
   const setChats = useAppStore((s) => s.setChats);
@@ -239,7 +239,9 @@ export function useChats() {
         || useAppStore.getState().chats !== before) return;
       listDisplaySourceRef.current = "cache";
       setChats(saved);
-      setRead(listReadRefused(listReadSucceeded(userId), { subject: userId, message: CHATS_UNAVAILABLE }));
+      // Restoring bytes is not a failed request. Server membership authority
+      // still remains false until the ordinary online read succeeds.
+      setRead({ ...listReadSucceeded(userId), fromCache: true });
     });
   }, [userId, accountEpoch, captureOwner, setChats]);
 
@@ -1033,8 +1035,8 @@ export function useChats() {
     loading,
     /** The refused read's sentence, or null. Already in a person's words. */
     error: read.error,
-    /** `loading | unavailable | stale | ready` — see `lib/listReadState.ts`. */
-    view: listReadView(read),
+    /** A restored snapshot is distinct from a failed read and from server-ready. */
+    view: read.fromCache ? "cached" as const : listReadView(read),
     refetch: fetchChats,
   };
 }

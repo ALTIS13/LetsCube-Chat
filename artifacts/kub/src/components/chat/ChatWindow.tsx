@@ -19,6 +19,8 @@ import { ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMed
 import { OfflineHistoryStatus } from "./OfflineHistoryStatus";
 import { TopicStrip } from "./TopicStrip";
 import { ChannelRail, ChannelRailSheet, ChannelRailTrigger } from "./ChannelRail";
+import { TopicNotificationControl } from "./TopicNotificationControl";
+import { useChatMute } from "@/hooks/useChatMute";
 import { ChannelManageDialogHost, requestChannelManage } from "./ChannelManageModal";
 import { VoiceCallCapsule } from "./VoiceCallCapsule";
 import { useTopics } from "@/hooks/useTopics";
@@ -64,7 +66,7 @@ import { mediaDayLabel } from "@/lib/sharedMediaBrowsing";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
-import { KubButton, KubEmptyState, KubIcon } from "@/components/kub";
+import { KubButton, KubEmptyState, KubIcon, KubModal } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { settleActionFeedback, showActionFeedback } from "@/lib/actionFeedback";
 import { mapPgError } from "@/lib/errors";
@@ -221,6 +223,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const { topics, snapshot: topicSnapshot, hasTextChannelHistory, scopeKnown: topicScopeKnown, createTopic, view: topicsView, refetch: refetchTopics } = useTopics(chatId, topicsEnabled);
   const topicNotificationScope = currentTopicNotificationScope({ chatId, chat, userId, accountEpoch, selectedTopicId,
     snapshot: topicsEnabled ? topicSnapshot : null });
+  const [railNotification, setRailNotification] = useState<ChatHeaderTopicNotificationScope | null>(null);
+  const railNotificationScope = railNotification?.userId === userId && railNotification?.accountEpoch === accountEpoch && railNotification.chatId === chatId
+    ? currentTopicNotificationScope({ chatId, chat, userId, accountEpoch, selectedTopicId: railNotification.topicId,
+      snapshot: topicsEnabled ? topicSnapshot : null }) : null;
   // Held by value. A refresh that answers with the same channels hands back new
   // objects, and a new array here re-keyed the conversation's history read and
   // fetched it again for a scope that had not changed (D-320).
@@ -779,6 +785,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     requestChannelManage({ chatId, chatName: chat?.name ?? null, role: myRole });
     setRailOpen(false);
   }, [chat?.name, chatId, myRole]);
+  const openChannelNotifications = useCallback((channel: ServerChannel) => {
+    const current = useAppStore.getState();
+    if (channel.kind !== "text" || current.currentUser?.id !== userId || current.accountEpoch !== accountEpoch || current.selectedChatId !== chatId) return;
+    const scope = currentTopicNotificationScope({ chatId, chat, userId, accountEpoch,
+      selectedTopicId: topicIdForChannel(channel), snapshot: topicsEnabled ? topicSnapshot : null });
+    if (scope) setRailNotification(scope);
+  }, [chatId, chat, userId, accountEpoch, topicsEnabled, topicSnapshot]);
   const railProps = {
     groups: serverChannels.groups,
     previews: channelPreviews,
@@ -795,6 +808,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     elsewhereChannelId: voiceElsewhereRoom?.channelId ?? null,
     joining: call.phase === "joining",
     onSelectText: selectChannel,
+    onNotifications: topicsEnabled && topicSnapshot?.userId === userId && topicSnapshot?.accountEpoch === accountEpoch && topicSnapshot?.chatId === chatId
+      ? openChannelNotifications : undefined,
     onJoinVoice: joinVoiceRoom,
     // The rail draws the control for an administrator; the dialog refuses to
     // open for anyone else. Both, because a control that does nothing is worse
@@ -2394,6 +2409,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           in place from the moment the conversation opens rather than from the
           moment the rail is first offered. */}
       <ChannelManageDialogHost />
+      {railNotificationScope && (
+        <ChannelNotificationDialog scope={railNotificationScope} onClose={() => setRailNotification(null)} />
+      )}
       {forwardingMessages && (
         <ForwardModal
           messages={forwardingMessages}
@@ -2452,6 +2470,46 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       </div>
       </BotViewerContext.Provider>
     </ChatMediaPlaybackProvider>
+  );
+}
+
+function ChannelNotificationDialog({ scope, onClose }: { scope: ChatHeaderTopicNotificationScope; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Keep this portalled dialog's keyboard sequence above the still-open rail.
+    const controls = () => {
+      const nodes = [...panel.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button:not(:disabled),input:not(:disabled)")];
+      return nodes.filter(node => !(node instanceof HTMLInputElement) || node.type !== "radio" || node.checked ||
+        (!nodes.some(peer => peer instanceof HTMLInputElement && peer.type === "radio" && peer.name === node.name && peer.checked) &&
+          nodes.find(peer => peer instanceof HTMLInputElement && peer.type === "radio" && peer.name === node.name) === node));
+    };
+    controls()[0]?.focus({ preventScroll: true });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const nodes = controls(), first = nodes[0], last = nodes[nodes.length - 1];
+      if (event.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus({ preventScroll: true });
+      }
+    };
+    panel.addEventListener("keydown", onKey);
+    return () => {
+      panel.removeEventListener("keydown", onKey);
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, []);
+  const { state: muteState } = useChatMute(scope.chatId);
+  const chatMutes = useAppStore((state) => state.chatMutes);
+  const parentMuted = chatMutes.userId === scope.userId && chatMutes.source !== "none" && !chatMutes.error ? muteState.muted : null;
+  return (
+    <KubModal open title="Уведомления канала" onClose={onClose} size="sm" contentClassName="p-0" panelRef={panelRef}>
+      <TopicNotificationControl key={`${scope.userId}:${scope.accountEpoch}:${scope.chatId}:${scope.canonicalScopeKey}`}
+        chatId={scope.chatId} topicId={scope.topicId} canonicalScopeKey={scope.canonicalScopeKey}
+        title={scope.title} parentMuted={parentMuted} onBack={onClose} />
+    </KubModal>
   );
 }
 

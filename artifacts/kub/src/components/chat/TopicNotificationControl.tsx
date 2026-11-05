@@ -67,14 +67,14 @@ export function TopicNotificationControl({ chatId, topicId, canonicalScopeKey, t
       </button>
       <div className="break-words px-4 py-2 text-sm font-semibold text-[color:var(--kub-text)]">{title}</div>
       <fieldset disabled={!canChoose} className="min-w-0">
-        <legend className="sr-only">Уведомления темы: {title}</legend>
+        <legend className="sr-only">Уведомления канала: {title}</legend>
         {choices.map(({ mode, label }) => (
           <label key={mode} className={cn(ROW, "kub-raise-hover has-disabled:cursor-not-allowed has-disabled:opacity-60")}>
             <input type="radio" name={name} value={mode} checked={confirmed === mode}
               onChange={() => choose(mode)} className={cn("h-4 w-4 shrink-0 accent-[var(--kub-cyan)]", FOCUS_RING)} />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="break-words">{label}</span>
-              {mode === "inherit" && <span className="break-words text-xs text-[color:var(--kub-muted)]">{inheritDetail}</span>}
+              {mode === "inherit" && <span className="break-words text-xs text-[color:var(--kub-muted)]">Настройки чата: {inheritDetail}</span>}
             </span>
           </label>
         ))}

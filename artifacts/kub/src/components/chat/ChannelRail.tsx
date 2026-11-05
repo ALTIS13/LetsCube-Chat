@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "@/components/ui/context-menu";
 import { TinyUserAvatar } from "./MessageReactions";
 import {
   LocalMuteMark,
@@ -27,6 +28,7 @@ import type { ChannelPreview } from "@/lib/channelPreview";
 import { channelReadKey, unreadBadgeLabel } from "@/lib/channelUnread";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { isTopModalLayer, popModalLayer, pushModalLayer } from "@/lib/modalStack";
 
 /**
  * A group's channels, listed the way a server lists them.
@@ -112,6 +114,8 @@ export interface ChannelRailProps {
   /** True while a join is in flight, so a second press cannot start a second one. */
   joining: boolean;
   onSelectText: (channel: ServerChannel) => void;
+  /** Opens this channel's existing notification preferences without navigating. */
+  onNotifications?: (channel: ServerChannel) => void;
   onJoinVoice: (channel: ServerChannel) => void;
   /** Opens the management surface. Absent means no administrator control is drawn. */
   onManageChannels?: () => void;
@@ -151,6 +155,7 @@ function ChannelRailList({
   elsewhereChannelId,
   joining,
   onSelectText,
+  onNotifications,
   onJoinVoice,
   onManageChannels,
   failed,
@@ -266,6 +271,7 @@ function ChannelRailList({
                   channel={channel}
                   active={channel.id === currentTextChannelId}
                   onSelect={onSelectText}
+                  onNotifications={onNotifications}
                   preview={previews?.get(channel.id) ?? null}
                   unread={unread?.get(channelReadKey(channel)) ?? 0}
                 />
@@ -343,19 +349,22 @@ function TextChannelRow({
   channel,
   active,
   onSelect,
+  onNotifications,
   preview,
   unread,
 }: {
   channel: ServerChannel;
   active: boolean;
   onSelect: (channel: ServerChannel) => void;
+  onNotifications?: (channel: ServerChannel) => void;
   preview: ChannelPreview | null;
   unread: number;
 }) {
   // Telegram's topic row: a name in full weight and a count at the end of the
   // line while something in it is unread. The channel being read shows none.
   const badge = active ? null : unreadBadgeLabel(unread);
-  return (
+  const row = (
+    <div className="mt-0.5 flex min-w-0 items-center gap-0.5">
     <button
       type="button"
       onClick={() => onSelect(channel)}
@@ -364,7 +373,7 @@ function TextChannelRow({
       data-channel-id={channel.id}
       data-active={active ? "true" : "false"}
       className={cn(
-        "relative mt-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
+        "relative flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
         active ? CHOSEN_ROW : RESTING_ROW,
         FOCUS_RING_INSET,
         PRESS_SINK,
@@ -415,6 +424,30 @@ function TextChannelRow({
         )}
       </span>
     </button>
+    {onNotifications && (
+      <button type="button"
+        aria-label={`Уведомления канала «${channel.name}»`}
+        title={`Уведомления канала «${channel.name}»`}
+        data-testid="channel-rail-notifications"
+        onClick={(event) => { event.stopPropagation(); onNotifications(channel); }}
+        className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] kub-raise-hover md:h-8 md:w-8", FOCUS_RING_INSET, PRESS_SINK)}>
+        <KubIcon name="notifications" size={16} />
+      </button>
+    )}
+    </div>
+  );
+  return (
+    <ContextMenu modal={false}>
+      <ContextMenuTrigger asChild disabled={!onNotifications}>{row}</ContextMenuTrigger>
+      {onNotifications && (
+        <ContextMenuContent className="z-[80] min-w-[200px]" onCloseAutoFocus={(event) => event.preventDefault()}>
+          <ContextMenuItem onSelect={() => onNotifications(channel)} className="min-h-11 gap-2">
+            <KubIcon name="notifications" size={16} />
+            Уведомления канала
+          </ContextMenuItem>
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
   );
 }
 
@@ -784,13 +817,15 @@ export function ChannelRailSheet({
   /** The server's name, for the screen's own header. */
   title?: string | null;
 }) {
+  const layerId = useId();
   useEffect(() => {
+    const layer = pushModalLayer(`channel-rail-sheet:${layerId}`);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && isTopModalLayer(layer)) onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    return () => { window.removeEventListener("keydown", onKey); popModalLayer(layer); };
+  }, [onClose, layerId]);
 
   return (
     // `z-[60]`, the contact card's layer, and it is a measurement rather than a

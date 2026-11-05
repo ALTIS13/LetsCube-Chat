@@ -553,6 +553,12 @@ participant lifecycle and group-call state; no duplicate room/call on reconnect.
 
 ## Task8: Interface and Motion (#18,30--31,34,93)
 
+**Nov05 bounded delta:** D393--D396 track current owner requests: false cached
+chat-error flash, compact task form/avatar filters, readable historical release
+notes and channel notification entry. Source/pixel checks are in progress;
+do not mark this wider stream complete or equate web pixels with Apple/device
+acceptance. [Batch](../../operations/2026-11-05-task-workflows.md).
+
 **Oct26 bounded delta:** stale voice short-press text after switching to video
 is reproduced and repaired; feedback5 and final1440/390/both-theme pixels pass.
 Released97e07de8/shared web and Stable40 with actual rollout/content proof. It does
@@ -597,6 +603,15 @@ Bounded recorder-feedback slice is released onOct26; this wider checkbox remains
 open for the other interface/motion work, not a reason to replay the accepted fix.
 
 ## Task9: Product Depth (#17,19--20,27,36--38,92)
+
+**Nov05 owner priority:** review authority is shared by readonly access and both
+write RPCs; explicit tasks.review_own capability repairs participant Owner
+review. Migration is applied with before-backup/rollback/17 SQL cases. Client
+batch adds unassigned creation, active Mine/history, multi-person/co-executor
+filtering and scoped grant retirement. Client release and real second-client
+task workflow remain separate acceptance boundaries. Do not rerun accepted
+unchanged task draft/Realtime evidence merely to fill this checkpoint.
+[Current batch](../../operations/2026-11-05-task-workflows.md).
 
 **State:** IN PROGRESS; D-354 source/browser fix4765bcad is shipped. Actual
 authenticated shared-web draft refresh and transient Retry pass; terminal and

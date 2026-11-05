@@ -1,17 +1,16 @@
 /**
- * Who may confirm, reject, assign, cancel and edit a task — one copy per RPC of
+ * Confirm/reject now use the authoritative `task_review_access` RPC through
+ * `useTaskReviewAccess`. No client-side review predicate is retained here.
+ *
+ * Who may assign, cancel and edit a task — one copy per RPC of
  * the gate that RPC actually applies.
  *
  * `public.tasks` carries `tasks insert/update/delete blocked` (`with check
  * false` / `using false`), so **no** write reaches this table through RLS. Every
  * state change is a SECURITY DEFINER function, and those functions are the only
- * authority there is. The five gates below were read off production on
- * 2026-09-15 with `pg_get_functiondef`:
- *
- *     task_confirm / task_reject
- *         if not public.is_manager_or_admin(caller) then raise …
- *         if cur.status <> 'waiting_confirmation' then raise …
- *         if cur.assignee_id = caller then raise …   -- «собственную задачу»
+ * authority there is. The non-review gates below were read off production on
+ * 2026-09-15 with `pg_get_functiondef`, rechecked against the coordinator's
+ * 2026-11-05 catalog snapshot.
  *
  *     task_assign
  *         if not public.is_manager_or_admin(caller) then raise …
@@ -32,7 +31,8 @@
  *                    coalesce(p_location_id, v_task.location_id), v_caller)
  *            ) then raise 'forbidden'
  *
- * **The register's proposed fix for D-124 was wrong, and measuring it is the
+ * **Historical evidence (2026-09-15, not the current review contract).**
+ * The register's proposed fix for D-124 was wrong, and measuring it is the
  * whole point of this module.** D-124 asked for confirm/reject/assign/cancel to
  * be gated on `has_location_permission(task.location_id, 'tasks.manage')`,
  * «the grants the server functions check». The server functions check no such
@@ -106,16 +106,6 @@ export interface TaskActionActor {
    * since its branch requires the location to be non-null first.
    */
   isLocationAdmin: boolean;
-}
-
-/** `task_confirm`: staff only, on a task waiting for confirmation that is not their own. */
-export function canConfirmTask(actor: TaskActionActor, status: TaskActionStatus): boolean {
-  return actor.isManagerOrAdmin && status === "waiting_confirmation" && !actor.isAssignee;
-}
-
-/** `task_reject`: the same gate as confirm, byte for byte. */
-export function canRejectTask(actor: TaskActionActor, status: TaskActionStatus): boolean {
-  return canConfirmTask(actor, status);
 }
 
 /** `task_assign`: staff only, while the task has not been picked up. */
