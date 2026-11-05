@@ -2,7 +2,15 @@
 
 Status: active production-hardening tracker, updated 2026-11-05.
 
-**Current release, Nov05 14:38Z:** AndroidStable0.1.45/build46, mandatory=false,
+**Current release, Nov05 16:39Z:** AndroidStable0.1.46/build47, mandatory=false,
+rollback46 retained, full public APK and exact healthy shared web verified.
+D393--D396 released: no false cache-startup warning, scoped task review and
+ordinary task flows, per-channel notification entry and readable release history.
+Migration applied with backup/rollback and17 verified cases; exact synthetic UI
+and guest retained-data Android upgrade pass. Native signed-in and Apple/Windows
+device deltas remain separate. [Evidence](operations/2026-11-05-task-workflows.md).
+
+**Prior release, Nov05 14:38Z:** AndroidStable0.1.45/build46, mandatory=false,
 full public APK SHA/length verified; rollback45 retained. D376 bounded AAC PCM
 compatibility is released, not universal encoding support. Actual browser
 RED/GREEN, affected42/browser8/typecheck/review, Realme browser one product

@@ -26304,7 +26304,7 @@ Stable and exact shared-web/public APK evidence pass; server clear and privacy
 checks are not bypassed.
 [Evidence](operations/2026-10-23-offline-history.md).
 
-## D-393 `[ ]` Restoring cached chats flashes a fabricated red load failure
+## D-393 `[x]` Restoring cached chats flashes a fabricated red load failure
 
 The exact cache-restoration effect calls listReadRefused before a server answer.
 It is a false error, not evidence of a failed network read. SOURCE FIXED:
@@ -26312,11 +26312,11 @@ restoration has a distinct cached state, while server membership authority stays
 false. Actual request failure still becomes unavailable/stale. A delayed neutral
 inline retry status replaces the red card only for a persistent stale read;
 account/session replacement retires the timer. First-read failure remains visible.
-Behavioral cache RED/GREEN and affected ownership checks pass. Client publication
-and final exact notice pixels are pending, not accepted as released.
+Behavioral cache RED/GREEN, affected ownership, notice15 and exact pixels pass.
+Released on verified shared web and AndroidStable47.
 [Current batch](operations/2026-11-05-task-workflows.md).
 
-## D-394 `[ ]` Task review authority disagrees with the visible Owner action
+## D-394 `[x]` Task review authority disagrees with the visible Owner action
 
 The global Owner is an authorized manager but can also be a co-executor; the
 old server rejects all participant review while the client excludes only the
@@ -26324,25 +26324,28 @@ primary assignee. SERVER FIXED/APPLIED: a shared review predicate and explicit
 tasks.review_own capability now serve Confirm, Reject and readonly access checks.
 Verified backup, rollback,17 SQL scenarios and loaded negative controls pass.
 Client consumes the authoritative answer and retires stale/account-owned grants.
-No actual user task was completed by QA. Native/web client publication pending.
+Verified shared web and AndroidStable47 carry the client fix. No actual user task
+was completed by QA; signed-in multi-client/native delta remains separate.
 [Authority and coverage limits](operations/2026-11-05-task-workflows.md).
 
-## D-395 `[ ]` Task creation/filtering and completed Mine need ordinary-user flows
+## D-395 `[x]` Task creation/filtering and completed Mine need ordinary-user flows
 
 Owner requests explicit unassigned creation, compact progressive form, searchable
 multi-person avatar filter and confirmed/cancelled history outside active Mine.
-SOURCE FIXED with52 synthetic workflow checks at390/1440 in both themes; exact
+RELEASED on verified shared web and AndroidStable47 with68 distinct synthetic
+workflow checks at390/1440 in both themes; exact
 pixels reviewed. Co-executors participate in Mine and person filters. Unassigned
-clears routing without inventing a new database scope. Publication pending; this
+clears routing without inventing a new database scope. This
 does not close all task/role/settings or whole-application interface work.
 [Current batch](operations/2026-11-05-task-workflows.md).
 
-## D-396 `[ ]` Channel mute and previous release notes are hard to discover
+## D-396 `[x]` Channel mute and previous release notes are hard to discover
 
 Owner requests individual-channel notification controls and a short historical
-changelog with tester checks. IN PROGRESS: channel-list bell/context entry uses
+changelog with tester checks. RELEASED: channel-list bell/context entry uses
 the existing topic-preference contract, not a new mute store. Changelog merges
 receipt-backed released notes with the actual available Stable manifest; history
-does not authorize downloads or announce an unpublished candidate. Final affected
-checks, pixels and publication pending.
+does not authorize downloads or announce an unpublished candidate. Final menu24,
+rail12, history34 and exact pixels pass. Actual public history lists47 and three
+earlier releases. Native delivery/provider timing is not inferred.
 [Current batch](operations/2026-11-05-task-workflows.md).

@@ -91,6 +91,35 @@ The mounted cold-list matrix43/43 is retained; its changed restore assertion was
 rerun1/1. Typecheck and diff whitespace checks pass. These are source/synthetic
 browser results, not physical task completion or cross-client acceptance.
 
-Shared web/native publication of these client changes is pending at this
-checkpoint. AndroidStable remains0.1.45/build46. Do not call the whole batch or
-all12 streams complete based on the installed review migration.
+## Published Release
+
+Shared web at `736a5c858823cdf9542c84b5a943f9b5fddf97cc`, build
+`d86e22971566dee8`: sole healthy image, public/container HTML, service worker
+and entry parity, all five changed-product markers verified. The public
+download page shows Android47 with tester checks and three expandable previous
+releases in an unauthenticated read-only browser. A separate cold catalog request
+aborted; the published archive stayed readable and did not pretend to be the
+current download. Subsequent bounded positive succeeded; catalog reachability
+on arbitrary connections is not claimed.
+
+Android `0.1.46` / build47 published16:39:39Z, mandatory=false, rollback46 retained.
+Public APK7,856,137B SHA-256:
+`02b0b6fb01f928201a774d0dd2fdd878a92ab5db7e76ed515b4c65a76aae3b5d`.
+Original signer, four Firebase resources, APK/AAB web and DEX parity, known
+secret scan and release flags pass. Local embedded web build `4962ebcc72b5157e`.
+Realme46->47 retained UID/data/first-install time; guest startup, foreground,
+fatal0 and whole installed APK hash pass. No authenticated native task completion,
+provider delivery, iPhone/macOS or new Windows package is claimed.
+
+Three reviewed outgoing commits resolve310 aliases in23 source files against
+their own trees. Publisher295 offline controls pass. Initial staging refused
+locally on an old receipt filename; exact remote staging target absent and
+Stable46 unchanged were verified before correcting that binding. Final staged
+bytes, locked previous-catalog compare-and-swap, rollback copy and full public
+hash/length all pass. No repeated build or device install was needed.
+
+Next: actual authorized two-client task review and active/history transitions;
+remaining task and interface coverage is in the [12-stream status](../IMPLEMENTATION_STATUS.md).
+Keep released notes separate from downloadable catalog authority. On a later
+verified Stable release, archive the previous version in `VERIFIED_RELEASE_HISTORY`
+before its catalog row is replaced. Do not archive a candidate.

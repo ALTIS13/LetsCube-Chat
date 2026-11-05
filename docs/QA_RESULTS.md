@@ -1,5 +1,24 @@
 # QA Results
 
+## 2026-11-05 - Task Review, Ordinary Workflows And Stable47
+
+Owner/co-executor review reproduces the old denial. New shared authority and
+explicit capability pass17 rolled-back cases in rehearsal and against the
+installed database; before-backup, byte-identical rollback/mirrors and3 loaded
+mutations pass. No real user's task changed. UI68 distinct cases and final form20
+and hint4 pass; affected hook/cache83, final menu24/channel12, changelog34 and
+quiet notice15 pass. Exact 390/1440 and both themes inspected. Cold-list43
+evidence reused, changed restore assertion1 passes. Typecheck and own-tree310
+alias checks pass. Public /download shows47,3 previous releases and tester checks;
+an aborted catalog response preserves the factual archive.
+
+Shared web736a5c85/buildd86e22971566dee8 exact healthy/public parity; Android
+0.1.46/build47 original signer/Firebase4/APK-AAB parity, Realme46->47 retained
+identity/data/guest/fatal0/full installed hash and public7,856,137B hash pass.
+Stable is optional, rollback46 retained. No native signed-in review, provider
+delivery, iPhone/macOS or new Windows package acceptance.
+[Evidence and remaining boundaries](operations/2026-11-05-task-workflows.md).
+
 ## 2026-11-05 - Bounded AAC Compatibility / Stable46
 
 Native AAC failure has actual Chromium RED before repair and GREEN afterwards.

@@ -555,9 +555,9 @@ participant lifecycle and group-call state; no duplicate room/call on reconnect.
 
 **Nov05 bounded delta:** D393--D396 track current owner requests: false cached
 chat-error flash, compact task form/avatar filters, readable historical release
-notes and channel notification entry. Source/pixel checks are in progress;
-do not mark this wider stream complete or equate web pixels with Apple/device
-acceptance. [Batch](../../operations/2026-11-05-task-workflows.md).
+notes and channel notification entry. Source/pixels, verified shared web and
+AndroidStable47 pass. Do not mark this wider stream complete or equate web
+pixels with Apple/device acceptance. [Batch](../../operations/2026-11-05-task-workflows.md).
 
 **Oct26 bounded delta:** stale voice short-press text after switching to video
 is reproduced and repaired; feedback5 and final1440/390/both-theme pixels pass.
@@ -608,8 +608,9 @@ open for the other interface/motion work, not a reason to replay the accepted fi
 write RPCs; explicit tasks.review_own capability repairs participant Owner
 review. Migration is applied with before-backup/rollback/17 SQL cases. Client
 batch adds unassigned creation, active Mine/history, multi-person/co-executor
-filtering and scoped grant retirement. Client release and real second-client
-task workflow remain separate acceptance boundaries. Do not rerun accepted
+filtering and scoped grant retirement. Client is released on shared web and
+AndroidStable47; real second-client task workflow remains a separate boundary.
+Do not rerun accepted
 unchanged task draft/Realtime evidence merely to fill this checkpoint.
 [Current batch](../../operations/2026-11-05-task-workflows.md).
 

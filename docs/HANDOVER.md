@@ -1,19 +1,17 @@
 # LETSCUBE — handover
 
-**Current checkpoint, 2026-11-05:** Owner Codex coordinator, Task9 of12; Task8
-UI work runs in parallel. Owner-role Confirm failure is reproduced at the
-co-executor self-review guard. Capability-based shared review authority migration
-20261105151615 is APPLIED with verified before-backup, exact rollback/mirrors,
-independent review, actual17-case rehearsal/live rollback and3 mutations. No
-real user's task was changed. Client review ownership, unassigned creation,
-avatar filters, compact form, multi-release changelog and channel notification
-entry are being integrated by disjoint agents. Client release is NOT yet done;
-AndroidStable46 remains current. Next: freeze/review changed clients, exact
-1440/390/both-theme UI checks, then verified web and legitimate native release.
-Newest owner report D393: cache restoration itself fabricated the flashing red
-chat failure. Cached state is repaired without granting server authority; quiet
-account-owned retry presentation is under final verification. Do not hide actual
-first-read refusal or replay the accepted cold-cache cohort.
+**Current checkpoint, 2026-11-05 16:39Z:** Owner Codex coordinator, Task9 of12;
+bounded Task8 and channel work released. Shared web `736a5c85`/`d86e22971566dee8`
+and AndroidStable0.1.46/build47 are verified, mandatory=false, rollback46 kept.
+D393 no false chat-cache error; persistent actual errors still offer a quiet
+retry. D394--D396: capability-based review, unassigned creation, avatar filters,
+active Mine/history, individual-channel notification controls and release history.
+Migration20261105151615 applied with before-backup, exact rollback/mirrors,17
+rehearsal/live cases and3 mutations. UI68 plus targeted boundary checks and
+exact pixels pass. Realme46->47 retained identity/data/guest and exact APK hash;
+public bytes and web image/assets verified. Next: actual authenticated two-client
+task review/history and Android draft/permission-loss QA. No native Apple/Windows
+package, real provider delivery or whole-product interface acceptance is claimed.
 [Current batch/evidence](operations/2026-11-05-task-workflows.md),
 [12-stream status](IMPLEMENTATION_STATUS.md).
 
@@ -33,7 +31,7 @@ Reuse accepted cold-photo/notification/updater evidence, not repeated cohorts.
 [consumer evidence](operations/2026-11-05-media-send-consumer.md),
 [paid tools and actual capability routing](operations/tooling-guide.md).
 
-**Current execution checkpoint, 2026-10-28:** Owner Codex coordinator. Stable
+**Prior released checkpoint, 2026-10-28:** Owner Codex coordinator. Stable
 Android0.1.44/build45 is published, mandatory=false/full public APK hash verified
 20:36:52Z, rollback44 retained. Reviewed stale catalog recovery, exact post-dispatch
 notification close through both renderers and baked-video quality correction are
