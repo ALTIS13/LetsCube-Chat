@@ -188,6 +188,11 @@ export function useTask(taskId: string | null) {
         void fetchTask();
       }, 250);
     };
+    // The departing co-executor may no longer be eligible for the CDC event.
+    // Recheck via RLS when the visible detail resumes or connectivity returns.
+    const revalidateVisible = () => {
+      if (document.visibilityState === "visible") debouncedFetch();
+    };
     // One channel per table, through the helper, because a channel is only as
     // live as its least live binding — measured on production on 2026-09-05 and
     // written up in `lib/realtimeTableChannels.ts`. This effect carried `tasks`
@@ -231,9 +236,13 @@ export function useTask(taskId: string | null) {
       },
     );
     for (const { name } of channels) registerChannel(name);
+    document.addEventListener("visibilitychange", revalidateVisible);
+    window.addEventListener("online", revalidateVisible);
     return () => {
       active = false;
       if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", revalidateVisible);
+      window.removeEventListener("online", revalidateVisible);
       for (const { name, channel } of channels) {
         rt.removeChannel(channel);
         unregisterChannel(name);

@@ -1,7 +1,7 @@
 "use client";
 
 import { formatTaskPeriod } from "@/lib/taskPeriod";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
@@ -70,20 +70,58 @@ const LOCATION_REVIEW_INVALIDATION_KEYS = ["tasks.manage"] as const;
  * — the modal never updates `tasks` directly.
  */
 export function TaskDetailModal(props: Props) {
-  const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  const accountEpoch = useAppStore((s) => s.accountEpoch);
-  // Drafts and open action forms belong to one task/session, not to the modal slot.
-  return <TaskDetailContent key={JSON.stringify([props.taskId, userId, accountEpoch])} {...props} />;
+  const { taskId, ...editorProps } = props;
+  const { task, loading, refreshing, error, refetch, ...detail } = useTask(taskId);
+
+  // useTask also hides the row on a task/session change. Only a readable snapshot owns an editor.
+  const readableTask = loading ? null : task;
+  return (
+    <KubModal
+      open
+      onClose={props.onClose}
+      title={readableTask?.title ?? "Задача"}
+      icon={readableTask ? <KubIcon name="tasks" size={15} /> : undefined}
+      size="lg"
+      contentClassName={readableTask ? "px-5 py-4 space-y-4 [overflow-wrap:anywhere]" : "px-5 py-10"}
+    >
+      {readableTask ? (
+        <TaskDetailEditor {...editorProps} {...detail} task={readableTask} refreshing={refreshing} error={error} refetch={refetch} />
+      ) : loading ? (
+        <div className="flex items-center justify-center">
+          <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
+        </div>
+      ) : error === "transient" ? (
+        <TaskReadError initial refreshing={refreshing} onRetry={refetch} />
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-3 text-center">
+          <KubIcon name="tasks" size={26} tone="muted" />
+          <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+            Задача недоступна или была удалена.
+          </div>
+          <p className="max-w-sm text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Возможно, у вас нет доступа к этой задаче или она больше не существует.
+          </p>
+          <KubButton variant="secondary" onClick={props.onClose}>
+            Закрыть
+          </KubButton>
+        </div>
+      )}
+    </KubModal>
+  );
 }
 
-function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: Props) {
+type TaskDetailRead = ReturnType<typeof useTask>;
+type EditorProps = Omit<Props, "taskId"> & Omit<TaskDetailRead, "loading" | "task"> & { task: NonNullable<TaskDetailRead["task"]> };
+
+function TaskDetailEditor({
+  nowMs = Date.now(), onClose, onDeleted, task, events, checklist, reminders, refreshing, error: readError, refetch,
+}: EditorProps) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   // Assignment/cancellation retain their measured staff predicate. Review
   // uses the server's task_review_access answer, including scoped capabilities.
   const { allowed: isManagerOrAdmin, checking: managerChecking } = useMatchesIsManagerOrAdmin();
   const { softDeleteTask } = useTaskSoftDelete();
-  const { task, events, checklist, reminders, loading, refreshing, error: readError, refetch } = useTask(taskId);
   const reviewEnabled = Boolean(task && task.status === "waiting_confirmation" && !task.deleted_at && !refreshing && !readError);
   const globalReviewInputs = usePermissionAccess(REVIEW_INVALIDATION_KEYS, { enabled: reviewEnabled });
   const locationReviewInputs = usePermissionAccess(LOCATION_REVIEW_INVALIDATION_KEYS, {
@@ -145,33 +183,11 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [sub, setSub] = useState<Subdialog>(null);
-
-  if (loading || !task) {
-    return (
-      <KubModal open onClose={onClose} title="Задача" size="lg" contentClassName="px-5 py-10">
-        {loading ? (
-          <div className="flex items-center justify-center">
-            <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
-          </div>
-        ) : readError === "transient" ? (
-          <TaskReadError initial refreshing={refreshing} onRetry={refetch} />
-        ) : (
-          <div className="flex flex-col items-center justify-center gap-3 text-center">
-            <KubIcon name="tasks" size={26} tone="muted" />
-            <div className="text-sm font-semibold text-[color:var(--kub-text)]">
-              Задача недоступна или была удалена.
-            </div>
-            <p className="max-w-sm text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              Возможно, у вас нет доступа к этой задаче или она больше не существует.
-            </p>
-            <KubButton variant="secondary" onClick={onClose}>
-              Закрыть
-            </KubButton>
-          </div>
-        )}
-      </KubModal>
-    );
-  }
+  const editorActive = useRef(false);
+  useLayoutEffect(() => {
+    editorActive.current = true;
+    return () => { editorActive.current = false; };
+  }, []);
 
   const status = TASK_STATUS_META[task.status];
   const priority = TASK_PRIORITY_META[task.priority];
@@ -323,6 +339,7 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
     setActionNotice(null);
     setActionLoading("delete");
     const { error } = await softDeleteTask(task.id, reason);
+    if (!editorActive.current) return;
     setActionLoading(null);
     if (error) {
       setActionError(error);
@@ -377,14 +394,7 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
 
   return (
     <>
-      <KubModal
-        open
-        onClose={onClose}
-        title={task.title}
-        icon={<KubIcon name="tasks" size={15} />}
-        size="lg"
-        contentClassName="px-5 py-4 space-y-4 [overflow-wrap:anywhere]"
-      >
+      <>
         {readError === "transient" && <TaskReadError refreshing={refreshing} onRetry={refetch} />}
         {/* meta strip */}
         <div className="flex flex-wrap gap-2 items-center">
@@ -905,7 +915,7 @@ function TaskDetailContent({ taskId, nowMs = Date.now(), onClose, onDeleted }: P
             </div>
           )}
         </div>
-      </KubModal>
+      </>
 
       {sub === "confirm" && (
         <TaskConfirmModal

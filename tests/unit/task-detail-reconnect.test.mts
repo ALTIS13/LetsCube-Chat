@@ -142,6 +142,39 @@ test("a second reconnect immediately after a successful catch-up still revalidat
   } finally { await f.close(); }
 });
 
+for (const signal of ["foreground", "online", "both"] as const) test(`${signal} return revalidates after silent access loss without a Realtime frame`, async () => {
+  const f = await fixture();
+  try {
+    assert.ok((await f.state()).task, "fixture starts with a readable task");
+    await f.page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("online"));
+      const previous = window.fixture.rows;
+      window.fixture.rows = (table: string, id: string) => table === "tasks" ? null : previous(table, id);
+    });
+    await f.advance(250);
+    assert.equal(await f.count(), 1, "background signals must not start a new read");
+    await f.page.evaluate((signal) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+      if (signal !== "online") document.dispatchEvent(new Event("visibilitychange"));
+      if (signal !== "foreground") window.dispatchEvent(new Event("online"));
+    }, signal);
+    await f.advance(249);
+    assert.equal(await f.count(), 1);
+    await f.advance(1);
+    assert.equal(await f.count(), 2, "foreground and online share one exact-task read");
+    assert.equal((await f.state()).task, null, "the invisible row retires the old detail");
+    await f.page.evaluate(() => {
+      window.fixture.detach();
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("online"));
+    });
+    await f.advance(250);
+    assert.equal(await f.count(), 2, "retired detail owns no foreground or online listener");
+  } finally { await f.close(); }
+});
+
 for (const kind of ["task", "session", "account", "unmount"]) test("late retired join/row callbacks queue no work after " + kind, async () => {
   const f = await fixture();
   try {

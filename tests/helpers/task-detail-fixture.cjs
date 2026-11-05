@@ -39,7 +39,12 @@ const boundaries = new Map([
       hasAnyPermission:keys => keys.includes('tasks.delete')});
   `],
   ["hooks/useLocationAdmin.ts", "export const useIsLocationAdmin = () => ({isLocationAdmin:false});"],
-  ["hooks/useTaskSoftDelete.ts", "export const useTaskSoftDelete = () => ({softDeleteTask:() => {throw Error('writes forbidden');}});"],
+  ["hooks/useTaskSoftDelete.ts", `export const useTaskSoftDelete = () => ({softDeleteTask:(id, reason) => {
+    const deletion = window.fixture.deletion;
+    if (!deletion || deletion.id !== id || deletion.reason !== reason || deletion.started) throw Error('writes forbidden');
+    deletion.started = true;
+    return new Promise(resolve => { deletion.finish = () => resolve({ error: null }); });
+  }});`],
   ["hooks/useRecurringTasks.ts", `
     export const useTaskRecurrence = () => ({recurrence:null,status:'ready',message:null,refetch:async()=>{}});
     export function pauseTaskRecurrence() {throw Error('writes forbidden');}
@@ -88,7 +93,8 @@ async function compileFixture({ change, styles = false } = {}) {
       f.render = (taskId=f.taskId) => {
         f.taskId=taskId;
         flushSync(() => root.render(f.mode === 'hook' ? <Hook taskId={taskId}/> :
-          <TaskDetailModal taskId={taskId} nowMs={Date.parse('2026-10-07T12:00:00Z')} onClose={()=>{}}/>));
+          <TaskDetailModal taskId={taskId} nowMs={Date.parse('2026-10-07T12:00:00Z')}
+            onClose={f.closeDetail} onDeleted={f.onDeleted}/>));
       };
       f.owner = (id='owner-a', session='session-1') => flushSync(() => {
         useAppStore.getState().setAuthSessionIdentity(id ? {userId:id,sessionId:session} : null);
@@ -139,10 +145,34 @@ async function mountFixture(page, bundle, {mode="hook", initial={}, theme="dark"
     network.push("unexpected network request"); return route.abort();
   });
   await page.goto(ORIGIN);
-  await page.evaluate(({mode,initial,theme,autoSubscribe}) => {
+  await page.evaluate(initializeTaskFixture, {mode,initial,theme,autoSubscribe});
+  if (bundle.css) await page.addStyleTag({content:bundle.css});
+  await page.addScriptTag({content:bundle.js});
+  await page.waitForFunction(() => window.fixture.batches.length > 0);
+  return {
+    page,
+    async idle() {await page.evaluate(async()=>{for(let i=0;i<24;i++) await Promise.resolve();
+      await new Promise(done=>setTimeout(done,0));});},
+    async state() {return page.evaluate(()=>JSON.parse(document.querySelector('[data-testid="hook-state"]').textContent));},
+    async refresh(plan={}) {await page.evaluate(plan=>{window.fixture.enqueue(plan);window.fixture.refetch();},plan);},
+    async release(index) {await page.evaluate(index=>window.fixture.release(index),index);},
+    async close() {
+      await page.evaluate(async()=>{const f=window.fixture;f.unmount();for(const batch of f.batches) batch.release();
+        for(let i=0;i<24;i++) await Promise.resolve();});
+      assert.equal(await page.evaluate(()=>window.fixture.writes),0,"no backend mutation permitted");
+      assert.deepEqual(network,[],"no external or unexpected requests permitted");
+      assert.deepEqual(faults,[],"no rejected promises or runtime errors permitted");
+    },
+  };
+}
+
+function initializeTaskFixture({mode,initial,theme,autoSubscribe}) {
     document.documentElement.classList.toggle("dark",theme === "dark");
     const AT='2026-10-07T12:00:00Z';
     const f=window.fixture={mode,theme,autoSubscribe,taskId:'task-a',plans:[initial],batches:[],channels:[],writes:0,reads:[],state:null};
+    f.closeCount=0; f.deletedCount=0;
+    f.closeDetail=() => { f.closeCount++; f.detach(); };
+    f.onDeleted=() => { f.deletedCount++; };
     f.profile = id => ({id,full_name:'Fictional QA',username:null,avatar_url:null,bio:null,role:'user',
       is_test_account:true,profile_frame:null,profile_background:null,presence_status:null,
       online_at:null,created_at:AT,updated_at:AT});
@@ -210,27 +240,9 @@ async function mountFixture(page, bundle, {mode="hook", initial={}, theme="dark"
     };
     f.release = index => f.batches[index].release();
     f.releaseTable = (index,table) => f.batches[index].parts.get(table)?.release();
-  },{mode,initial,theme,autoSubscribe});
-  if (bundle.css) await page.addStyleTag({content:bundle.css});
-  await page.addScriptTag({content:bundle.js});
-  await page.waitForFunction(() => window.fixture.batches.length > 0);
-  return {
-    page,
-    async idle() {await page.evaluate(async()=>{for(let i=0;i<24;i++) await Promise.resolve();
-      await new Promise(done=>setTimeout(done,0));});},
-    async state() {return page.evaluate(()=>JSON.parse(document.querySelector('[data-testid="hook-state"]').textContent));},
-    async refresh(plan={}) {await page.evaluate(plan=>{window.fixture.enqueue(plan);window.fixture.refetch();},plan);},
-    async release(index) {await page.evaluate(index=>window.fixture.release(index),index);},
-    async close() {
-      await page.evaluate(async()=>{const f=window.fixture;f.unmount();for(const batch of f.batches) batch.release();
-        for(let i=0;i<24;i++) await Promise.resolve();});
-      assert.equal(await page.evaluate(()=>window.fixture.writes),0,"no backend mutation permitted");
-      assert.deepEqual(network,[],"no external or unexpected requests permitted");
-      assert.deepEqual(faults,[],"no rejected promises or runtime errors permitted");
-    },
-  };
 }
 
 exports.compileFixture = compileFixture;
 exports.mountFixture = mountFixture;
 exports.requireKub = requireKub;
+exports.initializeTaskFixture = initializeTaskFixture;

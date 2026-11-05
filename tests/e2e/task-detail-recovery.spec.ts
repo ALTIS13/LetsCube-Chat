@@ -53,3 +53,36 @@ for(const theme of ["light","dark"] as const) test(`fictional detail recovery re
     await expect(page.getByTestId("task-checklist-draft")).toHaveValue("Fictional retained checklist draft");
   }finally{await f.close();}
 });
+
+for (const theme of ["light", "dark"] as const) test(`fictional task after access is restored (${theme})`, async ({ page }, testInfo) => {
+  const f = await mountFixture(page, bundle, { mode: "modal", theme, autoSubscribe: false });
+  try {
+    const detail = page.getByRole("dialog", { name: "Fictional task A", exact: true });
+    const comment = page.getByPlaceholder("Оставьте комментарий…");
+    const checklist = page.getByTestId("task-checklist-draft");
+    const unavailable = page.getByText("Задача недоступна или была удалена.", { exact: true });
+    await expect(detail).toBeVisible();
+    await comment.fill("Fictional local comment");
+    await checklist.fill("Fictional local checklist");
+    await page.evaluate(() => {
+      window.fixture.enqueue({ absent: true, holdTables: ["task_events"] });
+      window.fixture.deliver();
+    });
+    await expect(unavailable).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Закрыть", exact: true }).filter({ hasText: "Закрыть" })).toBeInViewport();
+    await expect(detail).toHaveCount(0);
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: testInfo.outputPath("unavailable.png"), scale: "css", animations: "disabled" });
+
+    await page.evaluate(() => window.fixture.deliver());
+    await expect(detail).toBeVisible();
+    await f.release(1);
+    await expect(unavailable).toHaveCount(0);
+    await expect(comment).toHaveValue("");
+    await expect(checklist).toHaveValue("");
+    await expect(detail).toBeInViewport();
+    await comment.scrollIntoViewIfNeeded();
+    await expect(comment).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath("restored.png"), scale: "css", animations: "disabled" });
+  } finally { await f.close(); }
+});

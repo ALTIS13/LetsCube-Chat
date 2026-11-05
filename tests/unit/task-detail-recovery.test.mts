@@ -52,6 +52,32 @@ test("prompt terminal snapshot retirement finishes flags and clears all collecti
   }finally{await f.close();}
 });
 
+for (const [name, plan] of [
+  ["HTTP 403", { status: { tasks: 403 }, errors: { tasks: {} } }],
+  ["successful absence", { absent: true }],
+] as const) test(`access restored after ${name} opens a fresh task editor`, async () => {
+  const f = await fixture({ mode: "modal" });
+  try {
+    const checklist = f.page.getByTestId("task-checklist-draft");
+    const comment = f.page.getByPlaceholder("Оставьте комментарий…");
+    const confirm = f.page.getByRole("dialog", { name: "Удалить задачу?", exact: true });
+    await checklist.fill("Fictional retired checklist");
+    await comment.fill("Fictional retired comment");
+    await f.page.getByRole("button", { name: "Удалить задачу", exact: true }).click();
+    await f.page.getByPlaceholder("Например: тестовая задача больше не нужна").fill("Fictional retired reason");
+    await promptTerminal(f, plan);
+    assert.equal(await comment.count(), 0);
+    assert.equal(await confirm.count(), 0);
+
+    await f.page.evaluate(() => window.fixture.deliver());
+    await f.page.waitForFunction(() => window.fixture.batches[2]?.done === 4);
+    await f.idle();
+    assert.equal(await comment.inputValue(), "", "restored access must not resurrect an old comment");
+    assert.equal(await checklist.inputValue(), "");
+    assert.equal(await confirm.count(), 0, "restored access must not reopen a stale confirmation");
+  } finally { await f.close(); }
+});
+
 test("pending ancillary denial retires the loaded parent without waiting for the task",async()=>{
   const f=await fixture();
   try {
@@ -62,6 +88,38 @@ test("pending ancillary denial retires the loaded parent without waiting for the
     assert.deepEqual(state.checklist,[]);assert.deepEqual(state.reminders,[]);
     await f.release(1);await f.idle();assert.deepEqual(await f.state(),state);
   }finally{await f.close();}
+});
+
+test("initial task response preserves keyboard focus on the dialog close button", async () => {
+  const f = await fixture({ mode: "modal", initial: { hold: true } });
+  try {
+    const close = f.page.getByRole("button", { name: "Закрыть", exact: true });
+    await close.focus();
+    await f.release(0);
+    await f.page.getByRole("dialog", { name: "Fictional task A", exact: true }).waitFor();
+    assert.equal(await close.evaluate(node => node === document.activeElement), true);
+  } finally { await f.close(); }
+});
+
+for (const retired of [false, true]) test(retired ? "a delete response from an inaccessible task cannot close the next task" :
+  "a successful delete still closes the active task", async () => {
+  const f = await fixture({ mode: "modal" });
+  try {
+    await f.page.evaluate(() => { window.fixture.deletion = { id: "task-a", reason: null }; });
+    await f.page.getByRole("button", { name: "Удалить задачу", exact: true }).click();
+    await f.page.getByRole("button", { name: "Удалить", exact: true }).click();
+    await f.page.waitForFunction(() => window.fixture.deletion.started);
+    const active = f.page.getByRole("dialog", { name: retired ? "Fictional task B" : "Fictional task A", exact: true });
+    if (retired) {
+      await promptTerminal(f, { absent: true });
+      await f.page.evaluate(() => window.fixture.render("task-b"));
+      await active.waitFor();
+    }
+    await f.page.evaluate(() => window.fixture.deletion.finish());
+    await f.idle();
+    assert.equal(await active.count(), retired ? 1 : 0);
+    assert.deepEqual(await f.page.evaluate(() => [window.fixture.closeCount, window.fixture.deletedCount]), retired ? [0, 0] : [1, 1]);
+  } finally { await f.close(); }
 });
 
 test("pending transient 57014 control preserves actual mounted draft/history until history settles",async()=>{
@@ -412,11 +470,13 @@ const mutants = [
     async check(f:any){const before=await f.page.evaluate(()=>{const f=window.fixture;f.old=f.state.refetch;f.detach();return f.batches.length;});
       await f.page.evaluate(async()=>{await window.fixture.old();});
       assert.equal(await f.page.evaluate(()=>window.fixture.batches.length),before);}},
-  {name:"draft-owner-key",file:"pages/tasks/TaskDetailModal.tsx",
-    before:"key={JSON.stringify([props.taskId, userId, accountEpoch])}",after:'key="shared-modal"',mode:"modal",
+  {name:"visible-owner-fence",file:"hooks/useTask.ts",
+    before:"state.owner === owner ? state : emptyDetail(owner, Boolean(taskId && userId))",after:"state",mode:"modal",
     async check(f:any){await f.page.getByPlaceholder("Оставьте комментарий…").fill("Fictional old draft");
-      await f.page.evaluate(()=>window.fixture.render('task-b'));await f.idle();
-      assert.equal(await f.page.getByPlaceholder("Оставьте комментарий…").inputValue(),"");}},
+      const oldVisible = await f.page.evaluate(()=>{
+        window.fixture.enqueue({hold:true});window.fixture.render('task-b');
+        return Boolean(document.querySelector('textarea[placeholder="Оставьте комментарий…"]'));
+      });assert.equal(oldVisible,false);}},
 ];
 
 for(const change of mutants) test("compiled omission is detected: "+change.name,async()=>{
