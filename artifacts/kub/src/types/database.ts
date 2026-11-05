@@ -1873,6 +1873,15 @@ export interface Database {
         Args: { p_task_id: string; p_note?: string | null }
         Returns: void
       }
+      task_review_access: {
+        Args: { p_task_id: string }
+        Returns: {
+          can_review: boolean
+          can_review_own: boolean
+          is_participant: boolean
+          reason: 'ready' | 'self_review' | 'unavailable' | 'status'
+        }
+      }
       task_reject: {
         Args: { p_task_id: string; p_reason: string }
         Returns: void
