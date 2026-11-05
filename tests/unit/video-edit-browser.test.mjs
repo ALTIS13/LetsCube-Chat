@@ -164,6 +164,55 @@ test("Chromium: actual middle trim reencodes only green frames and its audio, no
     audioStart:result.output.minAudioTimestamp,audioEnd:result.output.maxAudioTimestamp,pcmSamples:result.output.samples})}`);
 });
 
+test("Chromium: bounded PCM fallback keeps selected video and audio after a native AAC decode failure", { timeout: 60000 }, async t => {
+  const page = await browserFixture(t, chromium);
+  const result = await page.evaluate(async () => {
+    const generated = await f.generate();
+    if (generated.unsupported) return generated;
+    const source = await f.analyze(generated.file);
+    const original = AudioDecoder.prototype.decode;
+    let injected = 0;
+    AudioDecoder.prototype.decode = function (chunk) {
+      AudioDecoder.prototype.decode = original;
+      injected++;
+      throw new DOMException('Synthetic native audio decode refusal', 'EncodingError');
+    };
+    let trimmed;
+    try { trimmed = await videoEdit.trimVideo(generated.file, { start: 1.1, end: 1.9 }); }
+    finally { AudioDecoder.prototype.decode = original; }
+    const context = new AudioContext({ sampleRate: 48000 });
+    let correlation;
+    try {
+      const originalPcm = await context.decodeAudioData(await generated.file.arrayBuffer());
+      const outputPcm = await context.decodeAudioData(await trimmed.file.arrayBuffer());
+      const x = originalPcm.getChannelData(0), y = outputPcm.getChannelData(0);
+      let xy = 0, xx = 0, yy = 0;
+      for (let i = 4800; i < 28800; i++) {
+        const a = x[52800 + i], b = y[i];
+        xy += a * b; xx += a * a; yy += b * b;
+      }
+      correlation = xy / Math.sqrt(xx * yy);
+    } finally { await context.close(); }
+    return { injected, source, correlation, changed: trimmed.changed, same: trimmed.file === generated.file,
+      output: await f.analyze(trimmed.file) };
+  });
+  assert.notEqual(result.unsupported, true);
+  assert.equal(result.injected, 1);
+  assert.equal(result.changed, true);
+  assert.equal(result.same, false);
+  assert.ok(result.correlation > .98, `decoded output shifted against selected source: ${result.correlation}`);
+  assert.deepEqual([...new Set(result.source.colors)], [0, 1, 2]);
+  assert.deepEqual([...new Set(result.output.colors)], [1]);
+  assert.ok(result.output.audio && result.output.samples > 30000);
+  assert.ok(Math.abs(result.output.duration - .8) < .06);
+  assert.ok(result.output.energies[1] > result.output.energies[0] * 100);
+  assert.ok(result.output.energies[1] > result.output.energies[2] * 100);
+  assert.ok(result.output.minTimestamp >= -.00001 && result.output.maxTimestamp <= .801);
+  assert.ok(result.output.minAudioTimestamp >= -1024/48000-.00001);
+  assert.ok(result.output.maxAudioTimestamp <= .8+2*1024/48000+.00001);
+  assert.equal(result.output.tag, null);
+});
+
 test("WebKit: real trim when supported, otherwise explicit unsupported on a real readable synthetic AV input", { timeout: 60000 }, async t => {
   const bytes = await knownSyntheticBytes(t);
   const page = await browserFixture(t, webkit);
