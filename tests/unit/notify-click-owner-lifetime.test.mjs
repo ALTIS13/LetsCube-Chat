@@ -16,6 +16,9 @@ const CHAT = "33333333-3333-4333-8333-333333333333";
 const MESSAGE = "44444444-4444-4444-8444-444444444444";
 const TASK = "55555555-5555-4555-8555-555555555555";
 const INVITE = "66666666-6666-4666-8666-666666666666";
+const SESSION = "77777777-7777-4777-8777-777777777777";
+const NOTICE = "88888888-8888-4888-8888-888888888888";
+const REPLACEMENT = "99999999-9999-4999-8999-999999999999";
 let browser;
 let bundle;
 
@@ -38,33 +41,51 @@ const stubs = new Map([
   ["store/app.store.ts", `import {useSyncExternalStore} from 'react';
     const listeners=new Set();
     export function useAppStore(selector) {
-      return useSyncExternalStore(fn => {listeners.add(fn); return () => listeners.delete(fn);},
-        () => selector(window.state));
+      return useSyncExternalStore(useAppStore.subscribe, () => selector(window.state));
     }
+    useAppStore.subscribe=fn => {listeners.add(fn);return () => listeners.delete(fn);};
     useAppStore.getState=() => window.state;
-    useAppStore.setState=patch => {window.state={...window.state,...patch}; for(const fn of listeners) fn();};`],
+    useAppStore.setState=patch => {
+      const previous=window.state;window.state={...previous,...patch};
+      for(const fn of listeners) fn(window.state,previous);
+    };`],
   ["lib/supabase/client.ts", `
     async function held(name) {
-      if(!window.holds.delete(name)) return;
+      const skip=window.holds.get(name);
+      if(skip===undefined) return;
+      if(skip>0) {window.holds.set(name,skip-1);return;}
+      window.holds.delete(name);
       await new Promise(resolve => window.gates.set(name,resolve)); window.gates.delete(name);
     }
+    let onFeedEvent;
+    const ownRows=() => structuredClone(window.rows.filter(row => row.user_id===window.state.currentUser?.id)
+      .sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)));
+    const page=() => ({v:2,rows:ownRows(),next:null});
+    const lookup=ids => {
+      const rows=ownRows().filter(row => ids.includes(row.id));
+      return {v:2,rows,unavailable_ids:ids.filter(id => !rows.some(row => row.id===id))};
+    };
     const client={
       from(table) {
-        if(!['notifications','chat_members'].includes(table)) throw Error('unexpected fixture table');
-        const filters={}; let columns='*'; let ids;
-        const query={select(value){columns=value;return this;}, eq(k,v){filters[k]=v;return this;},
-          order(){return this;}, in(k,v){if(k!=='id') throw Error('unexpected filter');ids=v;return this;},
-          limit(){return execute();}, maybeSingle(){return execute();},
-          then(ok,bad){return execute().then(ok,bad);}};
-        async function execute() {
-          const phase=table==='chat_members' ? 'access' : columns==='*' ? 'refresh' : 'confirm';
-          window.calls.push({phase}); await held(phase);
-          if(table==='chat_members') return {data:window.denyAccess ? null : {chat_id:filters.chat_id},error:null};
-          return {data:window.rows.filter(row => row.user_id===filters.user_id && (!ids || ids.includes(row.id))),error:null};
-        }
-        return query;
+        if(table!=='chat_members') throw Error('unexpected fixture table');
+        const filters={};
+        return {select(){return this;},eq(k,v){filters[k]=v;return this;},
+          async maybeSingle(){
+            window.calls.push({phase:'access'});await held('access');
+            return {data:window.denyAccess ? null : {chat_id:filters.chat_id},error:null};
+          }};
       },
       async rpc(name,args) {
+        if(name==='notification_feed_open_v2') {
+          const eventId='10000000-0000-4000-8000-000000000001';
+          onFeedEvent({new:{event_id:eventId,recipient_id:window.state.currentUser.id,notification_id:null,
+            event_kind:'invalidate',created_at:'2026-10-11T00:00:00.000Z'}});
+          return {data:{v:2,barrier_event_id:eventId,page:page(),lookup:lookup(args.p_held_ids)},error:null};
+        }
+        if(name==='notification_feed_page_v2') {
+          window.calls.push({phase:'refresh'});const data=page();await held('refresh');return {data,error:null};
+        }
+        if(name==='notification_feed_lookup_v2') return {data:lookup(args.p_ids),error:null};
         if(!['notifications_mark_read','notifications_mark_chat_messages_read','notifications_mark_all_read',
           'group_invite_accept','group_invite_decline'].includes(name)) throw Error('unexpected fixture RPC');
         const owner=window.state.currentUser?.id;
@@ -74,12 +95,14 @@ const stubs = new Map([
         window.lifecycle.push('rpc-finished');
         if(name.startsWith('group_invite_')) return {data:name==='group_invite_accept' ? '${CHAT}' : {status:'declined'},
           error:window.inviteError ? {code:'42501'} : null};
-        for(const row of window.rows) if(row.user_id===owner &&
-          (name==='notifications_mark_all_read' || row.id===args.p_id || row.payload.chat_id===args.p_chat_id))
-          row.read_at='2026-10-11T00:01:00.000Z';
+        for(const row of window.rows) if(row.user_id===owner && !row.read_at &&
+          (name==='notifications_mark_all_read' || row.id===args.p_id || row.payload.chat_id===args.p_chat_id)) {
+          row.read_at='2026-10-11T00:01:00.000Z';row.feed_revision++;
+        }
         return {data:null,error:null};
       },
-      channel(){return {on(){return this;},subscribe(fn){fn('SUBSCRIBED');return this;}};},
+      channel(){return {on(_event,_filter,receive){onFeedEvent=receive;return this;},
+        subscribe(fn){fn('SUBSCRIBED');return this;}};},
       removeChannel() {},
     };
     export function createClient(){return client;}`],
@@ -116,9 +139,10 @@ async function compile(change) {
       import {createRoot} from 'react-dom/client'; import {flushSync} from 'react-dom';
       import {useAppStore} from './src/store/app.store.ts';
       import {NotificationBell} from './src/components/sidebar/NotificationBell.tsx';
-      window.effects=[]; window.calls=[]; window.holds=new Set(); window.gates=new Map(); window.jumps=new Map();
+      window.effects=[]; window.calls=[]; window.holds=new Map(); window.gates=new Map(); window.jumps=new Map();
       window.lifecycle=[];
-      window.state={currentUser:{id:'${A}'},accountEpoch:1,mutedChatIds:[],selectedChatId:null,
+      window.state={currentUser:{id:'${A}'},authSessionIdentity:{userId:'${A}',sessionId:'${SESSION}'},
+        accountEpoch:1,mutedChatIds:[],selectedChatId:null,
         chats:[{id:'${CHAT}'},{id:'manual-chat'}],
         setSelectedChatId(id){window.effects.push({type:'selected',id});useAppStore.setState({selectedChatId:id});},
         setChats(chats){useAppStore.setState({chats});}};
@@ -146,12 +170,13 @@ async function compile(change) {
       flushSync(() => root.render(window.parentRemoval ? <RemovalParent/> : <NotificationBell/>));
       window.retire=kind => {
         if(kind==='unmount') {flushSync(() => root.unmount());window.detached=true;return;}
-        const patch={currentUser:kind==='logout' ? null : {id:kind==='account' ? '${B}' : '${A}'},
+        const id=kind==='logout' ? null : kind==='account' ? '${B}' : '${A}';
+        const patch={currentUser:id ? {id} : null,authSessionIdentity:id ? {userId:id,sessionId:'${SESSION}'} : null,
           accountEpoch:window.state.accountEpoch+1};
         if(kind==='epoch-before-render') window.state={...window.state,...patch};
         else flushSync(() => useAppStore.setState(patch));
       };
-      window.manualNavigate=() => flushSync(() => useAppStore.setState({selectedChatId:'manual-chat'}));
+      window.manualNavigate=(id='manual-chat') => flushSync(() => useAppStore.setState({selectedChatId:id}));
       window.runJumps=() => {const pending=[...window.jumps.values()];window.jumps.clear();for(const fn of pending) fn();};
       window.unmount=() => {if(!window.detached) root.unmount();};
     `},
@@ -167,7 +192,7 @@ test.before(async () => {
 test.after(async () => {await browser?.close();});
 
 function row(kind="task_assigned",extra={}) {
-  return {id:"fictional-notice",user_id:A,kind,read_at:null,created_at:"2026-10-11T00:00:00.000Z",
+  return {id:NOTICE,user_id:A,kind,read_at:null,created_at:"2026-10-11T00:00:00.000Z",alert_suppressed_at:null,feed_revision:1,
     payload:{task_id:TASK,title:"Fictional task",chat_id:CHAT,message_id:MESSAGE,
       sender_id:B,sender_kind:"user",chat_type:"private",sender_name:"Fictional sender",preview:"Fictional preview",
       invite_id:INVITE,status:"pending",chat_name:"Fictional group"},...extra};
@@ -188,7 +213,7 @@ async function fixture(rows=[row()],code=bundle,parentRemoval=false) {
   await drain();
   await page.getByTestId("notification-bell-button").click(); await drain();
   return {page,drain,
-    async hold(phase){await page.evaluate(phase => window.holds.add(phase),phase);},
+    async hold(phase,skip=0){await page.evaluate(([phase,skip]) => window.holds.set(phase,skip),[phase,skip]);},
     async click(kind="task",action){
       if(action) await page.getByRole("button",{name:action==="accept" ? "Принять" : "Отклонить",exact:true}).click();
       else await page.getByTestId(kind==="message" ? "notification-message-group" : "notification-item").first().click();
@@ -224,9 +249,10 @@ async function inviteBoundary(action,phase,retirement,error=false,code=bundle) {
   const f=await fixture([row("group_invite")],code);
   try {
     await f.page.evaluate(error => {window.inviteError=error;},error);
-    await f.hold(phase);await f.click("invite",action);await f.gated(phase);
-    await f.retire(retirement);
+    // The hook refreshes once for the read ACK; hold the bell's own refresh.
+    await f.hold(phase,phase==="refresh" ? 1 : 0);await f.click("invite",action);await f.gated(phase);
     const before=await f.effects();
+    await f.retire(retirement);
     const controlsBefore=await f.page.getByRole("button",{name:"Принять",exact:true}).count();
     const callsBefore=await f.page.evaluate(() => window.calls.length);
     await f.release(phase);
@@ -241,7 +267,7 @@ async function inviteBoundary(action,phase,retirement,error=false,code=bundle) {
 }
 
 for(const action of ["accept","decline"]) for(const phase of ["invite","read","refresh"])
-  test(`held ${action} ${phase} retires on epoch`,() => inviteBoundary(action,phase,"epoch-before-render"));
+  test(`held ${action} ${phase} retires on epoch`,() => inviteBoundary(action,phase,phase==="refresh" ? "epoch" : "epoch-before-render"));
 for(const action of ["accept","decline"]) for(const retirement of ["logout","account","unmount"])
   test(`held ${action} RPC retires on ${retirement}`,() => inviteBoundary(action,"invite",retirement));
 for(const action of ["accept","decline"])
@@ -267,18 +293,21 @@ async function jumpRetirement(retirement,code=bundle) {
   try {
     await f.click("message");
     assert.equal(await f.page.evaluate(() => window.jumps.size),1,"current action schedules exactly one jump");
-    if(retirement==="manual") await f.page.evaluate(() => window.manualNavigate());
+    if(retirement==="manual" || retirement==="manual-round-trip") {
+      await f.page.evaluate(() => window.manualNavigate());
+      if(retirement==="manual-round-trip") await f.page.evaluate(chatId => window.manualNavigate(chatId),CHAT);
+    }
     else await f.retire(retirement);
     await f.page.evaluate(() => window.runJumps());
     assert.deepEqual((await f.effects()).filter(e => e.type==="jump"),[],"retired/manual navigation must suppress stale jump");
   } finally {await f.close();}
 }
-for(const retirement of ["logout","account","epoch-before-render","unmount","manual"])
+for(const retirement of ["logout","account","epoch-before-render","unmount","manual","manual-round-trip"])
   test(`delayed jump retires on ${retirement}`,() => jumpRetirement(retirement));
 
 async function replacedAction(first,code=bundle) {
   const f=await fixture([row(first==="message" ? "message" : first==="task" ? "task_assigned" : "group_invite"),
-    row("task_assigned",{id:"replacement-notice",payload:{task_id:"replacement-task",title:"Replacement"}})],code);
+    row("task_assigned",{id:REPLACEMENT,payload:{task_id:"replacement-task",title:"Replacement"}})],code);
   try {
     await f.hold(first==="accept" || first==="decline" ? "invite" : "read");
     await f.click(first,first==="accept" || first==="decline" ? first : undefined);
@@ -325,7 +354,7 @@ for(const reason of ["owner","selection"])
   test(`jump scheduling refuses ${reason}`,() => schedulingGuard(reason));
 
 async function replacedJump(code=bundle) {
-  const f=await fixture([row("message"),row("task_assigned",{id:"replacement-notice",payload:{task_id:"replacement-task",title:"Replacement"}})],code);
+  const f=await fixture([row("message"),row("task_assigned",{id:REPLACEMENT,payload:{task_id:"replacement-task",title:"Replacement"}})],code);
   try {
     await f.click("message");
     assert.equal(await f.page.evaluate(() => window.jumps.size),1,"original jump actually scheduled");
@@ -364,15 +393,15 @@ const omissions = [
   ["decline RPC continuation",["await declineGroupInvite(supabase, payload.invite_id);\n    if (!canCommit()) return;","await declineGroupInvite(supabase, payload.invite_id);"],code => inviteBoundary("decline","invite","epoch-before-render",true,code)],
   ["accept read continuation",["await markRead(item.id);\n    if (!canCommit()) return;\n    dispatchChatsRefresh","await markRead(item.id);\n    dispatchChatsRefresh"],code => inviteBoundary("accept","read","epoch-before-render",false,code)],
   ["accept refresh continuation",["await refresh();\n    if (!canCommit()) return;\n    const opened = await safeOpenChat(result.data, { canCommit });\n    if (!canCommit()) return;",
-    "await refresh();\n    const opened = await safeOpenChat(result.data);"],code => inviteBoundary("accept","refresh","epoch-before-render",false,code)],
+    "await refresh();\n    const opened = await safeOpenChat(result.data);"],code => inviteBoundary("accept","refresh","epoch",false,code)],
   ["single safeOpenChat canCommit",["safeOpenChat(target.chatId, { canCommit })","safeOpenChat(target.chatId)"],code => accessRetirement(code,"chat")],
   ["accepted invite safeOpenChat canCommit",["safeOpenChat(chatId, { canCommit })","safeOpenChat(chatId)"],code => accessRetirement(code,"accepted")],
   ["accept safeOpenChat canCommit",["safeOpenChat(result.data, { canCommit })","safeOpenChat(result.data)"],code => inviteBoundary("accept","access","epoch-before-render",false,code)],
   ["decline read continuation",["await markRead(item.id);\n    if (!canCommit()) return;\n    await refresh();","await markRead(item.id);\n    await refresh();"],code => replacedInviteRead(code)],
   ["schedule owner guard",["if (!canCommit() || useAppStore.getState().selectedChatId !== chatId) return;","if (useAppStore.getState().selectedChatId !== chatId) return;"],code => schedulingGuard("owner",code)],
   ["schedule selection guard",["if (!canCommit() || useAppStore.getState().selectedChatId !== chatId) return;","if (!canCommit()) return;"],code => schedulingGuard("selection",code)],
-  ["jump owner guard",["if (canCommit() && useAppStore.getState().selectedChatId === chatId)","if (useAppStore.getState().selectedChatId === chatId)"],code => jumpRetirement("epoch-before-render",code)],
-  ["jump selection guard",["if (canCommit() && useAppStore.getState().selectedChatId === chatId)","if (canCommit())"],code => jumpRetirement("manual",code)],
+  ["jump owner guard",["if (canCommit() && !selectionChanged)","if (!selectionChanged)"],code => jumpRetirement("epoch-before-render",code)],
+  ["jump selection history",["if (canCommit() && !selectionChanged)","if (canCommit() && useAppStore.getState().selectedChatId === chatId)"],code => jumpRetirement("manual-round-trip",code)],
 ];
 
 // These oracles observe panel/read boundaries that later safeOpenChat guards
@@ -388,14 +417,14 @@ async function heldGroupPanel(code=bundle) {
 test("retired grouped read leaves panel alone",() => heldGroupPanel());
 
 async function replacedInviteRead(code=bundle) {
-  const f=await fixture([row("group_invite"),row("task_assigned",{id:"replacement-notice",payload:{task_id:"replacement-task",title:"Replacement"}})],code);
+  const f=await fixture([row("group_invite"),row("task_assigned",{id:REPLACEMENT,payload:{task_id:"replacement-task",title:"Replacement"}})],code);
   try {
     await f.hold("read");await f.click("invite","decline");await f.gated("read");
     await f.page.getByTestId("notification-item").filter({hasText:"Replacement"}).click();await f.drain();
     const before=await f.page.evaluate(() => window.calls.filter(c => c.phase==='refresh').length);
     await f.release("read");
-    assert.equal(await f.page.evaluate(() => window.calls.filter(c => c.phase==='refresh').length),before,
-      "retired decline must not start refresh after the held read");
+    assert.equal(await f.page.evaluate(() => window.calls.filter(c => c.phase==='refresh').length),before+1,
+      "only the read hook may reconcile its ACK; the retired decline must not start another refresh");
   } finally {await f.close();}
 }
 test("replacement retires decline after held read",() => replacedInviteRead());

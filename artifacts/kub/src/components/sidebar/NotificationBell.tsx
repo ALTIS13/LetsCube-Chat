@@ -84,8 +84,14 @@ type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "he
 
 function scheduleNotificationMessageJump(chatId: string, messageId: string, canCommit: () => boolean) {
   if (!canCommit() || useAppStore.getState().selectedChatId !== chatId) return;
+  // Returning to the same chat does not restore the bell's old intent.
+  let selectionChanged = false;
+  const stopWatchingSelection = useAppStore.subscribe((state, previous) => {
+    if (state.selectedChatId !== previous.selectedChatId) selectionChanged = true;
+  });
   window.setTimeout(() => {
-    if (canCommit() && useAppStore.getState().selectedChatId === chatId) {
+    stopWatchingSelection();
+    if (canCommit() && !selectionChanged) {
       requestChatMessageJump(chatId, messageId);
     }
   }, 150);
