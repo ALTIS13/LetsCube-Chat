@@ -9,29 +9,25 @@ const requireKub=createRequire(new URL('../../artifacts/kub/package.json',import
 const {createClient}=requireKub('@supabase/supabase-js');
 const source=readFileSync(new URL('../../artifacts/kub/src/hooks/useUser.ts',import.meta.url),'utf8');
 
-function callback(name,client,{web=false,retire=async()=>true}={}) {
+function callback(client,{web=false,retire=async()=>true,alert=()=>{},state=()=>({accountEpoch:1,currentUser:null})}={}) {
   const ast=ts.createSourceFile('useUser.ts',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
-  let selected;
+  let selected, shared;
   function visit(node) {
-    if(name==='useSignOut'&&ts.isFunctionDeclaration(node)&&node.name?.text===name)selected=node.getText(ast);
-    if(name==='useUser.signOut'&&ts.isFunctionDeclaration(node)&&node.name?.text==='useUser') {
-      for(const statement of node.body.statements)if(ts.isVariableStatement(statement))
-        for(const declaration of statement.declarationList.declarations)
-          if(declaration.name.getText(ast)==='signOut')selected='export const candidate='+declaration.initializer.getText(ast);
-    }
+    if(ts.isFunctionDeclaration(node)&&node.name?.text==='signOutCurrentInstallation')shared=node.getText(ast);
+    if(ts.isFunctionDeclaration(node)&&node.name?.text==='useSignOut')selected=node.getText(ast);
     ts.forEachChild(node,visit);
   }
-  visit(ast);assert.ok(selected,'actual source callback required');
+  visit(ast);assert.ok(selected&&shared,'actual source callbacks required');
   const module={exports:{}};
-  vm.runInNewContext(ts.transpileModule(selected,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,
-    {module,exports:module.exports,useCallback:fn=>fn,createClient:()=>client,supabase:client,
-      isWebBrowser:()=>web,retireWebMessagePreviews:retire});
-  return name==='useSignOut'?module.exports.useSignOut():module.exports.candidate;
+  vm.runInNewContext(ts.transpileModule(shared+'\n'+selected,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,
+    {module,exports:module.exports,useCallback:fn=>fn,createClient:()=>client,
+      isWebBrowser:()=>web,retireWebMessagePreviews:retire,showAppAlert:alert,useAppStore:{getState:state}});
+  return module.exports.useSignOut();
 }
 
 // Actual installed Auth SDK and product callback; only the HTTP leaf is fictional.
 // This proves request scope/retirement order, not production session persistence.
-async function authFixture() {
+async function authFixture({logoutStatuses=[204]}={}) {
   const requests=[];
   const user={id:'10000000-0000-4000-8000-000000000001',aud:'authenticated',role:'authenticated',user_metadata:{},app_metadata:{}};
   const jwt=part=>Buffer.from(JSON.stringify(part)).toString('base64url');
@@ -41,7 +37,12 @@ async function authFixture() {
     global:{fetch:async(url,init)=>{
       const u=new URL(url);requests.push({path:u.pathname,scope:u.searchParams.get('scope'),method:init?.method});
       if(u.pathname==='/auth/v1/user')return Response.json(user);
-      if(u.pathname==='/auth/v1/logout')return new Response(null,{status:204});
+      if(u.pathname==='/auth/v1/logout') {
+        const status=logoutStatuses.shift();
+        if(status===204)return new Response(null,{status});
+        if(status===503||status===403)return Response.json({msg:'Fictional service details'}, {status});
+        throw Error('unexpected fictional logout request');
+      }
       throw Error('unexpected Auth HTTP request');
     }},
   });
@@ -50,25 +51,64 @@ async function authFixture() {
   return {client,logouts:()=>requests.filter(r=>r.path==='/auth/v1/logout')};
 }
 
-for(const name of ['useSignOut','useUser.signOut'])test(name+' sends local logout through the installed SDK on native clients',async()=>{
+test('interactive logout reports the SDK failure and a second local attempt can settle it',async()=>{
+  const f=await authFixture({logoutStatuses:[503,403]});
+  const alerts=[];
+  const out=callback(f.client,{alert:(...args)=>alerts.push(args),state:()=>({accountEpoch:1,currentUser:{id:'fictional-owner'}})});
+  await out();
+  assert.deepEqual(alerts,[['Проверьте соединение и попробуйте ещё раз.','Не удалось выйти','alert','fictional-owner']]);
+  assert.ok((await f.client.auth.getSession()).data.session);
+  await out();
+  assert.equal((await f.client.auth.getSession()).data.session,null);
+  assert.equal(alerts.length,1,'successful settlement must not show an error');
+  assert.deepEqual(f.logouts().map(r=>r.scope),['local','local']);
+});
+
+test('logout sends local scope through the installed SDK on native clients',async()=>{
   const f=await authFixture();
-  const signOut=callback(name,f.client,{retire:()=>{throw Error('native must not use browser retirement');}});
+  const signOut=callback(f.client,{retire:()=>{throw Error('native must not use browser retirement');}});
   await signOut();
   assert.deepEqual(f.logouts(),[{path:'/auth/v1/logout',scope:'local',method:'POST'}]);
   assert.equal((await f.client.auth.getSession()).data.session,null);
 });
 
-for(const name of ['useSignOut','useUser.signOut'])test(name+' browser logout waits for installation retirement before the local Auth request',async()=>{
+test('browser logout waits for installation retirement before the local Auth request',async()=>{
   const f=await authFixture();let release;
-  const signOut=callback(name,f.client,{web:true,retire:()=>new Promise(resolve=>{release=resolve;})});
+  const signOut=callback(f.client,{web:true,retire:()=>new Promise(resolve=>{release=resolve;})});
   const pending=signOut();assert.equal(typeof release,'function');assert.deepEqual(f.logouts(),[]);
   release(true);await pending;
   assert.deepEqual(f.logouts(),[{path:'/auth/v1/logout',scope:'local',method:'POST'}]);
 });
 
-for(const name of ['useSignOut','useUser.signOut'])test(name+' failed browser retirement leaves Auth untouched',async()=>{
+test('failed browser retirement leaves Auth untouched and shows an alert',async()=>{
+  const f=await authFixture(), alerts=[];
+  const out=callback(f.client,{web:true,retire:async()=>false,alert:(...args)=>alerts.push(args)});
+  await out();
+  assert.equal(alerts[0]?.[1],'Не удалось выйти');
+  assert.deepEqual(f.logouts(),[]);
+  assert.ok((await f.client.auth.getSession()).data.session);
+});
+
+test('a failed old-account attempt cannot show an alert in a replacement session',async()=>{
+  const f=await authFixture(), alerts=[];
+  let epoch=1, settle;
+  const out=callback(f.client,{web:true,retire:()=>new Promise(resolve=>{settle=resolve;}),
+    state:()=>({accountEpoch:epoch,currentUser:{id:'fictional-owner'}}),alert:(...args)=>alerts.push(args)});
+  const pending=out();
+  epoch=2; settle(false);
+  await pending;
+  assert.deepEqual(alerts,[]);
+  assert.deepEqual(f.logouts(),[]);
+});
+
+test('browser retirement completion cannot sign out a replacement session',async()=>{
   const f=await authFixture();
-  await assert.rejects(callback(name,f.client,{web:true,retire:async()=>false})());
+  let epoch=1, settle;
+  const out=callback(f.client,{web:true,retire:()=>new Promise(resolve=>{settle=resolve;}),
+    state:()=>({accountEpoch:epoch,currentUser:{id:'fictional-owner'}})});
+  const pending=out();
+  epoch=2; settle(true);
+  await pending;
   assert.deepEqual(f.logouts(),[]);
   assert.ok((await f.client.auth.getSession()).data.session);
 });

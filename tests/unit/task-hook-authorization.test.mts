@@ -13,7 +13,7 @@ const { chromium } = requireKub("@playwright/test");
 let browser: any;
 let bundle: string;
 
-async function compileFixture(change?: { before: string; after: string }) {
+async function compileFixture(change?: { before: string; after: string; hook?: "useTasks" }) {
   const boundaries = new Map([
     ["store/app.store.ts", `
       import {useSyncExternalStore} from 'react';
@@ -44,7 +44,7 @@ async function compileFixture(change?: { before: string; after: string }) {
       plugin.onLoad({ filter: /\.[tj]sx?$/ }, (args: any) => {
         const relative = args.path.slice(sourceRoot.length + 1).replaceAll("\\", "/");
         if (boundaries.has(relative)) return { contents: boundaries.get(relative), loader: "tsx", resolveDir: dirname(args.path) };
-        if (change && relative === "hooks/useTaskReviewAccess.ts") {
+        if (change && relative === `hooks/${change.hook ?? "useTaskReviewAccess"}.ts`) {
           const source = readFileSync(args.path, "utf8").replaceAll("\r\n", "\n");
           assert.equal(source.split(change.before).length - 1, 1, "mutation must match the actual hook exactly once");
           return { contents: source.replace(change.before, change.after), loader: "tsx", resolveDir: dirname(args.path) };
@@ -233,6 +233,67 @@ test("an older denial cannot erase a newer permitted result", async () => {
     await f.release();
     assert.equal((await f.state()).tasks[0].id, "newer");
     assert.equal((await f.state()).view, "ready");
+  } finally { await f.close(); }
+});
+
+test("foreground refresh removes a revoked task even when no realtime event arrived", async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.state()).tasks[0].id, "task-a");
+    await f.page.evaluate(() => {
+      const state = (window as any).fixture;
+      state.plans.push({ data: [] });
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await f.page.waitForTimeout(350);
+    assert.equal(await f.page.evaluate(() => (window as any).fixture.reads.length), 1);
+    await f.page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await f.page.waitForFunction(() => (window as any).fixture.reads.length === 2, null, { timeout: 1800 });
+    await f.idle();
+    assert.deepEqual((await f.state()).tasks, []);
+    assert.equal((await f.state()).view, "ready");
+  } finally { await f.close(); }
+});
+
+test("network recovery refreshes the list once and a burst of foreground events does not duplicate it", async () => {
+  const f = await fixture();
+  try {
+    await f.page.evaluate(() => {
+      const state = (window as any).fixture;
+      state.plans.push({ data: [{ id: "regained" }] });
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("online"));
+    });
+    await f.page.waitForFunction(() => (window as any).fixture.reads.length >= 2, null, { timeout: 1800 });
+    await f.idle();
+    assert.equal((await f.state()).tasks[0].id, "regained");
+    await f.page.evaluate(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await f.page.waitForFunction(() => (window as any).fixture.reads.length >= 3, null, { timeout: 1800 });
+    await f.page.waitForTimeout(400);
+    assert.equal(await f.page.evaluate(() => (window as any).fixture.reads.length), 3);
+    assert.equal((await f.state()).view, "ready");
+  } finally { await f.close(); }
+});
+
+test("compiled omission of the visibility guard starts a forbidden background list read", async () => {
+  const code = await compileFixture({ hook: "useTasks", before: 'if (document.visibilityState === "visible") debounced();', after: "debounced();" });
+  const f = await fixture("list", {}, code);
+  try {
+    await f.page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await f.page.waitForFunction(() => (window as any).fixture.reads.length === 2, null, { timeout: 1800 });
+    await assert.rejects(async () => assert.equal(await f.page.evaluate(() => (window as any).fixture.reads.length), 1), { code: "ERR_ASSERTION" });
   } finally { await f.close(); }
 });
 

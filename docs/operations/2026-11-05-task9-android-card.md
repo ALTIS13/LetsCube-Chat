@@ -68,13 +68,17 @@ draft loss or complete peer-refresh acceptance from that selector/gesture
 failure. No draft was submitted. All exact synthetic tasks and SIDs were
 settled; prior sessions were retained, and Realme returned to empty guest/Home.
 
-Logout remains a distinct blocker for Android release. The first native
+At this point logout remained a distinct blocker for Android release. The first native
 logout retired the exact SID server-side but showed a failure; normal retry
 cleared guest state. The same-actor API cleanup control returned HTTP 204
 with Android Origin allowed and no body over both HTTP/1.1 and HTTP/2.
 Those controls do not instrument the release WebView. Next: isolate the
 remaining physical WebView geometry/Retry/revoke cases without creating
 another live fixture, then measure the exact first native logout response.
+The later [Task9 workflow follow-up](2026-11-05-task-workflows.md#follow-up-realme-signed-peer-refresh-and-isolated-retryrevoke)
+confirmed both drafts after peer refresh, and [Stable 50](2026-11-06-android50-stable.md)
+fixed the first logout. Real access revoke and restore in the signed app
+remain separate acceptance cases.
 
 ## Installed synthetic WebView control
 

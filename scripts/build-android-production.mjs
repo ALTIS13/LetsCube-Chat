@@ -27,6 +27,7 @@ const APPROVED_BUILD_ENV_KEYS = new Set([
   "PORT",
   "NODE_ENV",
 ]);
+const ANDROID_CANDIDATE_MEDIA_URL_MODES = new Set(["public", "signed", "signed-only"]);
 const ANDROID_BUILD_PROCESS_ENV_KEYS = [
   "APPDATA",
   "ANDROID_HOME",
@@ -142,6 +143,17 @@ export function createAndroidBuildProcessEnv(baseEnv, publicEnv) {
     }
   }
   return env;
+}
+
+// Candidate Vite only. Keep this opt-in out of the shared production whitelist.
+export function createAndroidCandidateWebProcessEnv(baseEnv, publicEnv, mediaUrlMode) {
+  if (!ANDROID_CANDIDATE_MEDIA_URL_MODES.has(mediaUrlMode)) {
+    throw new Error("Android candidate media URL mode must be public, signed, or signed-only.");
+  }
+  return {
+    ...createAndroidBuildProcessEnv(baseEnv, publicEnv),
+    VITE_MEDIA_SIGNED_URLS: mediaUrlMode,
+  };
 }
 
 function run(command, args, env) {

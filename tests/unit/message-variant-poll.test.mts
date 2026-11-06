@@ -10,6 +10,7 @@ import {
   decideMessageVariantPoll,
   getExpectedMessageVariantKindsByMessage,
   getMessageVariantRowsSignature,
+  getMessageVariantSourceIds,
   hasNewMessageVariantWork,
   hasOutstandingMessageVariants,
   onlyPicturesOutstanding,
@@ -176,6 +177,47 @@ test("only the messages the worker makes variants for are waited for", () => {
   assert.deepEqual(Array.from(expected.keys()), ["m-1", "m-2"]);
   assert.deepEqual(expected.get("m-1"), ["video_poster", "video_720p"]);
   assert.deepEqual(expected.get("m-2"), ["image_thumb", "image_preview"]);
+});
+
+test("path-only storage media contributes both query IDs and expected variants", () => {
+  const video = {
+    ...videoMessage("storage-video"),
+    media_url: null,
+    media_bucket: " chat-media ",
+    media_path: " //owner/clip.mp4 ",
+  };
+  const image = {
+    ...imageMessage("storage-image"),
+    media_url: null,
+    media_bucket: "chat-media",
+    media_path: "owner/photo.jpg",
+  };
+  const messages = [video, image, video];
+  assert.deepEqual(getMessageVariantSourceIds(messages), ["storage-image", "storage-video"]);
+  assert.deepEqual(Array.from(getExpectedMessageVariantKindsByMessage(messages)), [
+    ["storage-video", ["video_poster", "video_720p"]],
+    ["storage-image", ["image_thumb", "image_preview"]],
+  ]);
+});
+
+test("path-only admission rejects incomplete, empty, deleted, and temporary sources", () => {
+  const video = {
+    ...videoMessage("storage-video"),
+    media_url: null,
+    media_bucket: "chat-media",
+    media_path: "owner/clip.mp4",
+  };
+  const messages = [
+    { ...video, id: "missing-bucket", media_bucket: null },
+    { ...video, id: "blank-bucket", media_bucket: " " },
+    { ...video, id: "missing-path", media_path: null },
+    { ...video, id: "empty-path", media_path: " /// " },
+    { ...video, id: "tmp:uncommitted" },
+    { ...video, id: "deleted", deleted_at: "2026-09-12T10:00:00.000Z" },
+    { ...video, id: "file", type: "file" },
+  ];
+  assert.deepEqual(getMessageVariantSourceIds(messages), []);
+  assert.deepEqual(Array.from(getExpectedMessageVariantKindsByMessage(messages)), []);
 });
 
 test("an answer is told from the one before it by what the rows say, not by their order", () => {

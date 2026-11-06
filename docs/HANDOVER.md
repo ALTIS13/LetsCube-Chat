@@ -6,23 +6,37 @@ slices, not just implementations. Reuse accepted evidence. Optional
 commercial work is outside the agreed result. No cross-project access.
 
 **Current checkpoint, 2026-11-06:** Codex coordinator, Task9 with Tasks1/3/5/6/8
-parallel. [Current shared web](operations/2026-11-06-web-motion-txt.md)
-`9eb97344` / `a1aa8b14f8770bc3` (search motion and TXT renewal), exact
-image/assets verified. It includes [logout/task recovery](operations/2026-11-06-web-logout-recovery.md)
+parallel. [Current shared web](operations/2026-11-06-web-tasks-media.md)
+`a4b35a79` / `fe8b16ae0f163042` (task-list foreground/reconnect and media
+ownership/swipe), exact image/assets verified. It includes [logout retry
+from profile recovery](operations/2026-11-06-web-logout-profile-error.md),
+[search motion and TXT renewal](operations/2026-11-06-web-motion-txt.md),
+[logout/task recovery](operations/2026-11-06-web-logout-recovery.md)
 and [task card/bell](operations/2026-11-06-web-task-bell-slice.md). [Android
 Stable `0.1.49`/50](operations/2026-11-06-android50-stable.md) is optional;
 verified public APK and rollback47. Realme49->50 kept data and the first
-normal logout passed. [Installed iPhone PWA](operations/2026-11-05-task9-iphone-pwa.md)
+normal logout passed. [Candidate 51](operations/2026-11-06-android51-candidate.md)
+is signed and installed on Realme, unpublished; it is the target for the
+private coassignee acceptance. [Installed iPhone PWA](operations/2026-11-05-task9-iphone-pwa.md)
 passed first logout on the new public web, exact QA retirement and release.
 Its card is still open. On [Android 49](operations/2026-11-05-task9-android-card.md),
 card and both drafts through foreground/live peer update passed. Physical
 isolated Retry/revoke/regrant passed; actual signed-app RLS revoke remains
-open. No QA-only active staff location; no shared-location grant was made.
+open. [Disposable-group preflight](operations/2026-11-06-task9-chat-rls-preflight.md)
+rejected chat visibility and cleanup. Next Task9 cohort: private task with
+the exact quiet QA Staff coassignee, comment draft only; recheck no delivery
+targets after Auth and require verified backup and exact cleanup before effects.
 
-Next: review the one-run [D-356](operations/2026-11-05-task1-d356-held-bell-read.md)
-live held-read setup before any QA send, and integrate narrow Task3/5/6
-work after review. [Windows cold WNS](operations/2026-11-05-task10-windows-wns-readiness.md)
+Parallel: the one-run [D-356](operations/2026-11-05-task1-d356-held-bell-read.md)
+live held-read setup has a preexisting active endpoint; do not change it.
+Task3 variant ownership is under review; [Task5 signed-only](operations/2026-11-06-task5-d208-android-build-env.md)
+is compiled but not installed. [Task6 PG17/PostgREST/Auth](operations/2026-11-06-task6-pg17-gateway.md)
+passed on the isolated text fixture; check bot/runtime and lock contention next.
+[Windows cold WNS](operations/2026-11-05-task10-windows-wns-readiness.md)
 still lacks package/provider identity; independent Web Push receipt not shown.
+[Edge cold guest tab](operations/2026-11-06-task10-windows-pwa-cold.md)
+passed from the worker cache; Windows install manifest is intentionally not
+offered, so this is not installed-PWA evidence.
 Monitoring needs an external operator-only QA recipient. [Encrypted backup](operations/2026-11-05-task4-external-backup.md)
 bytes verified, retention/restore open. [Storage](operations/2026-11-06-task5-source-storage-revoke.md)
 public bytes still available after revoke; do not flip the bucket.

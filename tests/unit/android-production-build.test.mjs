@@ -4,12 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import * as androidBuild from "../../scripts/build-android-production.mjs";
 import {
+  createAndroidReleaseProcessEnv,
+  createAndroidReleaseToolProcessEnv,
+} from "../../scripts/build-android-release.mjs";
+import { readAndroidReleaseMetadata } from "../../scripts/android-release-metadata.mjs";
+
+const {
   createAndroidBuildProcessEnv,
   collectPublicAndroidBuildEnv,
   parseEnvText,
-} from "../../scripts/build-android-production.mjs";
-import { readAndroidReleaseMetadata } from "../../scripts/android-release-metadata.mjs";
+  createAndroidCandidateWebProcessEnv,
+} = androidBuild;
 
 test("Android production build forwards only public Vite settings", () => {
   const source = parseEnvText(`
@@ -101,6 +108,80 @@ test("Android Vite and Capacitor children receive only platform settings and app
   assert.equal(result.GITHUB_PAT, undefined);
   assert.equal(result.EXAMPLE_AUTHTOKEN, undefined);
   assert.equal(result.HTTPS_PROXY, undefined);
+});
+
+test("default Android environments cannot inherit a candidate media mode", () => {
+  const source = parseEnvText(`
+VITE_SUPABASE_URL=https://core.example.com
+VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-publishable
+VITE_MEDIA_SIGNED_URLS=signed-only
+`);
+  const baseEnv = { PATH: "C:\\tools", VITE_MEDIA_SIGNED_URLS: "signed", ANDROID_HOME: "C:\\sdk" };
+  const publicEnv = collectPublicAndroidBuildEnv(source, { version: "1.2.3", commit: "fixture" });
+  assert.equal(Object.hasOwn(publicEnv, "VITE_MEDIA_SIGNED_URLS"), false);
+
+  // The production child boundary must independently reject an injected value.
+  const injected = { ...publicEnv, VITE_MEDIA_SIGNED_URLS: "signed-only" };
+  for (const env of [
+    createAndroidBuildProcessEnv(baseEnv, injected),
+    createAndroidReleaseProcessEnv(baseEnv, injected),
+    createAndroidReleaseToolProcessEnv(baseEnv),
+  ]) {
+    assert.equal(Object.hasOwn(env, "VITE_MEDIA_SIGNED_URLS"), false);
+    assert.equal(env.PATH, "C:\\tools");
+  }
+});
+
+test("candidate Android web process accepts exactly the three approved media modes", () => {
+  const baseEnv = { Path: "C:\\tools", VITE_MEDIA_SIGNED_URLS: "signed-only" };
+  const publicEnv = { VITE_SUPABASE_URL: "https://core.example.com", VITE_MEDIA_SIGNED_URLS: "signed" };
+  for (const mode of ["public", "signed", "signed-only"]) {
+    assert.deepEqual(createAndroidCandidateWebProcessEnv(baseEnv, publicEnv, mode), {
+      PATH: "C:\\tools",
+      VITE_SUPABASE_URL: "https://core.example.com",
+      VITE_MEDIA_SIGNED_URLS: mode,
+    });
+  }
+  assert.equal(baseEnv.VITE_MEDIA_SIGNED_URLS, "signed-only");
+  assert.equal(publicEnv.VITE_MEDIA_SIGNED_URLS, "signed");
+});
+
+test("candidate Android web process refuses unapproved modes without echoing input", () => {
+  for (const mode of [undefined, null, "", "signed-only ", "SIGNED", "strict", "1", "true", true, 1,
+    new String("signed"), "synthetic-unapproved-value\nVITE_UNAPPROVED_SECRET=fixture"]) {
+    assert.throws(() => createAndroidCandidateWebProcessEnv({}, {}, mode), {
+      message: "Android candidate media URL mode must be public, signed, or signed-only.",
+    });
+  }
+});
+
+test("candidate Android web process does not expand the environment fence", () => {
+  const blocked = {
+    VITE_UNAPPROVED_SECRET: "fixture",
+    VITE_SUPABASE_SERVICE_ROLE_KEY: "fixture",
+    SUPABASE_SERVICE_ROLE_KEY: "fixture",
+    LETSCUBE_ANDROID_KEYSTORE_PATH: "fixture",
+    LETSCUBE_ANDROID_KEY_ALIAS: "fixture",
+    LETSCUBE_ANDROID_STORE_PASSWORD: "fixture",
+    LETSCUBE_ANDROID_KEY_PASSWORD: "fixture",
+    DATABASE_URL: "fixture",
+    NODE_OPTIONS: "fixture",
+    HTTPS_PROXY: "fixture",
+  };
+  const baseEnv = { ...blocked, PATH: "C:\\tools", JAVA_HOME: "C:\\jdk", VITE_MEDIA_SIGNED_URLS: "public" };
+  const publicEnv = {
+    ...blocked,
+    VITE_MEDIA_SIGNED_URLS: "signed",
+    VITE_SUPABASE_URL: "https://core.example.com",
+    VITE_SUPABASE_PUBLISHABLE_KEY: "synthetic-publishable",
+  };
+  assert.deepEqual(createAndroidCandidateWebProcessEnv(baseEnv, publicEnv, "signed-only"), {
+    PATH: "C:\\tools",
+    JAVA_HOME: "C:\\jdk",
+    VITE_SUPABASE_URL: "https://core.example.com",
+    VITE_SUPABASE_PUBLISHABLE_KEY: "synthetic-publishable",
+    VITE_MEDIA_SIGNED_URLS: "signed-only",
+  });
 });
 
 test("Android production build rejects missing public Supabase settings", () => {

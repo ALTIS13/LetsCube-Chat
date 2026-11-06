@@ -1,4 +1,6 @@
-export interface MessageVariantSource {
+import { messageMediaObjectRef, type MediaObjectRefMessage } from "./media/mediaObjectRef.ts";
+
+export interface MessageVariantSource extends MediaObjectRefMessage {
   id: string;
   chat_id?: string | null;
   type: string;
@@ -401,13 +403,14 @@ function sameMessageIds(left: readonly string[], right: readonly string[]): bool
  * Whether this message is one the worker makes variants for.
  *
  * A message still uploading carries a `tmp:` id that no row can reference, and
- * a deleted one has nothing left to make variants of. Shared by the ids the
- * poll asks about and the kinds it waits for, so those two cannot come apart.
+ * a deleted one has nothing left to make variants of. A storage-backed row
+ * does not need a legacy URL. Shared by the ids the poll asks about and the
+ * kinds it waits for, so those two cannot come apart.
  */
 function expectsMessageVariants(message: MessageVariantSource): boolean {
   return (
     (message.type === "image" || message.type === "video") &&
-    Boolean(message.media_url) &&
+    Boolean(message.media_url || messageMediaObjectRef(message)) &&
     !message.deleted_at &&
     !message.id.startsWith("tmp:")
   );

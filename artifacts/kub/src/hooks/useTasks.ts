@@ -160,13 +160,17 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
     return () => { owner.active = false; owner.request += 1; };
   }, [owner, fetchTasks]);
 
-  // Realtime: any change to tasks I can see → debounced refetch.
+  // Revalidate through the same RLS query for Realtime and foreground recovery.
   useEffect(() => {
     if (!userId || !enabled) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debounced = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(fetchTasks, 250);
+    };
+    // Revoked readers may not receive the change that removed their access.
+    const revalidateVisible = () => {
+      if (document.visibilityState === "visible") debounced();
     };
     // One channel per table (`lib/realtimeTableChannels.ts`): the tasks, and
     // their checklists, whose progress the cards show (tracker item 62).
@@ -182,8 +186,12 @@ export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {
       },
     );
     for (const { name } of channels) registerChannel(name);
+    document.addEventListener("visibilitychange", revalidateVisible);
+    window.addEventListener("online", revalidateVisible);
     return () => {
       if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", revalidateVisible);
+      window.removeEventListener("online", revalidateVisible);
       for (const { name, channel } of channels) {
         rt.removeChannel(channel);
         unregisterChannel(name);
