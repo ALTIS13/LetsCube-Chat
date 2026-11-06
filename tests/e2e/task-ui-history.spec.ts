@@ -8,6 +8,19 @@ let bundle:Awaited<ReturnType<typeof compileFormFixture>>;
 test.beforeAll(async()=>{test.setTimeout(120_000);bundle=await compileFormFixture({mode:'page'});});
 const evidence=resolve(process.env.TEMP??'C:/Users/maksi/AppData/Local/Temp','letscube-task-ui-20261105');
 
+test('task search keeps a stable accessible name after typing and clearing',async({page})=>{
+  const f=await mountFormFixture(page,bundle,'dark');
+  try {
+    const search=page.getByRole('textbox',{name:'Поиск по задачам',exact:true});
+    await expect(search).toBeVisible();
+    await search.fill('Fictional task 1');
+    await expect(search).toHaveValue('Fictional task 1');
+    await expect(page.getByRole('heading',{name:'Fictional task 1',exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'Очистить поиск задач',exact:true}).click();
+    await expect(search).toHaveValue('');
+  }finally{await f.close();}
+});
+
 for(const theme of ['light','dark'] as const) {
   test(`confirming own and coexecuted tasks moves Mine to History without reload (${theme})`,async({page},info)=>{
     const f=await mountFormFixture(page,bundle,theme);

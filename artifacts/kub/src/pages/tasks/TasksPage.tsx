@@ -499,6 +499,7 @@ export function TasksPage({ inPane = false }: { inPane?: boolean } = {}) {
           <KubInput
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            aria-label="Поиск по задачам"
             placeholder="Поиск по задачам…"
             leftIcon={<KubIcon name="search" size={15} />}
             rightSlot={
