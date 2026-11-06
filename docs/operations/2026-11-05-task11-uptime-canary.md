@@ -198,3 +198,20 @@ statistics. Database: 30 observed backends with configured max 100;
 179.4 MiB. The common Docker denominator is not a dedicated capacity budget.
 One idle/transient sample proves no bottleneck, SLA or growth trend. No
 resource limits or storage settings changed.
+
+## Durable local state, 2026-11-06
+
+The [SQLite store](../../scripts/ops/uptime-canary-state.mjs) commits a reducer
+transition and its unique event together. It records the exact intent before
+handing out a dispatch claim. After restart, an unknown ACK is not leased
+again. Normal claims are ordered, including OPENED before RECOVERED. A
+retirement can supersede old unclaimed events but not an unresolved attempt.
+Provider dispatch ACK and exact QA recipient receipt remain distinct.
+
+[12 local cases](../../tests/rehearsal/uptime-canary-state.test.mjs) passed
+on Node 24.15.0, including a process exit after the committed intent, two
+concurrent processes, transaction rollback, ordering and retirement.
+The out-of-order claim was reproduced before the fix; three focused
+ordering mutations were refused. This is local persistence/dispatch-fence
+evidence, not a scheduler, live monitoring installation or external QA
+receipt. No transport or production changes.

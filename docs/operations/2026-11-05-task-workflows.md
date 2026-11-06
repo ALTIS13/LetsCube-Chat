@@ -336,7 +336,9 @@ on the same device and not in Stable. Its private coassignee grant worked
 through the ordinary Staff API; the physical controller stopped at the
 unnamed search field before any card or draft assertion. The exact task is
 tombstoned and the new sessions retired. One synthetic in-app notice remains
-after a refused guarded cleanup. Keep the old dispatch closed.
+after a refused guarded cleanup. A separately guarded recovery then removed
+only that notice; exact COMMIT and independent readback verified. Keep the
+old dispatch closed.
 [Native evidence and web search release](2026-11-06-task9-realme51-preflight.md).
 
 The [separate iPhone path](2026-11-05-task9-iphone-pwa.md) passed read-only

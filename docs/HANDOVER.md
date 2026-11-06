@@ -17,9 +17,9 @@ from profile recovery](operations/2026-11-06-web-logout-profile-error.md),
 and [task card/bell](operations/2026-11-06-web-task-bell-slice.md). [Android
 Stable `0.1.49`/50](operations/2026-11-06-android50-stable.md) is optional;
 verified public APK and rollback47. Realme49->50 kept data and the first
-normal logout passed. [Candidate 51](operations/2026-11-06-android51-candidate.md)
-is signed and installed on Realme, unpublished; it is the target for the
-private coassignee acceptance. [Installed iPhone PWA](operations/2026-11-05-task9-iphone-pwa.md)
+normal logout passed. [Candidate 52](operations/2026-11-06-task9-native-continuation.md)
+is signed and installed on Realme, unpublished; it embeds named task
+search and replaces 51 as the QA target. [Installed iPhone PWA](operations/2026-11-05-task9-iphone-pwa.md)
 passed first logout on the new public web, exact QA retirement and release.
 Card is still open; separate self-owned Tech QA fixture and current named
 search passed read-only admission, device driver integration is in progress.
@@ -30,9 +30,16 @@ open. [Disposable-group preflight](operations/2026-11-06-task9-chat-rls-prefligh
 rejected chat visibility and cleanup. The [first private coassignee run](operations/2026-11-06-task9-realme51-preflight.md)
 proved live grant but stopped at the Android search locator. A read-only
 native diagnostic found one unnamed search edit. The task is tombstoned;
-all new SIDs are retired. Before a calibrated second run, clean the single
-remaining exact QA notice with fresh backup and independent readback. No
-Stable51 publication or iPhone lease for this case yet.
+all new SIDs are retired. The first remaining exact QA notice was removed
+with a fresh backup, exact COMMIT and independent unchanged-baseline
+readback. The calibrated 51 run then stopped at exact query input. Its
+separate QA notice was also removed with exact COMMIT and readback; the
+A/B probe proved the unique 12-hex fragment works. The first 52 workflow
+stopped before task writes at the native name projection. A scoped
+read-only probe is verifying MobileCLI's separate hint channel. Two
+iPhone leases were released after provisioning and viewport refusals;
+the viewport adapter is now under separate physical check. No new
+Stable publication.
 
 Parallel: the one-run [D-356](operations/2026-11-05-task1-d356-held-bell-read.md)
 live held-read setup has a preexisting active endpoint; do not change it.

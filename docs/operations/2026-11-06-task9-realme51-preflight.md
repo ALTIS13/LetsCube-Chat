@@ -58,6 +58,17 @@ sets (2/6). This proves the intended deletion did not commit. The one-shot
 intent is retained. Do not replay it. Diagnose the original refusal before
 choosing a new recovery action; do not open another fixture on this baseline.
 
+At `2026-11-06T02:27:25Z` an independently guarded recovery closed this
+boundary. The old one-shot intent stayed unchanged. The separate operator
+passed six local checks including actual PG17.6/psql COMMIT, rollback and
+clock refusal. Production used a fresh, verified full LETSCUBE archive
+and eligibility from the target DB clock, not workstation time. It
+confirmed exact COMMIT and one removed feed event. An independent
+readback confirmed zero remaining notices or queues for the case, the
+unchanged unrelated notification/SID baseline and the retained tombstone.
+No original refusal cause is asserted. The calibrated Realme test is a
+new scenario on this restored baseline.
+
 ## Web search accessibility release
 
 At `2026-11-06T02:00:25Z` the production verifier found the healthy image
