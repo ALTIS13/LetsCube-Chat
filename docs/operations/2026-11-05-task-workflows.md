@@ -327,3 +327,19 @@ editor retirement before the sibling response settled, and fresh inputs
 after regrant. No writes; exact helper removal and candidate identity
 verified. This is not a live revoke in the signed app or native keyboard
 proof. [Card and release evidence](2026-11-05-task9-android-card.md).
+
+## Follow-up: Android 51 and iPhone Card Admission
+
+[Stable 50](2026-11-06-android50-stable.md) passed the first normal Realme
+logout. [Signed candidate 51](2026-11-06-android51-candidate.md) is installed
+on the same device and not in Stable. Its private coassignee grant worked
+through the ordinary Staff API; the physical controller stopped at the
+unnamed search field before any card or draft assertion. The exact task is
+tombstoned and the new sessions retired. One synthetic in-app notice remains
+after a refused guarded cleanup. Keep the old dispatch closed.
+[Native evidence and web search release](2026-11-06-task9-realme51-preflight.md).
+
+The [separate iPhone path](2026-11-05-task9-iphone-pwa.md) passed read-only
+admission for a quiet Tech Admin and the named search in the current public
+web build. It will use a self-owned private task with zero notifications.
+That admission is not the physical iPhone card, keyboard or draft result.
