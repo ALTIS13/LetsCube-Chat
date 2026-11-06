@@ -67,6 +67,7 @@ const MESSAGE_VARIANT_CACHE_LIMIT = 8;
 
 interface MessageVariantCacheEntry {
   chatId: string;
+  signingGeneration: number;
   refreshState: MessageVariantRefreshState;
   variants: Record<string, MessageMediaVariantUrls>;
   listeners: Set<(variants: Record<string, MessageMediaVariantUrls>) => void>;
@@ -126,6 +127,15 @@ export function resolveOriginalPreviewUrl(message: {
   return url ? { url, width: preview.width, height: preview.height } : null;
 }
 
+function selectVisibleMessageVariantUrls(
+  variants: Record<string, MessageMediaVariantUrls>,
+  expectedKinds: ReadonlyMap<string, readonly MessageVariantKind[]>,
+): Record<string, MessageMediaVariantUrls> {
+  const ids = Object.keys(variants);
+  if (ids.every((id) => expectedKinds.has(id))) return variants;
+  return Object.fromEntries(ids.filter((id) => expectedKinds.has(id)).map((id) => [id, variants[id]]));
+}
+
 export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]): Record<string, MessageMediaVariantUrls> {
   const messageIds = useMemo(() => getMessageVariantSourceIds(messages), [messages]);
   const messageIdKey = messageIds.join("|");
@@ -145,15 +155,18 @@ export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]
       window.clearTimeout(entry.evictionTimer);
       entry.evictionTimer = null;
     }
-    setVariantsByMessageId(entry.variants);
     updateMessageVariantCacheEntry(entry, messageIds, expectedKinds);
+    setVariantsByMessageId(entry.variants);
     return () => {
       entry.listeners.delete(setVariantsByMessageId);
       scheduleMessageVariantEntryEviction(entry);
     };
   }, [chatId, messageIdKey]);
 
-  return variantsByMessageId;
+  return useMemo(
+    () => selectVisibleMessageVariantUrls(variantsByMessageId, expectedKinds),
+    [variantsByMessageId, expectedKinds],
+  );
 }
 
 function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
@@ -161,6 +174,7 @@ function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
   if (existing) return existing;
   const entry: MessageVariantCacheEntry = {
     chatId,
+    signingGeneration: signedMediaUrls().getGeneration(),
     refreshState: { messageIds: [], loading: false, reloadPending: false },
     variants: {},
     listeners: new Set(),
@@ -189,18 +203,24 @@ function updateMessageVariantCacheEntry(
   expectedKinds: Map<string, readonly MessageVariantKind[]>,
 ): void {
   const transition = queueMessageVariantRefresh(entry.refreshState, messageIds);
+  const batchChanged = transition.state.messageIds !== entry.refreshState.messageIds;
   entry.refreshState = transition.state;
   // A message that arrived after the polling gave up has to hand the patience
   // back, or D-176 is traded for a video that never loads. Only genuinely new
   // work counts; see `hasNewMessageVariantWork`.
   if (hasNewMessageVariantWork(entry.expectedKinds, expectedKinds)) entry.unchangedPolls = 0;
   entry.expectedKinds = expectedKinds;
-  applyMessageVariantPolling(entry);
-  if (messageIds.length === 0) {
-    entry.variants = {};
-    notifyMessageVariantListeners(entry);
-    return;
+  if (batchChanged) {
+    // Keep the visible overlap without reprojecting retired rows while a GET is pending.
+    entry.lastRows = entry.lastRows.filter((row) => row.message_id && expectedKinds.has(row.message_id));
+    entry.settledKinds = collectSettledMessageVariantKinds(entry.lastRows);
+    const next = selectVisibleMessageVariantUrls(entry.variants, expectedKinds);
+    if (next !== entry.variants) {
+      entry.variants = next;
+      notifyMessageVariantListeners(entry);
+    }
   }
+  applyMessageVariantPolling(entry);
   if (transition.startNow) {
     scheduleMessageVariantLoad(entry, entry.hasStarted ? MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS : 0);
   }
@@ -358,8 +378,26 @@ function messageVariantUrlSignature(variants: Record<string, MessageMediaVariant
  * signature above rather than by the notification.
  */
 function subscribeMessageVariantUrlRenewals(entry: MessageVariantCacheEntry): void {
-  entry.urlRenewalUnsubscribe = signedMediaUrls().subscribe(() => {
-    if (entry.disposed || entry.lastRows.length === 0) return;
+  const signing = signedMediaUrls();
+  entry.urlRenewalUnsubscribe = signing.subscribe(() => {
+    if (entry.disposed) return;
+    const generation = signing.getGeneration();
+    if (entry.signingGeneration !== generation) {
+      // A reset also emits. Old metadata must not create signing demand for the next owner.
+      entry.signingGeneration = generation;
+      entry.lastRows = [];
+      entry.variants = {};
+      entry.settledKinds = new Map();
+      entry.lastRowsSignature = null;
+      entry.unchangedPolls = 0;
+      if (entry.listeners.size > 0) {
+        notifyMessageVariantListeners(entry);
+        applyMessageVariantPolling(entry);
+        scheduleMessageVariantLoad(entry, MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS);
+      }
+      return;
+    }
+    if (!entry.listeners.size || entry.lastRows.length === 0) return;
     const next = projectMessageVariantRows(entry.lastRows);
     if (messageVariantUrlSignature(next) === messageVariantUrlSignature(entry.variants)) return;
     entry.variants = next;
@@ -372,6 +410,7 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
   entry.refreshState = beginMessageVariantRefresh(entry.refreshState);
   entry.hasStarted = true;
   const messageIds = entry.refreshState.messageIds;
+  const signingGeneration = signedMediaUrls().getGeneration();
   try {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -384,6 +423,14 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
     // converged, so it leaves the futile-poll count where it was: a minute
     // offline must not retire this chat's polling for the rest of the session.
     if (error) return;
+
+    // Projecting a ready row can enqueue a signature. Only the mounted entry,
+    // unchanged request batch and signing session may use this answer.
+    if (
+      entry.disposed || entry.listeners.size === 0 ||
+      entry.refreshState.messageIds !== messageIds ||
+      signedMediaUrls().getGeneration() !== signingGeneration
+    ) return;
 
     const rows = (data ?? []) as unknown as MediaVariant[];
     entry.lastRows = rows;

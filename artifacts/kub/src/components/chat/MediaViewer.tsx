@@ -485,7 +485,12 @@ export function MediaViewer({ media, onClose, sequence }: MediaViewerProps) {
           </button>
         </div>
 
-        <div className={cn("relative flex min-h-0 flex-1 items-center justify-center bg-black", !zoomable && "p-2 sm:p-4")}>
+        <div className={cn(
+          "relative flex min-h-0 flex-1 items-center justify-center bg-black",
+          !zoomable && "p-2 sm:p-4",
+          // Keep horizontal swipes on video in the viewer's pointer sequence.
+          media.type === "video" && sequence && "touch-pan-y",
+        )}>
           {fileStatus && (
             <div className="pointer-events-none absolute inset-x-2 top-2 z-30 flex justify-center">
               <div
