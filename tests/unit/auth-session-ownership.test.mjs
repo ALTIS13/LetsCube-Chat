@@ -201,6 +201,7 @@ function fixture({ hook = hookSource, store = storeSource, identity = identitySo
     "@/lib/historyCache/appOfflineHistory": offlineModule,
     "@/lib/realtimeRevival": { CONNECTION_REVIVED_EVENT: "fictional:connection-revived" },
     "@/lib/media/mediaUrl": { signedMediaUrls: () => ({ setAccount() {} }) },
+    "@/lib/appDialogs": { showAppAlert() { throw new Error("unexpected user alert in ownership fixture"); } },
     "@/lib/platform/capabilities": { isWebBrowser: () => false },
     "@/lib/platform/webMessagePreviews": {
       observeWebMessagePreviewIdentity() { throw new Error("native ownership fixture must not enter browser preview"); },

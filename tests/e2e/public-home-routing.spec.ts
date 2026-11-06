@@ -201,6 +201,39 @@ test.describe("public home routing integration", () => {
     await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toHaveCount(0);
   });
 
+  test("sign-out failure during profile recovery is explained and can be retried", async ({ page }) => {
+    test.setTimeout(60_000);
+    await installRuntime(page, "browser");
+    await installSession(page);
+    await installSupabaseFixture(page, { profileMode: "missing" });
+    const scopes: (string | null)[] = [];
+    const pageErrors: Error[] = [];
+    page.on("pageerror", error => pageErrors.push(error));
+    await page.route(`${SUPABASE_ORIGIN}/auth/v1/logout?**`, async route => {
+      scopes.push(new URL(route.request().url()).searchParams.get("scope"));
+      if (scopes.length === 1) {
+        await route.fulfill({ status: 503, json: { msg: "FICTIONAL_INTERNAL_DETAIL" } });
+      } else {
+        await route.fulfill({ status: 204 });
+      }
+    });
+
+    await page.goto("/", { waitUntil: "domcontentloaded", timeout: 40_000 });
+    await expect(page.getByText("Не удалось загрузить профиль", { exact: true })).toBeVisible();
+    const exit = page.getByRole("button", { name: "Выйти", exact: true });
+    await exit.click();
+    const alert = page.getByRole("dialog", { name: "Не удалось выйти" });
+    await expect(alert).toContainText("Проверьте соединение и попробуйте ещё раз.");
+    await expect(alert).not.toContainText("FICTIONAL_INTERNAL_DETAIL");
+    await alert.getByRole("button", { name: "Понятно", exact: true }).click();
+    await expect(exit).toBeFocused();
+    await exit.click();
+    await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toBeVisible();
+    await expect(alert).toHaveCount(0);
+    expect(scopes).toEqual(["local", "local"]);
+    expect(pageErrors).toEqual([]);
+  });
+
   test("banned authenticated root renders the ban screen", async ({ page }) => {
     await installRuntime(page, "browser");
     await installSession(page);

@@ -13,13 +13,26 @@ import { isWebBrowser } from "@/lib/platform/capabilities";
 import { observeWebMessagePreviewIdentity, retireWebMessagePreviews } from "@/lib/platform/webMessagePreviews";
 import { offlineHistory } from "@/lib/historyCache/appOfflineHistory";
 import { CONNECTION_REVIVED_EVENT } from "@/lib/realtimeRevival";
+import { showAppAlert } from "@/lib/appDialogs";
 
 const PROFILE_LOAD_ERROR = "Не удалось загрузить профиль. Проверьте соединение и попробуйте снова.";
 
+async function signOutCurrentInstallation(supabase: ReturnType<typeof createClient>, accountEpoch: number) {
+  if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Web preview retirement failed");
+  if (useAppStore.getState().accountEpoch !== accountEpoch) return;
+  const { error } = await supabase.auth.signOut({ scope: "local" });
+  if (error) throw error;
+}
+
 export function useSignOut(): () => Promise<void> {
   return useCallback(async () => {
-    if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке. Повторите выход.");
-    await createClient().auth.signOut({ scope: "local" });
+    const { currentUser, accountEpoch } = useAppStore.getState();
+    try {
+      await signOutCurrentInstallation(createClient(), accountEpoch);
+    } catch {
+      if (useAppStore.getState().accountEpoch !== accountEpoch) return;
+      showAppAlert("Проверьте соединение и попробуйте ещё раз.", "Не удалось выйти", "alert", currentUser?.id);
+    }
   }, []);
 }
 
@@ -118,6 +131,7 @@ function detachProfileChannel(key: string): void {
 }
 
 export function useUser() {
+  const signOut = useSignOut();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
@@ -335,6 +349,7 @@ export function useUser() {
           });
       } else {
         supabase.realtime.setAuth(null);
+        if (event === "SIGNED_OUT") setLoadingError(null);
         setLoading(false);
       }
     });
@@ -377,10 +392,6 @@ export function useUser() {
     return () => detach();
   }, [user?.id, accountEpoch, authSessionSource]);
 
-  const signOut = async () => {
-    if (isWebBrowser() && !await retireWebMessagePreviews()) throw new Error("Не удалось отключить предпросмотр на этой установке. Повторите выход.");
-    await supabase.auth.signOut({ scope: "local" });
-  };
   const retry = useCallback(() => {
     setLoadingError(null);
     setLoading(true);

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
   chat,
+  FIXTURE_HOST,
   membership,
   message,
   openFixture,
@@ -227,6 +228,36 @@ test.describe("D-135: signing out asks first", () => {
     const dialog = question(page, SIGN_OUT);
     await dialog.getByRole("button", { name: "Выйти", exact: true }).click();
     await expect.poll(() => logouts(fixture), { timeout: 10_000 }).toBeGreaterThan(0);
+  });
+
+  for (const theme of ["light", "dark"] as const) test(`sign-out failure is shown and can be retried (${theme})`, async ({ page }, info) => {
+    await boot(page);
+    await stampTheme(page, theme);
+    const scopes: (string | null)[] = [];
+    await page.route(`${FIXTURE_HOST}/auth/v1/logout?**`, async route => {
+      scopes.push(new URL(route.request().url()).searchParams.get("scope"));
+      await route.fulfill({ status: scopes.length === 1 ? 503 : 403, json: { msg: "FICTIONAL_INTERNAL_DETAIL" } });
+    });
+    const confirm = async () => {
+      await openAccountMenu(page);
+      await page.getByRole("button", { name: "Выйти", exact: true }).first().click();
+      await question(page, SIGN_OUT).getByRole("button", { name: "Выйти", exact: true }).click();
+    };
+    await confirm();
+    const error = question(page, "Не удалось выйти");
+    await expect(error).toBeInViewport();
+    await expect(error).toContainText("Проверьте соединение и попробуйте ещё раз.");
+    await expect(error).not.toContainText("FICTIONAL_INTERNAL_DETAIL");
+    await expect(error.getByRole("button", { name: "Понятно", exact: true })).toBeInViewport();
+    await settledDialog(page);
+    await error.screenshot({ path: info.outputPath("sign-out-failed.png"), animations: "disabled", scale: "css" });
+    await error.getByRole("button", { name: "Понятно", exact: true }).click();
+    await expect(page.getByTestId("chat-list-item")).toHaveCount(CHAT_COUNT);
+    await confirm();
+    await expect(page.getByRole("link", { name: "Войти", exact: true })).toBeVisible();
+    await expect(page.getByTestId("chat-list-item")).toHaveCount(0);
+    expect(scopes).toEqual(["local", "local"]);
+    await expect(error).toHaveCount(0);
   });
 
   test("the question holds in the dark theme", async ({ page }, info) => {
